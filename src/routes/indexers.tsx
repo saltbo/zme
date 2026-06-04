@@ -1,9 +1,10 @@
 import type { IndexerDetails, IndexerInput, IndexerSummary } from '@shared/types'
+import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { Activity, Database, LoaderCircle, MapPin, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +16,9 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { checkIndexerHealth, createIndexer, deleteIndexer, getIndexer, listIndexers, updateIndexer } from '@/lib/api'
+import { useIndexers } from '@/hooks/use-admin-queries'
+import { checkIndexerHealth, createIndexer, deleteIndexer, getIndexer, updateIndexer } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 dayjs.extend(relativeTime)
@@ -34,8 +37,10 @@ const initialForm: IndexerFormState = {
 
 export function IndexersPage() {
   const { t } = useTranslation()
-  const [items, setItems] = useState<IndexerSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const indexers = useIndexers()
+  const items = indexers.data ?? []
+  const loading = indexers.isLoading
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -45,21 +50,11 @@ export function IndexersPage() {
   const [createForm, setCreateForm] = useState<IndexerFormState>(initialForm)
   const [editForm, setEditForm] = useState<IndexerFormState>(initialForm)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const payload = await listIndexers()
-      setItems(payload.items)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('indexersLoadFailed'))
-    } finally {
-      setLoading(false)
-    }
-  }, [t])
-
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (indexers.error) {
+      toast.error(indexers.error instanceof Error ? indexers.error.message : t('indexersLoadFailed'))
+    }
+  }, [indexers.error, t])
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -67,7 +62,7 @@ export function IndexersPage() {
     try {
       await createIndexer(toIndexerInput(createForm))
       setCreateForm(initialForm)
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.indexers })
       setCreateOpen(false)
       toast.success(t('indexerCreated'))
     } catch (error) {
@@ -83,7 +78,9 @@ export function IndexersPage() {
     setSaving(true)
     try {
       const payload = await updateIndexer(selectedId, toIndexerInput(editForm))
-      setItems((current) => current.map((item) => (item.id === payload.item.id ? payload.item : item)))
+      queryClient.setQueryData<IndexerSummary[]>(queryKeys.indexers, (current = []) =>
+        current.map((item) => (item.id === payload.item.id ? payload.item : item)),
+      )
       setEditOpen(false)
       toast.success(t('indexerUpdated'))
     } catch (error) {
@@ -97,7 +94,9 @@ export function IndexersPage() {
     if (!selectedId) return
     try {
       await deleteIndexer(selectedId)
-      setItems((current) => current.filter((item) => item.id !== selectedId))
+      queryClient.setQueryData<IndexerSummary[]>(queryKeys.indexers, (current = []) =>
+        current.filter((item) => item.id !== selectedId),
+      )
       setEditOpen(false)
       setSelectedId(null)
       toast.success(t('indexerDeleted'))
@@ -110,7 +109,7 @@ export function IndexersPage() {
     setCheckingId(id)
     try {
       const payload = await checkIndexerHealth(id)
-      setItems((current) =>
+      queryClient.setQueryData<IndexerSummary[]>(queryKeys.indexers, (current = []) =>
         current.map((item) =>
           item.id === id
             ? {

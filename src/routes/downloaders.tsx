@@ -1,9 +1,10 @@
 import type { DownloaderDetails, DownloaderInput, DownloaderKind, DownloaderSummary } from '@shared/types'
+import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { Activity, Cloud, LoaderCircle, MapPin, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import qbittorrentIcon from '@/assets/downloaders/qbittorrent.svg'
@@ -18,14 +19,9 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import {
-  checkDownloaderHealth,
-  createDownloader,
-  deleteDownloader,
-  getDownloader,
-  listDownloaders,
-  updateDownloader,
-} from '@/lib/api'
+import { useDownloaders } from '@/hooks/use-admin-queries'
+import { checkDownloaderHealth, createDownloader, deleteDownloader, getDownloader, updateDownloader } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 dayjs.extend(relativeTime)
@@ -56,8 +52,10 @@ const initialForm: DownloaderFormState = {
 
 export function DownloadersPage() {
   const { t } = useTranslation()
-  const [items, setItems] = useState<DownloaderSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const downloaders = useDownloaders()
+  const items = downloaders.data ?? []
+  const loading = downloaders.isLoading
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -67,21 +65,11 @@ export function DownloadersPage() {
   const [createForm, setCreateForm] = useState<DownloaderFormState>(initialForm)
   const [editForm, setEditForm] = useState<DownloaderFormState>(initialForm)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const payload = await listDownloaders()
-      setItems(payload.items)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('downloadersLoadFailed'))
-    } finally {
-      setLoading(false)
-    }
-  }, [t])
-
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (downloaders.error) {
+      toast.error(downloaders.error instanceof Error ? downloaders.error.message : t('downloadersLoadFailed'))
+    }
+  }, [downloaders.error, t])
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -89,7 +77,7 @@ export function DownloadersPage() {
     try {
       await createDownloader(toDownloaderInput(createForm))
       setCreateForm({ ...initialForm, kind: createForm.kind, endpoint: getDefaultEndpoint(createForm.kind) })
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.downloaders })
       setCreateOpen(false)
       toast.success(t('downloaderCreated'))
     } catch (error) {
@@ -105,7 +93,9 @@ export function DownloadersPage() {
     setSaving(true)
     try {
       const payload = await updateDownloader(selectedId, toDownloaderInput(editForm))
-      setItems((current) => current.map((item) => (item.id === payload.item.id ? payload.item : item)))
+      queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
+        current.map((item) => (item.id === payload.item.id ? payload.item : item)),
+      )
       setEditOpen(false)
       toast.success(t('downloaderUpdated'))
     } catch (error) {
@@ -119,7 +109,9 @@ export function DownloadersPage() {
     if (!selectedId) return
     try {
       await deleteDownloader(selectedId)
-      setItems((current) => current.filter((item) => item.id !== selectedId))
+      queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
+        current.filter((item) => item.id !== selectedId),
+      )
       setEditOpen(false)
       setSelectedId(null)
       toast.success(t('downloaderDeleted'))
@@ -132,7 +124,7 @@ export function DownloadersPage() {
     setCheckingId(id)
     try {
       const payload = await checkDownloaderHealth(id)
-      setItems((current) =>
+      queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
         current.map((item) =>
           item.id === id
             ? {

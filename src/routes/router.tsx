@@ -1,0 +1,101 @@
+import type { ReactNode } from 'react'
+import { createBrowserRouter, Navigate } from 'react-router'
+import { AuthenticatedShell } from '@/components/app-shell/authenticated-shell'
+import { useAuth } from '@/contexts/auth'
+import { AuthGate } from '@/routes/auth-gate'
+import { DownloadersPage } from '@/routes/downloaders'
+import { FavoritesPage } from '@/routes/favorites'
+import { IndexersPage } from '@/routes/indexers'
+import { MediaDetailPage } from '@/routes/media-detail'
+import { MediaSourcesPage } from '@/routes/media-sources'
+import { MediaWorkspace } from '@/routes/media-workspace'
+import { UsersPage } from '@/routes/users'
+
+export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <AuthGate />,
+    children: [
+      {
+        path: 'onboarding',
+        element: null,
+      },
+      {
+        path: 'login',
+        element: null,
+      },
+      {
+        element: <AuthenticatedShell />,
+        children: [
+          {
+            index: true,
+            element: <MediaWorkspace mode="discover" />,
+          },
+          {
+            path: 'movies',
+            element: <MediaWorkspace mode="movie" />,
+          },
+          {
+            path: 'movies/:id',
+            element: <MediaDetailPage kind="movie" />,
+          },
+          {
+            path: 'series',
+            element: <MediaWorkspace mode="tv" />,
+          },
+          {
+            path: 'series/:id',
+            element: <MediaDetailPage kind="tv" />,
+          },
+          {
+            path: 'favorites',
+            element: <FavoritesPage />,
+          },
+          {
+            path: 'admin/users',
+            element: (
+              <AdminRoute>
+                <UsersPage />
+              </AdminRoute>
+            ),
+          },
+          {
+            path: 'admin/media-sources',
+            element: (
+              <AdminRoute>
+                <MediaSourcesPage />
+              </AdminRoute>
+            ),
+          },
+          {
+            path: 'admin/indexers',
+            element: (
+              <AdminRoute>
+                <IndexersPage />
+              </AdminRoute>
+            ),
+          },
+          {
+            path: 'admin/downloaders',
+            element: (
+              <AdminRoute>
+                <DownloadersPage />
+              </AdminRoute>
+            ),
+          },
+          {
+            path: '*',
+            element: <Navigate to="/" replace />,
+          },
+        ],
+      },
+    ],
+  },
+])
+
+function AdminRoute({ children }: { children: ReactNode }) {
+  const { isAdmin } = useAuth()
+  if (!isAdmin) return <Navigate to="/" replace />
+
+  return children
+}

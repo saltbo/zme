@@ -1,9 +1,10 @@
 import type { MediaSourceDetails, MediaSourceInput, MediaSourceSummary } from '@shared/types'
+import { useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import { Activity, Database, LoaderCircle, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -15,14 +16,15 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useMediaSources } from '@/hooks/use-admin-queries'
 import {
   checkMediaSourceHealth,
   createMediaSource,
   deleteMediaSource,
   getMediaSource,
-  listMediaSources,
   updateMediaSource,
 } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 dayjs.extend(relativeTime)
@@ -41,8 +43,10 @@ const initialForm: MediaSourceFormState = {
 
 export function MediaSourcesPage() {
   const { t } = useTranslation()
-  const [items, setItems] = useState<MediaSourceSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const mediaSources = useMediaSources()
+  const items = mediaSources.data ?? []
+  const loading = mediaSources.isLoading
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -52,21 +56,11 @@ export function MediaSourcesPage() {
   const [createForm, setCreateForm] = useState<MediaSourceFormState>(initialForm)
   const [editForm, setEditForm] = useState<MediaSourceFormState>(initialForm)
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const payload = await listMediaSources()
-      setItems(payload.items)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('mediaSourcesLoadFailed'))
-    } finally {
-      setLoading(false)
-    }
-  }, [t])
-
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (mediaSources.error) {
+      toast.error(mediaSources.error instanceof Error ? mediaSources.error.message : t('mediaSourcesLoadFailed'))
+    }
+  }, [mediaSources.error, t])
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -74,7 +68,7 @@ export function MediaSourcesPage() {
     try {
       await createMediaSource(toMediaSourceInput(createForm))
       setCreateForm(initialForm)
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.mediaSources })
       setCreateOpen(false)
       toast.success(t('mediaSourceCreated'))
     } catch (error) {
@@ -90,7 +84,9 @@ export function MediaSourcesPage() {
     setSaving(true)
     try {
       const payload = await updateMediaSource(selectedId, toMediaSourceInput(editForm))
-      setItems((current) => current.map((item) => (item.id === payload.item.id ? payload.item : item)))
+      queryClient.setQueryData<MediaSourceSummary[]>(queryKeys.mediaSources, (current = []) =>
+        current.map((item) => (item.id === payload.item.id ? payload.item : item)),
+      )
       setEditOpen(false)
       toast.success(t('mediaSourceUpdated'))
     } catch (error) {
@@ -104,7 +100,9 @@ export function MediaSourcesPage() {
     if (!selectedId) return
     try {
       await deleteMediaSource(selectedId)
-      setItems((current) => current.filter((item) => item.id !== selectedId))
+      queryClient.setQueryData<MediaSourceSummary[]>(queryKeys.mediaSources, (current = []) =>
+        current.filter((item) => item.id !== selectedId),
+      )
       setEditOpen(false)
       setSelectedId(null)
       toast.success(t('mediaSourceDeleted'))
@@ -117,7 +115,7 @@ export function MediaSourcesPage() {
     setCheckingId(id)
     try {
       const payload = await checkMediaSourceHealth(id)
-      setItems((current) =>
+      queryClient.setQueryData<MediaSourceSummary[]>(queryKeys.mediaSources, (current = []) =>
         current.map((item) =>
           item.id === id
             ? {

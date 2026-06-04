@@ -1,6 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Plus, ShieldCheck, Trash2, UserRound } from 'lucide-react'
 import type { FormEvent } from 'react'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -11,16 +12,9 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { type ManagedUser, useManagedUsers } from '@/hooks/use-admin-queries'
 import { authClient } from '@/lib/auth-client'
-
-interface ManagedUser {
-  id: string
-  name: string
-  email: string
-  role?: string | null
-  banned?: boolean | null
-  createdAt?: string | Date
-}
+import { queryKeys } from '@/lib/query-keys'
 
 type UserFormState = {
   name: string
@@ -38,9 +32,11 @@ const initialForm: UserFormState = {
 
 export function UsersPage() {
   const { t } = useTranslation()
-  const [items, setItems] = useState<ManagedUser[]>([])
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const users = useManagedUsers()
+  const items = users.data?.users ?? []
+  const currentUserId = users.data?.currentUserId ?? null
+  const loading = users.isLoading
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -48,26 +44,11 @@ export function UsersPage() {
   const [form, setForm] = useState<UserFormState>(initialForm)
   const [newPassword, setNewPassword] = useState('')
 
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [usersResult, sessionResult] = await Promise.all([
-        authClient.admin.listUsers({ query: { limit: 100, offset: 0 } }),
-        authClient.getSession(),
-      ])
-      if (usersResult.error) throw new Error(usersResult.error.message || t('usersLoadFailed'))
-      setItems((usersResult.data?.users ?? []) as ManagedUser[])
-      setCurrentUserId(sessionResult.data?.user.id ?? null)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('usersLoadFailed'))
-    } finally {
-      setLoading(false)
-    }
-  }, [t])
-
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (users.error) {
+      toast.error(users.error instanceof Error ? users.error.message : t('usersLoadFailed'))
+    }
+  }, [users.error, t])
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -82,7 +63,7 @@ export function UsersPage() {
       if (result.error) throw new Error(result.error.message || t('userCreateFailed'))
       setForm(initialForm)
       setCreateOpen(false)
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users })
       toast.success(t('userCreated'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('userCreateFailed'))
@@ -117,7 +98,7 @@ export function UsersPage() {
       setEditOpen(false)
       setSelected(null)
       setNewPassword('')
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users })
       toast.success(t('userUpdated'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('userUpdateFailed'))
@@ -133,7 +114,7 @@ export function UsersPage() {
         ? await authClient.admin.unbanUser({ userId: user.id })
         : await authClient.admin.banUser({ userId: user.id, banReason: 'Disabled by administrator' })
       if (result.error) throw new Error(result.error.message || t('userUpdateFailed'))
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('userUpdateFailed'))
     }
@@ -144,7 +125,7 @@ export function UsersPage() {
     try {
       const result = await authClient.admin.removeUser({ userId: user.id })
       if (result.error) throw new Error(result.error.message || t('userDeleteFailed'))
-      await refresh()
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users })
       toast.success(t('userDeleted'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('userDeleteFailed'))

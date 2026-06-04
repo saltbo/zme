@@ -19,5 +19,6 @@
       "@shared/*": ["./shared/*"]
     }
   },
-  "include": []
+  "files": [],
+  "references": [{ "path": "./tsconfig.web.json" }, { "path": "./tsconfig.server.json" }]
 }

@@ -32,7 +32,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { createDownload, listDownloaders } from '@/lib/api'
+import { useDownloaders } from '@/hooks/use-admin-queries'
+import { createDownload } from '@/lib/api'
 import { cn, formatBytes } from '@/lib/utils'
 
 const releaseSkeletonKeys = ['release-skeleton-1', 'release-skeleton-2', 'release-skeleton-3', 'release-skeleton-4']
@@ -119,8 +120,7 @@ function ReleaseSearchContent({
   const [indexer, setIndexer] = useState('all')
   const [quality, setQuality] = useState<ReleaseQuality>('all')
   const [sort, setSort] = useState<ReleaseSort>('seeders')
-  const [downloaders, setDownloaders] = useState<DownloaderSummary[]>([])
-  const [loadingDownloaders, setLoadingDownloaders] = useState(false)
+  const downloaders = useDownloaders()
   const indexers = getReleaseIndexers(items)
   const indexerItems = [
     { label: t('allIndexers'), value: 'all' },
@@ -142,28 +142,13 @@ function ReleaseSearchContent({
   const visibleItems = filterReleases({ items, keyword, indexer, quality, sort })
   const status = getReleaseStatus({ loading, error, resultCount: visibleItems.length, t })
   const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all'
-  const enabledDownloaders = downloaders.filter((item) => item.enabled)
+  const enabledDownloaders = (downloaders.data ?? []).filter((item) => item.enabled)
 
   useEffect(() => {
-    let cancelled = false
-    setLoadingDownloaders(true)
-    listDownloaders()
-      .then((payload) => {
-        if (!cancelled) setDownloaders(payload.items)
-      })
-      .catch((downloadersError: unknown) => {
-        if (!cancelled) {
-          toast.error(downloadersError instanceof Error ? downloadersError.message : t('downloadersLoadFailed'))
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDownloaders(false)
-      })
-
-    return () => {
-      cancelled = true
+    if (downloaders.error) {
+      toast.error(downloaders.error instanceof Error ? downloaders.error.message : t('downloadersLoadFailed'))
     }
-  }, [t])
+  }, [downloaders.error, t])
 
   return (
     <div ref={contentRef} tabIndex={-1} className="flex h-full min-h-0 flex-col outline-none">
@@ -292,7 +277,7 @@ function ReleaseSearchContent({
           onRetry={onSearch}
           filtered={hasFilters}
           downloaders={enabledDownloaders}
-          loadingDownloaders={loadingDownloaders}
+          loadingDownloaders={downloaders.isLoading}
         />
       </div>
     </div>
