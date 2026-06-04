@@ -12,7 +12,15 @@ import {
   submitDownload,
   updateDownloader,
 } from './services/downloaders'
-import { searchIndexers } from './services/prowlarr'
+import {
+  checkIndexerHealth,
+  createIndexer,
+  deleteIndexer,
+  getIndexer,
+  listIndexers,
+  searchIndexers,
+  updateIndexer,
+} from './services/indexers'
 import { getMediaDetails, getPopularMedia, getTrendingMedia, searchMedia } from './services/tmdb'
 
 const searchQuerySchema = z.object({
@@ -41,6 +49,19 @@ const downloaderSchema = z.object({
   credentials: z.record(z.string(), z.string()),
   options: z.record(z.string(), z.string()),
   enabled: z.boolean(),
+})
+
+const indexerSchema = z.object({
+  description: z.string().trim().optional(),
+  kind: z.enum(['prowlarr']),
+  endpoint: z.string().trim().url(),
+  credentials: z.record(z.string(), z.string()),
+  options: z.record(z.string(), z.string()),
+  enabled: z.boolean(),
+})
+
+const indexerParamsSchema = z.object({
+  id: z.string().trim().min(1),
 })
 
 const downloaderParamsSchema = z.object({
@@ -107,31 +128,53 @@ const routes = new Hono<{ Bindings: Env }>()
     },
   )
   .get('/indexers/search', zValidator('query', searchQuerySchema), async (c) => {
-    const baseUrl = c.env.PROWLARR_URL
-    const apiKey = c.env.PROWLARR_API_KEY
-    if (!baseUrl || !apiKey) {
-      return c.json(
-        {
-          code: 'INDEXER_NOT_CONFIGURED',
-          error: 'Indexer search is not configured.',
-        },
-        503,
-      )
-    }
-
     const { q } = c.req.valid('query')
     try {
-      const results = await searchIndexers(baseUrl, apiKey, q)
+      const results = await searchIndexers(createDb(c.env), q)
       return c.json({ results })
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Indexer search failed.'
+      const notConfigured = message.includes('No enabled indexers')
       return c.json(
         {
-          code: 'INDEXER_SEARCH_FAILED',
-          error: error instanceof Error ? error.message : 'Indexer search failed.',
+          code: notConfigured ? 'INDEXER_NOT_CONFIGURED' : 'INDEXER_SEARCH_FAILED',
+          error: message,
         },
-        502,
+        notConfigured ? 503 : 502,
       )
     }
+  })
+  .get('/indexers', async (c) => {
+    const items = await listIndexers(createDb(c.env))
+    return c.json({ items })
+  })
+  .get('/indexers/:id', zValidator('param', indexerParamsSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const item = await getIndexer(createDb(c.env), id)
+    if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ item })
+  })
+  .post('/indexers', zValidator('json', indexerSchema), async (c) => {
+    const item = await createIndexer(createDb(c.env), c.req.valid('json'))
+    return c.json({ item }, 201)
+  })
+  .patch('/indexers/:id', zValidator('param', indexerParamsSchema), zValidator('json', indexerSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const item = await updateIndexer(createDb(c.env), id, c.req.valid('json'))
+    if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ item })
+  })
+  .delete('/indexers/:id', zValidator('param', indexerParamsSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const deleted = await deleteIndexer(createDb(c.env), id)
+    if (!deleted) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ id })
+  })
+  .post('/indexers/:id/health', zValidator('param', indexerParamsSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const health = await checkIndexerHealth(createDb(c.env), id)
+    if (!health) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ health })
   })
   .get('/downloaders', async (c) => {
     const items = await listDownloaders(createDb(c.env))

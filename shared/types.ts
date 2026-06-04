@@ -56,6 +56,41 @@ export interface IndexerSearchItem {
   tmdbId: number | null
 }
 
+export type IndexerKind = 'prowlarr'
+
+export interface IndexerSummary {
+  id: string
+  description: string | null
+  kind: IndexerKind
+  endpoint: string
+  enabled: boolean
+  healthStatus: 'unknown' | 'online' | 'offline'
+  healthMessage: string | null
+  healthCheckedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface IndexerDetails extends IndexerSummary {
+  credentials: Record<string, string>
+  options: Record<string, string>
+}
+
+export interface IndexerHealth {
+  status: 'online' | 'offline'
+  message: string
+  checkedAt: string
+}
+
+export interface IndexerInput {
+  description?: string
+  kind: IndexerKind
+  endpoint: string
+  credentials: Record<string, string>
+  options: Record<string, string>
+  enabled: boolean
+}
+
 export interface SaveTarget {
   url: string
 }

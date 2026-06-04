@@ -21,7 +21,7 @@ interface ProwlarrSearchItem {
   tmdbId?: number
 }
 
-export async function searchIndexers(baseUrl: string, apiKey: string, query: string): Promise<IndexerSearchItem[]> {
+export async function searchProwlarr(baseUrl: string, apiKey: string, query: string): Promise<IndexerSearchItem[]> {
   const url = new URL('/api/v1/search', normalizeBaseUrl(baseUrl))
   url.searchParams.set('query', query)
   url.searchParams.set('type', 'search')

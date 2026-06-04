@@ -17,8 +17,6 @@ Create `.dev.vars` with the external services you want to test:
 ```dotenv
 TMDB_API_KEY=your_tmdb_v4_read_access_token
 TMDB_LANGUAGE=zh-CN
-PROWLARR_URL=http://127.0.0.1:9696
-PROWLARR_API_KEY=your_prowlarr_api_key
 ZPAN_BASE_URL=http://localhost:5174
 ```
 
@@ -29,4 +27,4 @@ pnpm install
 pnpm dev
 ```
 
-ZME does not run indexers or downloaders inside Workers. Prowlarr, bitmagnet, Jackett, and ZPan offline download are external services called by this frontend/API layer.
+ZME does not run indexers or downloaders inside Workers. Users connect their own Prowlarr and downloader services from the application settings.

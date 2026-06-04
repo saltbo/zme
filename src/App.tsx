@@ -74,6 +74,7 @@ import {
 } from './lib/api'
 import { cn, formatBytes } from './lib/utils'
 import { DownloadersPage } from './routes/downloaders'
+import { IndexersPage } from './routes/indexers'
 
 dayjs.extend(relativeTime)
 
@@ -129,6 +130,7 @@ function AuthenticatedShell() {
           <Route path="/movies/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
           <Route path="/series" element={<MediaWorkspace mode="tv" />} />
           <Route path="/series/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
+          <Route path="/indexers" element={<IndexersPage />} />
           <Route path="/downloaders" element={<DownloadersPage />} />
         </Routes>
       </SidebarInset>
@@ -217,6 +219,12 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('downloadersSubtitle'),
     }
   }
+  if (pathname === '/indexers') {
+    return {
+      title: t('indexers'),
+      subtitle: t('indexersSubtitle'),
+    }
+  }
   return {
     title: t('discover'),
     subtitle: t('discoverSubtitle'),
@@ -270,6 +278,7 @@ function AppSidebar() {
             <SidebarLink icon={Film} label={t('movies')} to="/movies" />
             <SidebarLink icon={Tv} label={t('series')} to="/series" />
             <SidebarLink icon={Download} label={t('requests')} to="/" muted />
+            <SidebarLink icon={Database} label={t('indexers')} to="/indexers" />
             <SidebarLink icon={HardDriveDownload} label={t('downloaders')} to="/downloaders" />
           </SidebarMenu>
         </SidebarContent>

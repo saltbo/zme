@@ -1,5 +1,5 @@
 import type { AppType } from '@server/app'
-import type { CreateDownloadInput, DownloaderInput, MediaKind } from '@shared/types'
+import type { CreateDownloadInput, DownloaderInput, IndexerInput, MediaKind } from '@shared/types'
 import { hc } from 'hono/client'
 
 const client = hc<AppType>('/')
@@ -95,6 +95,77 @@ export async function searchIndexers(query: string) {
 
   if (!response.ok) {
     throw await apiError(response, 'Failed to search indexers.')
+  }
+
+  return response.json()
+}
+
+export async function listIndexers() {
+  const response = await client.api.indexers.$get()
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to load indexers.')
+  }
+
+  return response.json()
+}
+
+export async function createIndexer(input: IndexerInput) {
+  const response = await client.api.indexers.$post({
+    json: input,
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to create indexer.')
+  }
+
+  return response.json()
+}
+
+export async function getIndexer(id: string) {
+  const response = await client.api.indexers[':id'].$get({
+    param: { id },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to load indexer.')
+  }
+
+  return response.json()
+}
+
+export async function updateIndexer(id: string, input: IndexerInput) {
+  const response = await client.api.indexers[':id'].$patch({
+    param: { id },
+    json: input,
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to update indexer.')
+  }
+
+  return response.json()
+}
+
+export async function deleteIndexer(id: string) {
+  const response = await client.api.indexers[':id'].$delete({
+    param: { id },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to delete indexer.')
+  }
+
+  return response.json()
+}
+
+export async function checkIndexerHealth(id: string) {
+  const response = await client.api.indexers[':id'].health.$post({
+    param: { id },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to check indexer health.')
   }
 
   return response.json()
