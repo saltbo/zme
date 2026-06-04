@@ -13,13 +13,45 @@ import {
   SlidersHorizontal,
   Star,
   Tv,
-  X,
 } from 'lucide-react'
+import type { CSSProperties } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Toaster, toast } from 'sonner'
-import { getTmdbLanguage, type SupportedLanguage, supportedLanguages } from './i18n'
+import { Avatar, AvatarBadge, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  Sidebar as SidebarRoot,
+} from '@/components/ui/sidebar'
+import { Skeleton } from '@/components/ui/skeleton'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { getTmdbLanguage, supportedLanguages } from './i18n'
 import {
   getMediaDetails,
   getPopularMedia,
@@ -49,8 +81,10 @@ interface TopbarOverride {
 export function App() {
   return (
     <BrowserRouter>
-      <AuthenticatedShell />
-      <Toaster richColors />
+      <TooltipProvider>
+        <AuthenticatedShell />
+        <Toaster richColors />
+      </TooltipProvider>
     </BrowserRouter>
   )
 }
@@ -59,9 +93,9 @@ function AuthenticatedShell() {
   const [topbarOverride, setTopbarOverride] = useState<TopbarOverride | null>(null)
 
   return (
-    <main className="min-h-dvh bg-[#f3f0f7] text-[#191420]">
-      <Sidebar />
-      <div className="min-h-dvh lg:pl-[280px]">
+    <SidebarProvider style={{ '--sidebar-width': '17.5rem' } as CSSProperties}>
+      <AppSidebar />
+      <SidebarInset className="min-h-dvh min-w-0 basis-0 bg-muted/40 text-foreground">
         <MobileHeader />
         <AppTopbar override={topbarOverride} />
         <Routes>
@@ -71,8 +105,8 @@ function AuthenticatedShell() {
           <Route path="/series" element={<MediaWorkspace mode="tv" />} />
           <Route path="/series/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
         </Routes>
-      </div>
-    </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 
@@ -94,34 +128,33 @@ function AppTopbar({ override }: { override: TopbarOverride | null }) {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-[#ded6ea] border-b bg-[#f3f0f7]/92 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-10 border-b bg-background/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {isDetailPage ? (
-            <button
+            <Button
               type="button"
               onClick={() => navigate(-1)}
-              className="flex size-10 shrink-0 items-center justify-center rounded-full border border-[#d8cfe6] bg-white/80 text-[#5d506f] shadow-sm transition hover:bg-white"
+              variant="outline"
+              size="icon-lg"
+              className="shrink-0 rounded-full"
               aria-label="Back"
             >
-              <ArrowLeft className="size-4" />
-            </button>
+              <ArrowLeft />
+            </Button>
           ) : null}
           <div className="min-w-0">
-            <h1 className="font-semibold text-2xl text-[#21162f] leading-none">{pageCopy.title}</h1>
-            <p className="mt-1 truncate text-[#685b78] text-sm">{pageCopy.subtitle}</p>
+            <h1 className="font-semibold text-2xl leading-none">{pageCopy.title}</h1>
+            <p className="mt-1 truncate text-muted-foreground text-sm">{pageCopy.subtitle}</p>
           </div>
         </div>
-        <form
-          onSubmit={handleSearch}
-          className="hidden h-10 w-[min(36vw,420px)] items-center gap-2 rounded-full border border-[#d8cfe6] bg-white/82 px-3 text-[#21162f] shadow-sm transition focus-within:border-[#8b5cf6] focus-within:bg-white md:flex"
-        >
-          <Search className="size-4 shrink-0 text-[#6d3fd1]" />
-          <input
+        <form onSubmit={handleSearch} className="relative hidden w-[min(36vw,420px)] md:block">
+          <Search className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
+          <Input
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
             placeholder={t('searchPlaceholder')}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#8a7b9c]"
+            className="h-10 rounded-full bg-background/80 pl-9 shadow-sm"
           />
         </form>
       </div>
@@ -181,73 +214,112 @@ function getStateMedia(state: unknown, routeMedia: { kind: MediaKind; id: number
   return media
 }
 
-function Sidebar() {
+function AppSidebar() {
   const { t } = useTranslation()
 
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-[280px] border-[#d9d1e6] border-r bg-[#21162f] p-5 text-white lg:flex lg:flex-col">
-      <Link to="/" className="flex items-center gap-3">
-        <span className="flex size-11 items-center justify-center rounded-2xl bg-[#8b5cf6] shadow-lg shadow-[#8b5cf6]/30">
-          <Clapperboard className="size-5" />
-        </span>
-        <div>
-          <div className="font-semibold text-xl">ZME</div>
-          <div className="text-[#c8bddc] text-xs">{t('privateDesk')}</div>
-        </div>
-      </Link>
+    <div className="hidden lg:block">
+      <SidebarRoot collapsible="offcanvas" className="dark border-sidebar-border border-r">
+        <SidebarHeader className="p-5">
+          <Link to="/" className="flex items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-lg shadow-sidebar-primary/30">
+              <Clapperboard className="size-5" />
+            </span>
+            <div>
+              <div className="font-semibold text-xl">ZME</div>
+              <div className="text-muted-foreground text-xs">{t('privateDesk')}</div>
+            </div>
+          </Link>
+        </SidebarHeader>
 
-      <nav className="mt-8 space-y-1">
-        <SidebarLink icon={Home} label={t('discover')} to="/" />
-        <SidebarLink icon={Film} label={t('movies')} to="/movies" />
-        <SidebarLink icon={Tv} label={t('series')} to="/series" />
-        <SidebarLink icon={Download} label={t('requests')} to="/" muted />
-        <SidebarLink icon={Settings} label={t('sources')} to="/" muted />
-      </nav>
+        <SidebarContent className="px-3">
+          <SidebarMenu>
+            <SidebarLink icon={Home} label={t('discover')} to="/" />
+            <SidebarLink icon={Film} label={t('movies')} to="/movies" />
+            <SidebarLink icon={Tv} label={t('series')} to="/series" />
+            <SidebarLink icon={Download} label={t('requests')} to="/" muted />
+            <SidebarLink icon={Settings} label={t('sources')} to="/" muted />
+          </SidebarMenu>
+        </SidebarContent>
 
-      <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-        <div className="flex items-center gap-2 text-[#c8bddc] text-xs uppercase tracking-[0.12em]">
-          <ShieldCheck className="size-4 text-[#8ee0c6]" />
-          {t('signedIn')}
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-full bg-[#f6c177] font-semibold text-[#21162f]">
-            S
-          </div>
-          <div className="min-w-0">
-            <div className="truncate font-medium text-sm">saltbo</div>
-            <div className="truncate text-[#c8bddc] text-xs">{t('zpanConnected')}</div>
-          </div>
-        </div>
-        <LanguageMenu />
-      </div>
-    </aside>
+        <SidebarFooter className="mt-auto p-3">
+          <UserPanel />
+        </SidebarFooter>
+      </SidebarRoot>
+    </div>
   )
 }
 
-function LanguageMenu() {
+function UserPanel() {
   const { i18n, t } = useTranslation()
   const currentLanguage = getTmdbLanguage(i18n.language)
+  const currentLanguageLabel =
+    supportedLanguages.find((language) => language.value === currentLanguage)?.label ?? currentLanguage
 
-  async function handleLanguageChange(language: SupportedLanguage) {
+  async function handleLanguageChange(language: string) {
     window.localStorage.setItem('zme.language', language)
     await i18n.changeLanguage(language)
   }
 
   return (
-    <label className="mt-4 block">
-      <span className="mb-1 block text-[#c8bddc] text-xs">{t('language')}</span>
-      <select
-        value={currentLanguage}
-        onChange={(event) => void handleLanguageChange(event.target.value as SupportedLanguage)}
-        className="h-9 w-full rounded-xl border border-white/10 bg-[#2d213c] px-3 text-white text-sm outline-none"
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <SidebarMenuButton
+            size="lg"
+            className="h-auto min-h-14 rounded-xl px-3 py-2 text-sidebar-foreground hover:bg-sidebar-accent"
+          />
+        }
       >
-        {supportedLanguages.map((language) => (
-          <option key={language.value} value={language.value}>
-            {language.label}
-          </option>
-        ))}
-      </select>
-    </label>
+        <Avatar size="lg" className="rounded-lg">
+          <AvatarFallback className="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold">
+            S
+          </AvatarFallback>
+          <AvatarBadge className="bg-emerald-400" />
+        </Avatar>
+        <span className="min-w-0 flex-1 text-left">
+          <span className="block truncate font-medium text-sm">saltbo</span>
+          <span className="mt-0.5 flex items-center gap-1.5 truncate text-muted-foreground text-xs">
+            <ShieldCheck className="size-3.5 shrink-0 text-emerald-300" />
+            {t('signedIn')}
+          </span>
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="right"
+        align="end"
+        sideOffset={8}
+        className="dark w-56 border border-sidebar-border bg-sidebar text-sidebar-foreground"
+      >
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>saltbo</DropdownMenuLabel>
+          <DropdownMenuItem>
+            <ShieldCheck />
+            <span>{t('zpanConnected')}</span>
+            <span className="ml-auto size-2 rounded-full bg-emerald-500" aria-hidden />
+          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Settings />
+              <span>{t('language')}</span>
+              <span className="ml-auto text-muted-foreground text-xs">{currentLanguageLabel}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="dark border border-sidebar-border bg-sidebar text-sidebar-foreground">
+              <DropdownMenuRadioGroup
+                value={currentLanguage}
+                onValueChange={(value) => void handleLanguageChange(value)}
+              >
+                {supportedLanguages.map((language) => (
+                  <DropdownMenuRadioItem key={language.value} value={language.value}>
+                    {language.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -262,20 +334,22 @@ function SidebarLink({
   to: string
   muted?: boolean
 }) {
+  const location = useLocation()
+  const isActive = !muted && location.pathname === to
+
   return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        cn(
-          'flex h-11 items-center gap-3 rounded-xl px-3 text-sm transition',
-          isActive && !muted ? 'bg-white text-[#21162f]' : 'text-[#d9cdec] hover:bg-white/10 hover:text-white',
-          muted ? 'opacity-55' : '',
-        )
-      }
-    >
-      <Icon className="size-4" />
-      {label}
-    </NavLink>
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        render={<NavLink to={to} />}
+        isActive={isActive}
+        size="lg"
+        tooltip={label}
+        className={cn('h-11 rounded-xl', muted && 'opacity-55')}
+      >
+        <Icon />
+        <span>{label}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   )
 }
 
@@ -283,18 +357,18 @@ function MobileHeader() {
   const { t } = useTranslation()
 
   return (
-    <header className="border-[#d9d1e6] border-b bg-[#f3f0f7]/90 px-4 py-3 backdrop-blur lg:hidden">
+    <header className="border-b bg-background/90 px-4 py-3 backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 font-semibold">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-[#8b5cf6] text-white">
+          <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Clapperboard className="size-4" />
           </span>
           ZME
         </Link>
-        <div className="flex items-center gap-2 text-[#6d5d7f] text-sm">
+        <Badge variant="outline" className="h-8 gap-2">
           <ShieldCheck className="size-4" />
           Private
-        </div>
+        </Badge>
       </div>
       <nav className="mt-3 grid grid-cols-3 gap-2">
         <MobileNavLink label={t('discover')} to="/" />
@@ -310,10 +384,7 @@ function MobileNavLink({ label, to }: { label: string; to: string }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        cn(
-          'flex h-10 items-center justify-center rounded-full border text-sm',
-          isActive ? 'border-[#8b5cf6] bg-[#8b5cf6] text-white' : 'border-[#d9d1e6] bg-white text-[#5d506f]',
-        )
+        cn(buttonVariants({ variant: isActive ? 'default' : 'outline', size: 'lg' }), 'h-10 rounded-full')
       }
     >
       {label}
@@ -359,7 +430,7 @@ function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
   }
 
   return (
-    <div className="mx-auto max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <FilterBar mode={mode} resultCount={visibleMedia.length} />
       <MediaWall items={visibleMedia} loading={loadingMedia} />
     </div>
@@ -392,7 +463,7 @@ function DiscoverPage() {
   }, [tmdbLanguage, t])
 
   return (
-    <div className="mx-auto max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-9">
         <MediaRail title={t('trending')} subtitle={t('trendingSubtitle')} items={trending} loading={loading} />
         <MediaRail
@@ -433,23 +504,23 @@ function MediaRail({
     <section>
       <div className="mb-3 flex items-end justify-between gap-4">
         <div>
-          <h2 className="font-semibold text-[#21162f] text-xl">{title}</h2>
-          <p className="mt-1 text-[#76678d] text-sm">{subtitle}</p>
+          <h2 className="font-semibold text-xl">{title}</h2>
+          <p className="mt-1 text-muted-foreground text-sm">{subtitle}</p>
         </div>
         {moreTo ? (
           <Link
             to={moreTo}
-            className="shrink-0 rounded-full bg-white px-3 py-1.5 font-medium text-[#6d3fd1] text-sm shadow-sm"
+            className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'shrink-0 rounded-full')}
           >
             {t('viewAll')}
           </Link>
         ) : null}
       </div>
-      <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="zme-x-scroll -mx-4 flex gap-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         {loading
           ? mediaSkeletonKeys.map((key) => (
               <div key={`${title}-${key}`} className="w-[190px] shrink-0 sm:w-[210px] 2xl:w-[230px]">
-                <div className="aspect-[2/3] animate-pulse rounded-[28px] bg-[#ddd4ea]" />
+                <Skeleton className="aspect-[2/3] rounded-xl" />
               </div>
             ))
           : items.map((item) => (
@@ -461,9 +532,9 @@ function MediaRail({
               </div>
             ))}
         {!loading && items.length === 0 ? (
-          <div className="flex min-h-64 min-w-full items-center justify-center rounded-3xl border border-[#ded6ea] bg-white p-8 text-[#76678d]">
+          <Card className="flex min-h-64 min-w-full items-center justify-center p-8 text-muted-foreground">
             {t('noMedia')}
-          </div>
+          </Card>
         ) : null}
       </div>
     </section>
@@ -474,16 +545,16 @@ function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind; result
   const { t } = useTranslation()
 
   return (
-    <div className="mb-5 flex flex-col gap-3 border-[#d9d1e6] border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
-        <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-[#21162f] text-sm shadow-sm">
+        <Badge variant="secondary" className="h-8 rounded-full px-3 font-semibold">
           {resultCount} {t('titles')}
-        </span>
-        <span className="text-[#76678d] text-sm">
+        </Badge>
+        <span className="text-muted-foreground text-sm">
           {mode === 'discover' ? t('mixedDiscoveryWall') : mode === 'movie' ? t('moviesOnly') : t('seriesOnly')}
         </span>
       </div>
-      <div className="flex gap-2 overflow-x-auto">
+      <div className="zme-x-scroll flex gap-2 overflow-x-auto pb-1">
         <FilterChip
           active
           label={mode === 'discover' ? t('recommended') : mode === 'movie' ? t('latestMovies') : t('latestSeries')}
@@ -491,13 +562,10 @@ function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind; result
         <FilterChip label="4K" />
         <FilterChip label="1080p" />
         <FilterChip label={t('subtitles')} />
-        <button
-          type="button"
-          className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-[#d8cfe6] bg-white/70 px-3.5 font-medium text-[#5d506f] text-sm transition hover:bg-white"
-        >
-          <SlidersHorizontal className="size-4" />
+        <Button type="button" variant="outline" size="lg" className="h-9 shrink-0 rounded-full">
+          <SlidersHorizontal data-icon="inline-start" />
           {t('filters')}
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -505,17 +573,14 @@ function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind; result
 
 function FilterChip({ label, active }: { label: string; active?: boolean }) {
   return (
-    <button
+    <Button
       type="button"
-      className={cn(
-        'h-9 shrink-0 rounded-full border px-3.5 font-medium text-sm transition',
-        active
-          ? 'border-[#7c3aed] bg-[#7c3aed] text-white shadow-md shadow-[#7c3aed]/16'
-          : 'border-[#d8cfe6] bg-white/70 text-[#5d506f] hover:bg-white',
-      )}
+      variant={active ? 'default' : 'outline'}
+      size="lg"
+      className={cn('h-9 shrink-0 rounded-full', active && 'shadow-md shadow-primary/15')}
     >
       {label}
-    </button>
+    </Button>
   )
 }
 
@@ -526,10 +591,10 @@ function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: bool
     return (
       <div className="grid gap-x-4 gap-y-7 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
         {mediaSkeletonKeys.map((key) => (
-          <div key={key} className="space-y-3">
-            <div className="aspect-[2/3] animate-pulse rounded-[28px] bg-[#ddd4ea]" />
-            <div className="mx-1 h-4 w-2/3 animate-pulse rounded bg-[#ddd4ea]" />
-            <div className="mx-1 h-3 w-1/2 animate-pulse rounded bg-[#eee7f6]" />
+          <div key={key} className="flex flex-col gap-3">
+            <Skeleton className="aspect-[2/3] rounded-xl" />
+            <Skeleton className="mx-1 h-4 w-2/3" />
+            <Skeleton className="mx-1 h-3 w-1/2" />
           </div>
         ))}
       </div>
@@ -538,9 +603,7 @@ function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: bool
 
   if (items.length === 0) {
     return (
-      <div className="flex min-h-80 items-center justify-center rounded-3xl border border-[#ded6ea] bg-white p-8 text-[#76678d]">
-        {t('noMatchedMedia')}
-      </div>
+      <Card className="flex min-h-80 items-center justify-center p-8 text-muted-foreground">{t('noMatchedMedia')}</Card>
     )
   }
 
@@ -558,9 +621,9 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
   const detailPath = item.kind === 'movie' ? `/movies/${item.id}` : `/series/${item.id}`
 
   return (
-    <article className="group">
+    <Card className="group gap-0 overflow-visible bg-transparent p-0 ring-0">
       <Link to={detailPath} state={{ media: item }} className="block">
-        <div className="relative aspect-[2/3] overflow-hidden rounded-[28px] bg-[#21162f] shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-[#21162f]/10 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_28px_58px_rgba(124,58,237,0.24)]">
+        <CardContent className="relative aspect-[2/3] overflow-hidden rounded-xl bg-card p-0 shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-foreground/10 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_28px_58px_rgba(124,58,237,0.18)]">
           {item.posterUrl ? (
             <img
               src={item.posterUrl}
@@ -569,38 +632,40 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
               loading="lazy"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-[#76678d]">{t('noPoster')}</div>
+            <div className="flex h-full items-center justify-center text-muted-foreground">{t('noPoster')}</div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
-          <button
+          <Button
             type="button"
             aria-label="Bookmark"
-            className="absolute top-3 right-3 flex size-9 items-center justify-center rounded-full bg-white/88 text-[#21162f] opacity-0 shadow-lg shadow-black/20 backdrop-blur transition group-hover:opacity-100 hover:bg-[#f6c177]"
+            variant="secondary"
+            size="icon-lg"
+            className="absolute top-3 right-3 rounded-full opacity-0 shadow-lg shadow-black/20 backdrop-blur transition group-hover:opacity-100"
           >
-            <Bookmark className="size-4" />
-          </button>
+            <Bookmark />
+          </Button>
           <div className="absolute inset-x-0 bottom-0 p-4 text-white">
             <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
-              <span className="flex items-center gap-1 rounded-full bg-white/14 px-2 py-1 backdrop-blur">
+              <Badge variant="secondary" className="bg-white/14 text-white backdrop-blur">
                 {item.kind === 'movie' ? <Film className="size-3" /> : <Tv className="size-3" />}
                 {item.kind === 'movie' ? t('movie') : t('tv')}
-              </span>
+              </Badge>
               <span>{item.releaseYear ?? t('unknown')}</span>
             </div>
             <h2 className="line-clamp-2 text-balance font-semibold text-xl leading-tight drop-shadow">{item.title}</h2>
           </div>
-        </div>
+        </CardContent>
       </Link>
-      <div className="px-1 pt-3">
-        <div className="flex items-center justify-between gap-2 text-[#76678d] text-sm">
+      <CardContent className="px-1 pt-3">
+        <div className="flex items-center justify-between gap-2 text-muted-foreground text-sm">
           <span className="line-clamp-1">{item.originalTitle}</span>
-          <span className="flex shrink-0 items-center gap-1 font-medium text-[#5d506f]">
+          <span className="flex shrink-0 items-center gap-1 font-medium text-foreground">
             <Star className="size-3.5 fill-[#f6c177] text-[#f6c177]" />
             {item.rating ? item.rating.toFixed(1) : 'NR'}
           </span>
         </div>
-      </div>
-    </article>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -669,24 +734,24 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
 
   if (loadingMedia) {
     return (
-      <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-        <div className="min-h-[560px] animate-pulse rounded-[34px] bg-[#21162f]/18" />
+      <div className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <Skeleton className="min-h-[560px] rounded-xl" />
       </div>
     )
   }
 
   if (!media) {
     return (
-      <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-        <div className="flex min-h-80 items-center justify-center rounded-[34px] border border-[#ded6ea] bg-white p-8 text-[#76678d]">
+      <div className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <Card className="flex min-h-80 items-center justify-center p-8 text-muted-foreground">
           {mediaError ?? t('mediaNotFound')}
-        </div>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+    <div className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <section className="overflow-hidden rounded-[28px] bg-[#130d1f] text-white shadow-[0_30px_90px_rgba(33,22,47,0.28)] sm:rounded-[34px]">
         <div className="relative lg:hidden">
           {media.backdropUrl ? (
@@ -706,28 +771,31 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
               </div>
               <div className="min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-white/12 px-3 font-medium text-white/82 text-xs uppercase tracking-[0.12em] backdrop-blur">
+                  <Badge variant="secondary" className="min-h-11 gap-2 bg-white/12 px-3 text-white/82 backdrop-blur">
                     {media.kind === 'movie' ? <Film className="size-3.5" /> : <Tv className="size-3.5" />}
                     {media.kind === 'movie' ? t('movie') : t('tv')}
-                  </div>
+                  </Badge>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button
+                    <Button
                       type="button"
                       onClick={() => void handleFindReleases()}
-                      className="flex size-11 items-center justify-center rounded-2xl bg-[#8b5cf6] text-white shadow-lg shadow-[#8b5cf6]/24 transition active:scale-95"
+                      size="icon-lg"
+                      className="size-11 rounded-xl shadow-lg shadow-primary/25"
                       aria-label="Search releases"
                       title="Search releases"
                     >
-                      <Search className="size-5" />
-                    </button>
-                    <button
+                      <Search />
+                    </Button>
+                    <Button
                       type="button"
-                      className="flex size-11 items-center justify-center rounded-2xl bg-white/12 text-white/82 backdrop-blur transition active:scale-95"
+                      variant="secondary"
+                      size="icon-lg"
+                      className="size-11 rounded-xl bg-white/12 text-white/82 backdrop-blur"
                       aria-label="Request"
                       title="Request"
                     >
-                      <Bookmark className="size-5" />
-                    </button>
+                      <Bookmark />
+                    </Button>
                   </div>
                 </div>
                 <h1 className="mt-5 text-balance font-semibold text-4xl leading-[0.98]">{media.title}</h1>
@@ -749,12 +817,9 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
 
             <div className="mt-5 flex flex-wrap gap-2">
               {media.genres.map((genre) => (
-                <span
-                  key={genre}
-                  className="rounded-full bg-white/12 px-3 py-1.5 font-medium text-white/76 text-xs backdrop-blur"
-                >
+                <Badge key={genre} variant="secondary" className="bg-white/12 text-white/76 backdrop-blur">
                   {genre}
-                </span>
+                </Badge>
               ))}
             </div>
           </div>
@@ -782,28 +847,31 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
 
             <div className="pt-2">
               <div className="mb-10 flex items-center justify-between gap-6">
-                <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1.5 font-medium text-white/82 text-xs uppercase tracking-[0.12em] backdrop-blur">
+                <Badge variant="secondary" className="gap-2 bg-white/12 text-white/82 backdrop-blur">
                   {media.kind === 'movie' ? <Film className="size-3.5" /> : <Tv className="size-3.5" />}
                   {media.kind === 'movie' ? t('movie') : t('tv')}
-                </div>
+                </Badge>
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => void handleFindReleases()}
-                    className="flex size-11 items-center justify-center rounded-2xl bg-[#8b5cf6] text-white shadow-lg shadow-[#8b5cf6]/24 transition hover:bg-[#7c3aed]"
+                    size="icon-lg"
+                    className="size-11 rounded-xl shadow-lg shadow-primary/25"
                     aria-label="Search releases"
                     title="Search releases"
                   >
-                    <Search className="size-5" />
-                  </button>
-                  <button
+                    <Search />
+                  </Button>
+                  <Button
                     type="button"
-                    className="flex size-11 items-center justify-center rounded-2xl bg-white/12 text-white/82 backdrop-blur transition hover:bg-white/18"
+                    variant="secondary"
+                    size="icon-lg"
+                    className="size-11 rounded-xl bg-white/12 text-white/82 backdrop-blur"
                     aria-label="Request"
                     title="Request"
                   >
-                    <Bookmark className="size-5" />
-                  </button>
+                    <Bookmark />
+                  </Button>
                 </div>
               </div>
               <h1 className="max-w-4xl text-balance font-semibold text-4xl leading-none sm:text-5xl lg:text-6xl">
@@ -826,34 +894,31 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                 {media.overview}
               </p>
 
-              <div className="mt-8 grid max-w-3xl grid-cols-4 divide-x divide-white/10 rounded-[26px] bg-white/10 p-1 text-sm backdrop-blur">
+              <Card className="mt-8 grid max-w-3xl grid-cols-4 gap-0 divide-x divide-white/10 bg-white/10 p-1 text-sm text-white backdrop-blur">
                 <DetailMetric label={t('director')} value={media.director ?? t('unknown')} />
                 <DetailMetric label={t('runtime')} value={media.runtime ?? t('unknown')} />
                 <DetailMetric label={t('originalLanguage')} value={media.language ?? t('unknown')} />
                 <DetailMetric label={t('rating')} value={media.rating ? media.rating.toFixed(1) : 'NR'} />
-              </div>
+              </Card>
 
               <div className="mt-5 flex flex-wrap gap-2">
                 {media.genres.map((genre) => (
-                  <span
-                    key={genre}
-                    className="rounded-full bg-white/12 px-3 py-1.5 font-medium text-white/76 text-xs backdrop-blur"
-                  >
+                  <Badge key={genre} variant="secondary" className="bg-white/12 text-white/76 backdrop-blur">
                     {genre}
-                  </span>
+                  </Badge>
                 ))}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-[#f8f5fb] px-5 py-7 text-[#21162f] sm:px-8">
+        <div className="bg-background px-5 py-7 text-foreground sm:px-8">
           <SectionTitle title={t('cast')} />
-          <div className="-mx-5 mt-4 flex gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
+          <div className="zme-x-scroll -mx-5 mt-4 flex gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
             {media.cast.length > 0 ? (
               media.cast.map((person) => (
                 <article key={`${person.name}-${person.role}`} className="w-[172px] shrink-0">
-                  <div className="aspect-[3/4] overflow-hidden rounded-[26px] bg-[#21162f] shadow-[0_18px_42px_rgba(33,22,47,0.18)]">
+                  <Card className="gap-0 overflow-hidden p-0 shadow-[0_18px_42px_rgba(33,22,47,0.14)]">
                     {person.portraitUrl ? (
                       <img
                         src={person.portraitUrl}
@@ -866,22 +931,22 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                         {t('noPortrait')}
                       </div>
                     )}
-                  </div>
-                  <div className="mt-3">
+                  </Card>
+                  <CardContent className="mt-3 px-0">
                     <div className="line-clamp-2 font-semibold text-sm leading-tight">{person.name}</div>
-                    <div className="mt-1 line-clamp-1 text-[#76678d] text-xs">{person.role}</div>
-                  </div>
+                    <div className="mt-1 line-clamp-1 text-muted-foreground text-xs">{person.role}</div>
+                  </CardContent>
                 </article>
               ))
             ) : (
-              <div className="flex min-h-40 min-w-full items-center justify-center rounded-2xl border border-[#ded6ea] bg-white text-[#76678d] text-sm">
+              <Card className="flex min-h-40 min-w-full items-center justify-center text-muted-foreground text-sm">
                 {t('noCast')}
-              </div>
+              </Card>
             )}
           </div>
         </div>
 
-        <div className="grid gap-8 bg-[#f8f5fb] px-5 pb-8 text-[#21162f] sm:px-8 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid gap-8 bg-background px-5 pb-8 text-foreground sm:px-8 xl:grid-cols-[minmax(0,1fr)_340px]">
           <section>
             <SectionTitle title={t('details')} />
             <div className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
@@ -895,20 +960,20 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
               {media.genres.map((tag) => (
-                <span key={tag} className="rounded-full bg-[#f0e9ff] px-3 py-1.5 font-medium text-[#6d3fd1] text-xs">
+                <Badge key={tag} variant="secondary">
                   {tag}
-                </span>
+                </Badge>
               ))}
             </div>
           </section>
 
           <aside>
             <SectionTitle title={t('externalIds')} />
-            <div className="mt-4 divide-y divide-[#ded6ea] text-sm">
+            <Card className="mt-4 gap-0 divide-y py-0 text-sm">
               <IdLine label="TMDB" value={media.ids.tmdb} />
               <IdLine label="IMDb" value={media.ids.imdb ?? '-'} />
               <IdLine label="TVDB" value={media.ids.tvdb ?? '-'} />
-            </div>
+            </Card>
           </aside>
         </div>
       </section>
@@ -929,8 +994,8 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[#76678d] text-xs uppercase tracking-[0.1em]">{label}</div>
-      <div className="mt-1 font-medium text-[#21162f]">{value}</div>
+      <div className="text-muted-foreground text-xs uppercase tracking-[0.1em]">{label}</div>
+      <div className="mt-1 font-medium">{value}</div>
     </div>
   )
 }
@@ -945,14 +1010,14 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
 }
 
 function SectionTitle({ title }: { title: string }) {
-  return <h2 className="font-semibold text-[#21162f] text-xl">{title}</h2>
+  return <h2 className="font-semibold text-xl">{title}</h2>
 }
 
 function IdLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between py-3">
-      <span className="font-medium text-[#5d506f]">{label}</span>
-      <span className="text-[#76678d]">{value}</span>
+    <div className="flex items-center justify-between px-4 py-3">
+      <span className="font-medium">{label}</span>
+      <span className="text-muted-foreground">{value}</span>
     </div>
   )
 }
@@ -973,43 +1038,29 @@ function ReleaseSearchDialog({
   const { t } = useTranslation()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-[#120c1d]/62 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-6">
-      <section className="max-h-[86vh] w-full overflow-hidden rounded-[28px] bg-[#f8f5fb] shadow-2xl shadow-black/30 sm:max-w-4xl">
-        <header className="flex items-start justify-between gap-4 border-[#ded6ea] border-b p-5">
-          <div>
-            <p className="text-[#76678d] text-xs uppercase tracking-[0.12em]">{t('indexerSearch')}</p>
-            <h2 className="mt-1 font-semibold text-2xl text-[#21162f]">{media.title}</h2>
-            <p className="mt-1 text-[#685b78] text-sm">{t('compareReleases')}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-[#5d506f] shadow-sm"
-            aria-label="Close"
-          >
-            <X className="size-5" />
-          </button>
-        </header>
+    <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <SheetContent side="bottom" className="mx-auto max-h-[86vh] max-w-4xl rounded-t-xl p-0 sm:mb-6 sm:rounded-xl">
+        <SheetHeader className="border-b p-5">
+          <SheetDescription className="text-xs uppercase tracking-[0.12em]">{t('indexerSearch')}</SheetDescription>
+          <SheetTitle className="text-2xl">{media.title}</SheetTitle>
+          <SheetDescription>{t('compareReleases')}</SheetDescription>
+        </SheetHeader>
 
-        <div className="flex items-center justify-between gap-3 border-[#ded6ea] border-b px-5 py-3">
-          <div className="text-[#76678d] text-sm">
+        <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
+          <div className="text-muted-foreground text-sm">
             {items.length} {t('results')}
           </div>
-          <button
-            type="button"
-            onClick={onSearch}
-            className="flex h-10 items-center gap-2 rounded-full bg-[#7c3aed] px-4 font-semibold text-sm text-white"
-          >
-            <Search className="size-4" />
+          <Button type="button" onClick={onSearch} className="rounded-full">
+            <Search data-icon="inline-start" />
             {t('searchAgain')}
-          </button>
+          </Button>
         </div>
 
         <div className="max-h-[58vh] overflow-auto p-5">
           <ReleaseList items={items} loading={loading} />
         </div>
-      </section>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -1018,12 +1069,12 @@ function ReleaseList({ items, loading }: { items: IndexerSearchItem[]; loading: 
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         {releaseSkeletonKeys.map((key) => (
-          <div key={key} className="rounded-2xl border border-[#ded6ea] bg-white p-4">
-            <div className="h-4 w-5/6 animate-pulse rounded bg-[#ddd4ea]" />
-            <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-[#eee7f6]" />
-          </div>
+          <Card key={key} className="p-4">
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="mt-3 h-3 w-1/2" />
+          </Card>
         ))}
       </div>
     )
@@ -1031,14 +1082,14 @@ function ReleaseList({ items, loading }: { items: IndexerSearchItem[]; loading: 
 
   if (items.length === 0) {
     return (
-      <div className="flex min-h-48 items-center justify-center rounded-2xl border border-[#ded6ea] bg-white p-6 text-[#76678d] text-sm">
+      <Card className="flex min-h-48 items-center justify-center p-6 text-muted-foreground text-sm">
         {t('noReleases')}
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {items.map((item) => (
         <ReleaseRow key={item.id} item={item} />
       ))}
@@ -1065,32 +1116,25 @@ function ReleaseRow({ item }: { item: IndexerSearchItem }) {
   }
 
   return (
-    <article className="grid gap-4 rounded-2xl border border-[#ded6ea] bg-white p-4 shadow-sm sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
-      <div className="min-w-0">
+    <Card className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
+      <CardContent className="min-w-0 px-0">
         <div className="mb-2 flex flex-wrap gap-2">
-          <span className="rounded-full bg-[#f0e9ff] px-2.5 py-1 font-medium text-[#6d3fd1] text-xs">
-            {item.indexer}
-          </span>
-          <span className="rounded-full bg-[#e8f8f3] px-2.5 py-1 font-medium text-[#247d69] text-xs">
+          <Badge variant="secondary">{item.indexer}</Badge>
+          <Badge variant="outline">
             {item.seeders ?? 0} {t('seeders')}
-          </span>
+          </Badge>
         </div>
-        <h3 className="line-clamp-2 font-semibold text-[#21162f] text-sm leading-5">{item.title}</h3>
-        <div className="mt-2 flex flex-wrap gap-3 text-[#76678d] text-xs">
+        <h3 className="line-clamp-2 font-semibold text-sm leading-5">{item.title}</h3>
+        <div className="mt-2 flex flex-wrap gap-3 text-muted-foreground text-xs">
           <span>{formatBytes(item.size)}</span>
           <span>{item.publishDate ? new Date(item.publishDate).getFullYear() : t('unknownDate')}</span>
           <span>{item.infoHash ? t('magnetReady') : t('torrentUrl')}</span>
         </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => void handleSave()}
-        className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 font-semibold text-sm text-white transition hover:bg-[#6d28d9] disabled:cursor-not-allowed disabled:opacity-45"
-        disabled={!uri}
-      >
+      </CardContent>
+      <Button type="button" onClick={() => void handleSave()} size="lg" className="h-11" disabled={!uri}>
         {t('saveToZpan')}
-        <ArrowUpRight className="size-4" />
-      </button>
-    </article>
+        <ArrowUpRight data-icon="inline-end" />
+      </Button>
+    </Card>
   )
 }
