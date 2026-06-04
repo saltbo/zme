@@ -87,9 +87,24 @@ async function toIndexerSearchItem(item: ProwlarrSearchItem): Promise<IndexerSea
 
 async function resolveDownloadFields(item: ProwlarrSearchItem) {
   if (item.magnetUrl) {
+    if (item.magnetUrl.startsWith('magnet:')) {
+      return {
+        downloadUrl: sanitizeDownloadUrl(item.downloadUrl),
+        magnetUrl: item.magnetUrl,
+      }
+    }
+
+    if (isProwlarrProxyDownloadUrl(item.magnetUrl)) {
+      const resolved = await resolveProwlarrProxyDownloadUrl(item.magnetUrl)
+      return {
+        downloadUrl: resolved?.sourceType === 'torrent_url' ? resolved.uri : sanitizeDownloadUrl(item.downloadUrl),
+        magnetUrl: resolved?.sourceType === 'magnet' ? resolved.uri : null,
+      }
+    }
+
     return {
       downloadUrl: sanitizeDownloadUrl(item.downloadUrl),
-      magnetUrl: item.magnetUrl,
+      magnetUrl: null,
     }
   }
 
