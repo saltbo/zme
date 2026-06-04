@@ -177,7 +177,7 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
           </Badge>
           <Badge className="h-7 gap-1.5 rounded-full border-white/16 bg-black/42 text-white backdrop-blur">
             <stageMetric.icon className={cn('size-3.5', stageMetric.className)} />
-            {stageMetric.rate}/s · {stageMetric.progress}
+            {stageMetric.label}
           </Badge>
         </div>
         <div className="absolute inset-x-0 bottom-1.5 max-w-2xl p-4 text-white sm:p-5">
@@ -252,12 +252,19 @@ function getPrimaryProgress(
 }
 
 function getStageMetric(task: DownloadTaskSummary, progress: { value: number; label: string }) {
-  const uploading = task.status === 'uploading' || task.status === 'completed'
+  if (task.status === 'completed') {
+    return {
+      icon: CheckCircle2,
+      className: 'text-emerald-200',
+      label: progress.label,
+    }
+  }
+  const uploading = task.status === 'uploading'
+  const rate = formatRate(uploading ? task.storageUploadBps : task.downloadBps)
   return {
     icon: uploading ? UploadCloud : DownloadCloud,
     className: uploading ? 'text-emerald-200' : 'text-sky-200',
-    rate: formatRate(uploading ? task.storageUploadBps : task.downloadBps),
-    progress: progress.label,
+    label: `${rate}/s · ${progress.label}`,
   }
 }
 
