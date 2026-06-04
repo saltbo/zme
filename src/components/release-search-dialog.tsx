@@ -1,3 +1,4 @@
+import { toZmeDownloadCategory } from '@shared/download-metadata'
 import type { DownloaderSummary, IndexerSearchItem, MediaSearchItem } from '@shared/types'
 import dayjs from 'dayjs'
 import {
@@ -510,7 +511,7 @@ function ReleaseRow({
         uri: source.uri,
         sourceType: source.sourceType,
         title,
-        category: media.kind,
+        category: toZmeDownloadCategory(media.kind),
         tags: getMediaTags(media, item),
       })
       toast.success(t('downloadSubmitted'))

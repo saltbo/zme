@@ -1,3 +1,4 @@
+import { normalizeZmeDownloadCategory } from '@shared/download-metadata'
 import type {
   CreateDownloadInput,
   CreateDownloadResult,
@@ -324,7 +325,7 @@ async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) 
     source: { type: input.sourceType, uri: input.uri },
     targetFolder: options.targetFolder || '',
     name: input.title,
-    category: input.category,
+    category: normalizeZmeDownloadCategory(input.category),
     tags: input.tags,
   })
 }

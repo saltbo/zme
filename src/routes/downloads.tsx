@@ -1,3 +1,4 @@
+import { parseZmeDownloadCategory } from '@shared/download-metadata'
 import type { DownloadTaskStatus, DownloadTaskSummary, MediaKind } from '@shared/types'
 import { AlertTriangle, CheckCircle2, Clock, DownloadCloud, Gauge, LoaderCircle, Server } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -183,7 +184,7 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
 }
 
 function getTaggedMedia(task: DownloadTaskSummary): { kind: MediaKind; tmdbId: number } | null {
-  const kind = task.category === 'movie' || task.category === 'tv' ? task.category : null
+  const kind = parseZmeDownloadCategory(task.category)
   const tmdbId = getTagNumber(task.tags, 'tmdbId')
   return kind && tmdbId ? { kind, tmdbId } : null
 }
