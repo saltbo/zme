@@ -483,20 +483,21 @@ function ReleaseRow({
 }) {
   const { i18n, t } = useTranslation()
   const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
-  const uri = item.magnetUrl || item.downloadUrl
   const title = item.fileName || item.title
 
-  async function handleDownload(downloaderId: string) {
-    if (!uri) {
+  async function handleDownload(downloader: DownloaderSummary) {
+    const source = getDownloadSource(item)
+    if (!source) {
       toast.error(t('releaseMissingUrl'))
       return
     }
 
-    setSubmittingDownloaderId(downloaderId)
+    setSubmittingDownloaderId(downloader.id)
     try {
       await createDownload({
-        downloaderId,
-        uri,
+        downloaderId: downloader.id,
+        uri: source.uri,
+        sourceType: source.sourceType,
         title,
       })
       toast.success(t('downloadSubmitted'))
@@ -508,7 +509,8 @@ function ReleaseRow({
   }
 
   const submitting = Boolean(submittingDownloaderId)
-  const disabled = !uri || loadingDownloaders || downloaders.length === 0 || submitting
+  const hasSource = Boolean(getDownloadSource(item))
+  const disabled = !hasSource || loadingDownloaders || downloaders.length === 0 || submitting
 
   return (
     <Card className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
@@ -564,7 +566,7 @@ function ReleaseRow({
           <DropdownMenuGroup>
             <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
             {downloaders.map((downloader) => (
-              <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader.id)}>
+              <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader)}>
                 <HardDriveDownload />
                 <span className="truncate">{getDownloaderLabel(downloader)}</span>
               </DropdownMenuItem>
@@ -574,6 +576,18 @@ function ReleaseRow({
       </DropdownMenu>
     </Card>
   )
+}
+
+function getDownloadSource(item: IndexerSearchItem) {
+  if (item.magnetUrl) {
+    return { uri: item.magnetUrl, sourceType: 'magnet' as const }
+  }
+
+  if (item.downloadUrl) {
+    return { uri: item.downloadUrl, sourceType: 'torrent_url' as const }
+  }
+
+  return null
 }
 
 function getReleaseQuality(item: IndexerSearchItem): ReleaseQuality {

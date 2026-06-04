@@ -271,7 +271,6 @@ async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) 
   const credentials = readJson<ZpanCredentials>(downloader.credentialsJson)
   const options = readJson<ZpanOptions>(downloader.optionsJson)
   const url = new URL('/api/download-tasks', normalizeBaseUrl(downloader.endpoint))
-  const sourceType = input.uri.startsWith('magnet:') ? 'magnet' : 'torrent_url'
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -279,7 +278,7 @@ async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) 
       ...(credentials.apiKey ? { authorization: `Bearer ${credentials.apiKey}` } : {}),
     },
     body: JSON.stringify({
-      source: { type: sourceType, uri: input.uri },
+      source: { type: input.sourceType, uri: input.uri },
       targetFolder: options.targetFolder || '',
       name: input.title,
     }),

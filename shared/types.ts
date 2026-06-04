@@ -188,6 +188,7 @@ export interface DownloaderInput {
 export interface CreateDownloadInput {
   downloaderId: string
   uri: string
+  sourceType: 'magnet' | 'torrent_url'
   title?: string
 }
 

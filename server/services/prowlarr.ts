@@ -1,4 +1,5 @@
 import type { IndexerSearchItem } from '@shared/types'
+import { isProwlarrProxyDownloadUrl, resolveProwlarrProxyDownloadUrl } from './download-source'
 
 interface ProwlarrSearchItem {
   guid?: string
@@ -55,11 +56,12 @@ export async function searchProwlarr(
   }
 
   const payload = (await response.json()) as ProwlarrSearchItem[]
-  return payload.map(toIndexerSearchItem)
+  return Promise.all(payload.map(toIndexerSearchItem))
 }
 
-function toIndexerSearchItem(item: ProwlarrSearchItem): IndexerSearchItem {
-  const id = item.guid || item.downloadUrl || item.magnetUrl || crypto.randomUUID()
+async function toIndexerSearchItem(item: ProwlarrSearchItem): Promise<IndexerSearchItem> {
+  const resolved = await resolveDownloadFields(item)
+  const id = item.guid || item.infoHash || resolved.magnetUrl || resolved.downloadUrl || crypto.randomUUID()
   return {
     id,
     title: item.title || 'Untitled release',
@@ -71,8 +73,8 @@ function toIndexerSearchItem(item: ProwlarrSearchItem): IndexerSearchItem {
     files: typeof item.files === 'number' ? item.files : null,
     protocol: item.protocol || null,
     publishDate: item.publishDate || null,
-    downloadUrl: item.downloadUrl || null,
-    magnetUrl: item.magnetUrl || null,
+    downloadUrl: resolved.downloadUrl,
+    magnetUrl: resolved.magnetUrl,
     infoUrl: item.infoUrl || null,
     infoHash: item.infoHash || null,
     categories: item.categories?.flatMap((category) => (category.name ? [category.name] : [])) || [],
@@ -81,6 +83,40 @@ function toIndexerSearchItem(item: ProwlarrSearchItem): IndexerSearchItem {
     tmdbId: parsePositiveNumber(item.tmdbId),
     tvdbId: parsePositiveNumber(item.tvdbId),
   }
+}
+
+async function resolveDownloadFields(item: ProwlarrSearchItem) {
+  if (item.magnetUrl) {
+    return {
+      downloadUrl: sanitizeDownloadUrl(item.downloadUrl),
+      magnetUrl: item.magnetUrl,
+    }
+  }
+
+  if (!item.downloadUrl) {
+    return {
+      downloadUrl: null,
+      magnetUrl: null,
+    }
+  }
+
+  if (!isProwlarrProxyDownloadUrl(item.downloadUrl)) {
+    return {
+      downloadUrl: item.downloadUrl,
+      magnetUrl: null,
+    }
+  }
+
+  const resolved = await resolveProwlarrProxyDownloadUrl(item.downloadUrl)
+  return {
+    downloadUrl: resolved?.sourceType === 'torrent_url' ? resolved.uri : null,
+    magnetUrl: resolved?.sourceType === 'magnet' ? resolved.uri : null,
+  }
+}
+
+function sanitizeDownloadUrl(value: string | undefined): string | null {
+  if (!value) return null
+  return isProwlarrProxyDownloadUrl(value) ? null : value
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

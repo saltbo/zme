@@ -128,6 +128,7 @@ const idParamsSchema = z.object({
 const createDownloadSchema = z.object({
   downloaderId: z.string().trim().min(1),
   uri: z.string().trim().min(1),
+  sourceType: z.enum(['magnet', 'torrent_url']),
   title: z.string().trim().optional(),
 })
 
