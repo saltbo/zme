@@ -137,7 +137,19 @@ const createDownloadSchema = z.object({
 
 const downloadsQuerySchema = z.object({
   status: z
-    .enum(['queued', 'assigned', 'running', 'billing_paused', 'uploading', 'completed', 'failed', 'canceled'])
+    .enum([
+      'queued',
+      'assigned',
+      'running',
+      'billing_paused',
+      'pausing',
+      'paused',
+      'uploading',
+      'canceling',
+      'completed',
+      'failed',
+      'canceled',
+    ])
     .optional(),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),

@@ -12,17 +12,16 @@ import { useMediaDetails } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
 import { cn, formatBytes } from '@/lib/utils'
 
-const activeStatuses = new Set<DownloadTaskStatus>(['queued', 'assigned', 'running', 'billing_paused', 'uploading'])
-const statusFilters: DownloadTaskStatus[] = [
+const activeStatuses = new Set<DownloadTaskStatus>([
   'queued',
   'assigned',
   'running',
   'billing_paused',
+  'pausing',
   'uploading',
-  'completed',
-  'failed',
-  'canceled',
-]
+  'canceling',
+])
+const statusFilters: DownloadTaskStatus[] = ['running', 'uploading', 'paused', 'completed', 'failed', 'canceled']
 const skeletonKeys = ['download-skeleton-1', 'download-skeleton-2', 'download-skeleton-3', 'download-skeleton-4']
 type StatusFilter = 'all' | DownloadTaskStatus
 

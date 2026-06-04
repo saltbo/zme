@@ -190,7 +190,10 @@ export type DownloadTaskStatus =
   | 'assigned'
   | 'running'
   | 'billing_paused'
+  | 'pausing'
+  | 'paused'
   | 'uploading'
+  | 'canceling'
   | 'completed'
   | 'failed'
   | 'canceled'
@@ -213,10 +216,6 @@ export interface DownloadTaskSummary {
   downloadBps: number
   storageUploadBps: number
   errorMessage: string | null
-  createdAt: string
-  updatedAt: string
-  startedAt: string | null
-  finishedAt: string | null
 }
 
 export interface DownloadTaskPage {

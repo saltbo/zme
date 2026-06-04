@@ -10,6 +10,7 @@ import { and, eq } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { type Downloader, downloaders, type Indexer, indexers } from '../db/schema'
 import { isProwlarrProxyDownloadUrl, resolveProwlarrProxyDownloadUrl, withProwlarrApiKey } from './download-source'
+import { ZpanClient } from './zpan-client'
 
 type Db = ReturnType<typeof createDb>
 
@@ -319,23 +320,13 @@ async function probeAria2(downloader: Downloader) {
 async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) {
   const credentials = readJson<ZpanCredentials>(downloader.credentialsJson)
   const options = readJson<ZpanOptions>(downloader.optionsJson)
-  const url = new URL('/api/download-tasks', normalizeBaseUrl(downloader.endpoint))
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      ...(credentials.apiKey ? { authorization: `Bearer ${credentials.apiKey}` } : {}),
-    },
-    body: JSON.stringify({
-      source: { type: input.sourceType, uri: input.uri },
-      targetFolder: options.targetFolder || '',
-      name: input.title,
-      category: input.category,
-      tags: input.tags,
-    }),
+  await new ZpanClient(downloader.endpoint, credentials.apiKey).createDownloadTask({
+    source: { type: input.sourceType, uri: input.uri },
+    targetFolder: options.targetFolder || '',
+    name: input.title,
+    category: input.category,
+    tags: input.tags,
   })
-
-  await assertOk(response, 'ZPan')
 }
 
 async function submitToQbittorrent(downloader: Downloader, input: CreateDownloadInput) {

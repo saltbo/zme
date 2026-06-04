@@ -17,6 +17,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
+    "openapi:zpan": "openapi-ts -i https://raw.githubusercontent.com/saltbo/zpan/master/docs/openapi/downloader.json -o server/clients/zpan",
     "prepare": "husky"
   },
   "engines": {
@@ -53,6 +54,7 @@
     "@biomejs/biome": "^2.4.10",
     "@cloudflare/vite-plugin": "^1.39.2",
     "@cloudflare/workers-types": "^4.20260505.1",
+    "@hey-api/openapi-ts": "^0.98.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
