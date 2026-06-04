@@ -17,7 +17,6 @@ Create `.dev.vars` with the external services you want to test:
 ```dotenv
 TMDB_API_KEY=your_tmdb_v4_read_access_token
 TMDB_LANGUAGE=zh-CN
-ZPAN_BASE_URL=http://localhost:5174
 ```
 
 Then run:

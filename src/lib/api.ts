@@ -208,20 +208,6 @@ export async function checkIndexerHealth(id: string) {
   return response.json()
 }
 
-export async function getZpanSaveUrl(uri: string) {
-  const response = await client.api.zpan['save-url'].$get({
-    query: {
-      uri,
-    },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to build ZPan save URL.')
-  }
-
-  return response.json()
-}
-
 export async function listDownloaders() {
   const response = await client.api.downloaders.$get()
 

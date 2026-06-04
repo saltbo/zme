@@ -8,9 +8,6 @@ binding = "ASSETS"
 not_found_handling = "single-page-application"
 run_worker_first = ["/api/*"]
 
-[vars]
-ZPAN_BASE_URL = "http://localhost:5174"
-
 [[d1_databases]]
 binding = "DB"
 database_name = "zme"

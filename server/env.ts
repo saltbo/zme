@@ -7,5 +7,4 @@ export interface Env {
   DB: D1Database
   TMDB_API_KEY?: string
   TMDB_LANGUAGE?: string
-  ZPAN_BASE_URL?: string
 }

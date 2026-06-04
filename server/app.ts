@@ -256,13 +256,6 @@ const routes = new Hono<{ Bindings: Env }>()
       return c.json({ error: error instanceof Error ? error.message : 'Download submission failed.' }, 502)
     }
   })
-  .get('/zpan/save-url', zValidator('query', z.object({ uri: z.string().trim().min(1) })), (c) => {
-    const zpanBaseUrl = c.env.ZPAN_BASE_URL || 'http://localhost:5174'
-    const { uri } = c.req.valid('query')
-    const url = new URL('/downloads/new', zpanBaseUrl)
-    url.searchParams.set('uri', uri)
-    return c.json({ url: url.toString() })
-  })
 
 const app = new Hono<{ Bindings: Env }>().route('/api', routes)
 
