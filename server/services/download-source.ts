@@ -31,7 +31,7 @@ export async function resolveProwlarrProxyDownloadUrl(uri: string): Promise<Down
 export function isProwlarrProxyDownloadUrl(value: string) {
   try {
     const url = new URL(value)
-    return url.pathname.endsWith('/download') && url.searchParams.has('apikey') && url.searchParams.has('link')
+    return url.pathname.endsWith('/download') && url.searchParams.has('link')
   } catch {
     return false
   }
