@@ -1,8 +1,25 @@
-import type { AppType } from '@server/app'
-import type { CreateDownloadInput, DownloaderInput, FavoriteMediaInput, IndexerInput, MediaKind } from '@shared/types'
-import { hc } from 'hono/client'
-
-const client = hc<AppType>('/')
+import type {
+  CreateDownloadInput,
+  CreateDownloadResult,
+  DownloaderDetails,
+  DownloaderHealth,
+  DownloaderInput,
+  DownloaderSummary,
+  FavoriteMediaInput,
+  FavoriteMediaItem,
+  IndexerDetails,
+  IndexerHealth,
+  IndexerInput,
+  IndexerSearchItem,
+  IndexerSummary,
+  MediaDetails,
+  MediaKind,
+  MediaSearchItem,
+  MediaSourceDetails,
+  MediaSourceHealth,
+  MediaSourceInput,
+  MediaSourceSummary,
+} from '@shared/types'
 
 export class ApiError extends Error {
   constructor(
@@ -24,269 +41,193 @@ async function apiError(response: Response, fallbackMessage: string): Promise<Ap
   }
 }
 
-export async function searchMedia(query: string, language: string) {
-  const response = await client.api.media.search.$get({
-    query: {
-      q: query,
-      language,
+async function apiRequest<T>(path: string, fallbackMessage: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    credentials: 'include',
+    headers: {
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...init?.headers,
     },
   })
 
   if (!response.ok) {
-    throw await apiError(response, 'Failed to search media.')
+    throw await apiError(response, fallbackMessage)
   }
 
-  return response.json()
+  return response.json() as Promise<T>
+}
+
+function query(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(key, String(value))
+  }
+  const value = search.toString()
+  return value ? `?${value}` : ''
+}
+
+function jsonBody(input: unknown): RequestInit {
+  return {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }
+}
+
+export async function searchMedia(queryValue: string, language: string) {
+  return apiRequest<{ results: MediaSearchItem[] }>(
+    `/api/media/search${query({ q: queryValue, language })}`,
+    'Failed to search media.',
+  )
+}
+
+export async function getSetupStatus() {
+  return apiRequest<{ initialized: boolean }>('/api/setup/status', 'Failed to load setup status.')
+}
+
+export async function createInitialAdmin(input: { name: string; email: string; password: string }) {
+  return apiRequest<{ user: unknown }>('/api/setup/admin', 'Failed to create administrator.', jsonBody(input))
 }
 
 export async function getMediaDetails(kind: MediaKind, id: number, language: string) {
-  const response = await client.api.media[':kind'][':id'].$get({
-    param: {
-      kind,
-      id: String(id),
-    },
-    query: {
-      language,
-    },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load media details.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: MediaDetails }>(
+    `/api/media/${kind}/${id}${query({ language })}`,
+    'Failed to load media details.',
+  )
 }
 
 export async function getTrendingMedia(language: string) {
-  const response = await client.api.media.trending.$get({
-    query: {
-      language,
-    },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load trending media.')
-  }
-
-  return response.json()
+  return apiRequest<{ results: MediaSearchItem[] }>(
+    `/api/media/trending${query({ language })}`,
+    'Failed to load trending media.',
+  )
 }
 
 export async function getPopularMedia(kind: MediaKind, language: string) {
-  const response = await client.api.media.popular.$get({
-    query: {
-      kind,
-      language,
-    },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load popular media.')
-  }
-
-  return response.json()
+  return apiRequest<{ results: MediaSearchItem[] }>(
+    `/api/media/popular${query({ kind, language })}`,
+    'Failed to load popular media.',
+  )
 }
 
-export async function searchIndexers(query: string) {
-  const response = await client.api.indexers.search.$get({
-    query: {
-      q: query,
-    },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to search indexers.')
-  }
-
-  return response.json()
+export async function searchIndexers(queryValue: string) {
+  return apiRequest<{ results: IndexerSearchItem[] }>(
+    `/api/indexers/search${query({ q: queryValue })}`,
+    'Failed to search indexers.',
+  )
 }
 
 export async function listFavorites() {
-  const response = await client.api.favorites.$get()
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load favorites.')
-  }
-
-  return response.json()
+  return apiRequest<{ items: FavoriteMediaItem[] }>('/api/favorites', 'Failed to load favorites.')
 }
 
 export async function createFavorite(input: FavoriteMediaInput) {
-  const response = await client.api.favorites.$post({
-    json: input,
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to save favorite.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: FavoriteMediaItem }>('/api/favorites', 'Failed to save favorite.', jsonBody(input))
 }
 
 export async function deleteFavorite(kind: MediaKind, id: number) {
-  const response = await client.api.favorites[':kind'][':id'].$delete({
-    param: {
-      kind,
-      id: String(id),
-    },
+  return apiRequest<{ kind: MediaKind; id: number }>(`/api/favorites/${kind}/${id}`, 'Failed to remove favorite.', {
+    method: 'DELETE',
   })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to remove favorite.')
-  }
-
-  return response.json()
 }
 
 export async function listIndexers() {
-  const response = await client.api.indexers.$get()
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load indexers.')
-  }
-
-  return response.json()
+  return apiRequest<{ items: IndexerSummary[] }>('/api/indexers', 'Failed to load indexers.')
 }
 
 export async function createIndexer(input: IndexerInput) {
-  const response = await client.api.indexers.$post({
-    json: input,
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to create indexer.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: IndexerSummary }>('/api/indexers', 'Failed to create indexer.', jsonBody(input))
 }
 
 export async function getIndexer(id: string) {
-  const response = await client.api.indexers[':id'].$get({
-    param: { id },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load indexer.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: IndexerDetails }>(`/api/indexers/${id}`, 'Failed to load indexer.')
 }
 
 export async function updateIndexer(id: string, input: IndexerInput) {
-  const response = await client.api.indexers[':id'].$patch({
-    param: { id },
-    json: input,
+  return apiRequest<{ item: IndexerSummary }>(`/api/indexers/${id}`, 'Failed to update indexer.', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
   })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to update indexer.')
-  }
-
-  return response.json()
 }
 
 export async function deleteIndexer(id: string) {
-  const response = await client.api.indexers[':id'].$delete({
-    param: { id },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to delete indexer.')
-  }
-
-  return response.json()
+  return apiRequest<{ id: string }>(`/api/indexers/${id}`, 'Failed to delete indexer.', { method: 'DELETE' })
 }
 
 export async function checkIndexerHealth(id: string) {
-  const response = await client.api.indexers[':id'].health.$post({
-    param: { id },
+  return apiRequest<{ health: IndexerHealth }>(`/api/indexers/${id}/health`, 'Failed to check indexer health.', {
+    method: 'POST',
   })
+}
 
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to check indexer health.')
-  }
+export async function listMediaSources() {
+  return apiRequest<{ items: MediaSourceSummary[] }>('/api/media-sources', 'Failed to load media sources.')
+}
 
-  return response.json()
+export async function createMediaSource(input: MediaSourceInput) {
+  return apiRequest<{ item: MediaSourceSummary }>(
+    '/api/media-sources',
+    'Failed to create media source.',
+    jsonBody(input),
+  )
+}
+
+export async function getMediaSource(id: string) {
+  return apiRequest<{ item: MediaSourceDetails }>(`/api/media-sources/${id}`, 'Failed to load media source.')
+}
+
+export async function updateMediaSource(id: string, input: MediaSourceInput) {
+  return apiRequest<{ item: MediaSourceSummary }>(`/api/media-sources/${id}`, 'Failed to update media source.', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteMediaSource(id: string) {
+  return apiRequest<{ id: string }>(`/api/media-sources/${id}`, 'Failed to delete media source.', {
+    method: 'DELETE',
+  })
+}
+
+export async function checkMediaSourceHealth(id: string) {
+  return apiRequest<{ health: MediaSourceHealth }>(
+    `/api/media-sources/${id}/health`,
+    'Failed to check media source health.',
+    { method: 'POST' },
+  )
 }
 
 export async function listDownloaders() {
-  const response = await client.api.downloaders.$get()
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load downloaders.')
-  }
-
-  return response.json()
+  return apiRequest<{ items: DownloaderSummary[] }>('/api/downloaders', 'Failed to load downloaders.')
 }
 
 export async function createDownloader(input: DownloaderInput) {
-  const response = await client.api.downloaders.$post({
-    json: input,
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to create downloader.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: DownloaderSummary }>('/api/downloaders', 'Failed to create downloader.', jsonBody(input))
 }
 
 export async function getDownloader(id: string) {
-  const response = await client.api.downloaders[':id'].$get({
-    param: { id },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to load downloader.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: DownloaderDetails }>(`/api/downloaders/${id}`, 'Failed to load downloader.')
 }
 
 export async function updateDownloader(id: string, input: DownloaderInput) {
-  const response = await client.api.downloaders[':id'].$patch({
-    param: { id },
-    json: input,
+  return apiRequest<{ item: DownloaderSummary }>(`/api/downloaders/${id}`, 'Failed to update downloader.', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
   })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to update downloader.')
-  }
-
-  return response.json()
 }
 
 export async function deleteDownloader(id: string) {
-  const response = await client.api.downloaders[':id'].$delete({
-    param: { id },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to delete downloader.')
-  }
-
-  return response.json()
+  return apiRequest<{ id: string }>(`/api/downloaders/${id}`, 'Failed to delete downloader.', { method: 'DELETE' })
 }
 
 export async function checkDownloaderHealth(id: string) {
-  const response = await client.api.downloaders[':id'].health.$post({
-    param: { id },
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to check downloader health.')
-  }
-
-  return response.json()
+  return apiRequest<{ health: DownloaderHealth }>(
+    `/api/downloaders/${id}/health`,
+    'Failed to check downloader health.',
+    { method: 'POST' },
+  )
 }
 
 export async function createDownload(input: CreateDownloadInput) {
-  const response = await client.api.downloads.$post({
-    json: input,
-  })
-
-  if (!response.ok) {
-    throw await apiError(response, 'Failed to submit download.')
-  }
-
-  return response.json()
+  return apiRequest<{ item: CreateDownloadResult }>('/api/downloads', 'Failed to submit download.', jsonBody(input))
 }

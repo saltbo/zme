@@ -1,4 +1,5 @@
 import type {
+  DownloaderKind,
   DownloaderSummary,
   FavoriteMediaItem,
   IndexerSearchItem,
@@ -21,6 +22,7 @@ import {
   HardDriveDownload,
   Home,
   LoaderCircle,
+  LogOut,
   RefreshCw,
   Search,
   ServerOff,
@@ -29,11 +31,22 @@ import {
   SlidersHorizontal,
   Star,
   Tv,
+  UserRound,
 } from 'lucide-react'
-import type { CSSProperties, MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router'
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router'
 import { Toaster, toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Avatar, AvatarBadge, AvatarFallback } from '@/components/ui/avatar'
@@ -55,6 +68,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   SidebarContent,
@@ -73,19 +87,27 @@ import { getTmdbLanguage, supportedLanguages } from './i18n'
 import {
   ApiError,
   createDownload,
+  createDownloader,
   createFavorite,
+  createIndexer,
+  createInitialAdmin,
+  createMediaSource,
   deleteFavorite,
   getMediaDetails,
   getPopularMedia,
+  getSetupStatus,
   getTrendingMedia,
   listDownloaders,
   listFavorites,
   searchIndexers,
   searchMedia,
 } from './lib/api'
+import { authClient } from './lib/auth-client'
 import { cn, formatBytes } from './lib/utils'
 import { DownloadersPage } from './routes/downloaders'
 import { IndexersPage } from './routes/indexers'
+import { MediaSourcesPage } from './routes/media-sources'
+import { UsersPage } from './routes/users'
 
 dayjs.extend(relativeTime)
 
@@ -124,17 +146,560 @@ interface FavoritesContextValue {
 
 const FavoritesContext = createContext<FavoritesContextValue | null>(null)
 
+type SessionData = typeof authClient.$Infer.Session
+
+interface AuthContextValue {
+  user: SessionData['user']
+  isAdmin: boolean
+  refreshSession: () => Promise<void>
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
 export function App() {
   return (
     <BrowserRouter>
       <TooltipProvider>
-        <FavoritesProvider>
-          <AuthenticatedShell />
-        </FavoritesProvider>
+        <AuthGate />
         <Toaster richColors />
       </TooltipProvider>
     </BrowserRouter>
   )
+}
+
+function AuthGate() {
+  const location = useLocation()
+  const session = authClient.useSession()
+  const [initialized, setInitialized] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    getSetupStatus()
+      .then((payload) => {
+        if (!cancelled) setInitialized(payload.initialized)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : 'Setup status failed.')
+          setInitialized(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  if (initialized === null || session.isPending) {
+    return <FullPageLoading />
+  }
+
+  if (!initialized) {
+    if (location.pathname !== '/onboarding') return <Navigate to="/onboarding" replace />
+    return (
+      <OnboardingPage
+        onComplete={async () => {
+          setInitialized(true)
+          await session.refetch()
+        }}
+      />
+    )
+  }
+
+  if (location.pathname === '/onboarding') {
+    return <Navigate to="/" replace />
+  }
+
+  if (!session.data) {
+    if (location.pathname !== '/login') return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    return <LoginPage onSignedIn={() => session.refetch()} />
+  }
+
+  if (location.pathname === '/login') {
+    return <Navigate to="/" replace />
+  }
+
+  const authValue: AuthContextValue = {
+    user: session.data.user,
+    isAdmin: isAdminUser(session.data.user),
+    refreshSession: () => session.refetch(),
+  }
+
+  return (
+    <AuthContext.Provider value={authValue}>
+      <FavoritesProvider>
+        <AuthenticatedShell />
+      </FavoritesProvider>
+    </AuthContext.Provider>
+  )
+}
+
+function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) throw new Error('AuthProvider is missing.')
+  return context
+}
+
+function FullPageLoading() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-muted/40 text-muted-foreground">
+      <LoaderCircle className="mr-2 size-5 animate-spin" />
+      Loading
+    </div>
+  )
+}
+
+function LoginPage({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      const result = await authClient.signIn.email({ email, password })
+      if (result.error) throw new Error(result.error.message || 'Sign in failed.')
+      await onSignedIn()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Sign in failed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-4">
+      <Card className="w-full max-w-sm p-6">
+        <div className="mb-6 flex items-center gap-3">
+          <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Clapperboard className="size-5" />
+          </span>
+          <div>
+            <h1 className="font-semibold text-xl">ZME</h1>
+            <p className="text-muted-foreground text-sm">Sign in with email and password.</p>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <label htmlFor="login-email" className="grid gap-2 text-sm">
+            Email
+            <Input
+              id="login-email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              type="email"
+              required
+            />
+          </label>
+          <label htmlFor="login-password" className="grid gap-2 text-sm">
+            Password
+            <Input
+              id="login-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              minLength={8}
+              required
+            />
+          </label>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <LoaderCircle data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <ShieldCheck data-icon="inline-start" />
+            )}
+            Sign in
+          </Button>
+        </form>
+      </Card>
+    </main>
+  )
+}
+
+function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
+  const [step, setStep] = useState(0)
+  const [name, setName] = useState('Admin')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [tmdbApiKey, setTmdbApiKey] = useState('')
+  const [tmdbLanguage, setTmdbLanguage] = useState('zh-CN')
+  const [indexerEndpoint, setIndexerEndpoint] = useState('http://127.0.0.1:9696')
+  const [indexerApiKey, setIndexerApiKey] = useState('')
+  const [downloaderKind, setDownloaderKind] = useState<DownloaderKind>('zpan')
+  const [downloaderEndpoint, setDownloaderEndpoint] = useState('https://zpan.space')
+  const [downloaderApiKey, setDownloaderApiKey] = useState('')
+  const [downloaderUsername, setDownloaderUsername] = useState('')
+  const [downloaderPassword, setDownloaderPassword] = useState('')
+  const [downloaderOption, setDownloaderOption] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const steps = ['Administrator', 'Media source', 'Indexer', 'Downloader']
+
+  async function handleCreateAdmin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    try {
+      await createInitialAdmin({ name, email, password })
+      const result = await authClient.signIn.email({ email, password })
+      if (result.error) throw new Error(result.error.message || 'Sign in failed.')
+      toast.success('Administrator created.')
+      setStep(1)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Setup failed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleMediaSource(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!tmdbApiKey.trim()) {
+      setStep(2)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await createMediaSource({
+        description: 'TMDB',
+        kind: 'tmdb',
+        credentials: { apiKey: tmdbApiKey.trim() },
+        options: { language: tmdbLanguage },
+        enabled: true,
+      })
+      toast.success('Media source saved.')
+      setStep(2)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save media source.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleIndexer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!indexerApiKey.trim()) {
+      setStep(3)
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await createIndexer({
+        description: 'Prowlarr',
+        kind: 'prowlarr',
+        endpoint: indexerEndpoint.trim(),
+        credentials: { apiKey: indexerApiKey.trim() },
+        options: {},
+        enabled: true,
+      })
+      toast.success('Indexer saved.')
+      setStep(3)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save indexer.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDownloader(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!downloaderEndpoint.trim()) {
+      await onComplete()
+      return
+    }
+
+    const credentials: Record<string, string> = {}
+    const options: Record<string, string> = {}
+    if (downloaderKind === 'zpan' && downloaderApiKey) credentials.apiKey = downloaderApiKey
+    if (downloaderKind === 'aria2' && downloaderApiKey) credentials.secret = downloaderApiKey
+    if ((downloaderKind === 'qbittorrent' || downloaderKind === 'transmission') && downloaderUsername) {
+      credentials.username = downloaderUsername
+    }
+    if ((downloaderKind === 'qbittorrent' || downloaderKind === 'transmission') && downloaderPassword) {
+      credentials.password = downloaderPassword
+    }
+    if (downloaderKind === 'zpan' && downloaderOption) options.targetFolder = downloaderOption
+    if (downloaderKind === 'qbittorrent' && downloaderOption) options.category = downloaderOption
+    if (downloaderKind === 'transmission' && downloaderOption) options.downloadDir = downloaderOption
+    if (downloaderKind === 'aria2' && downloaderOption) options.dir = downloaderOption
+
+    setSubmitting(true)
+    try {
+      await createDownloader({
+        description: getDownloaderKindLabel(downloaderKind),
+        kind: downloaderKind,
+        endpoint: downloaderEndpoint.trim(),
+        credentials,
+        options,
+        enabled: true,
+      })
+      toast.success('Downloader saved.')
+      await onComplete()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to save downloader.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function handleDownloaderKindChange(kind: DownloaderKind) {
+    setDownloaderKind(kind)
+    setDownloaderEndpoint(getDefaultDownloaderEndpoint(kind))
+    setDownloaderOption('')
+    setDownloaderApiKey('')
+    setDownloaderUsername('')
+    setDownloaderPassword('')
+  }
+
+  return (
+    <main className="min-h-dvh bg-muted/40 p-4">
+      <div className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-3xl items-center">
+        <div className="w-full">
+          <div className="mb-8">
+            <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <Clapperboard className="size-5" />
+            </div>
+            <h1 className="font-semibold text-3xl">Initialize ZME</h1>
+            <p className="mt-2 max-w-xl text-muted-foreground">
+              Create the first administrator. Media source, indexer, and downloader setup can be completed later in the
+              admin area.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-[14rem_1fr]">
+            <div className="space-y-2 text-sm">
+              {steps.map((label, index) => (
+                <div
+                  key={label}
+                  className={cn(
+                    'rounded-lg border px-3 py-2',
+                    step === index
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : step > index
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'text-muted-foreground',
+                  )}
+                >
+                  {index + 1}. {label}
+                </div>
+              ))}
+            </div>
+            <Card className="p-5">
+              {step === 0 ? (
+                <form onSubmit={handleCreateAdmin} className="flex flex-col gap-4">
+                  <label htmlFor="setup-name" className="grid gap-2 text-sm">
+                    Name
+                    <Input id="setup-name" value={name} onChange={(event) => setName(event.target.value)} required />
+                  </label>
+                  <label htmlFor="setup-email" className="grid gap-2 text-sm">
+                    Email
+                    <Input
+                      id="setup-email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      type="email"
+                      required
+                    />
+                  </label>
+                  <label htmlFor="setup-password" className="grid gap-2 text-sm">
+                    Password
+                    <Input
+                      id="setup-password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      type="password"
+                      minLength={8}
+                      required
+                    />
+                  </label>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting ? (
+                      <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                    ) : (
+                      <ShieldCheck data-icon="inline-start" />
+                    )}
+                    Create administrator
+                  </Button>
+                </form>
+              ) : null}
+
+              {step === 1 ? (
+                <form onSubmit={handleMediaSource} className="flex flex-col gap-4">
+                  <label htmlFor="setup-tmdb-api-key" className="grid gap-2 text-sm">
+                    TMDB API Key
+                    <Input
+                      id="setup-tmdb-api-key"
+                      value={tmdbApiKey}
+                      onChange={(event) => setTmdbApiKey(event.target.value)}
+                      type="password"
+                    />
+                  </label>
+                  <div className="grid gap-2 text-sm">
+                    <span>Default language</span>
+                    <Select value={tmdbLanguage} onValueChange={(value) => setTmdbLanguage(value || 'zh-CN')}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="zh-CN">中文</SelectItem>
+                          <SelectItem value="en-US">English</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={submitting}>
+                      {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                      Save and continue
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                      Skip
+                    </Button>
+                  </div>
+                </form>
+              ) : null}
+
+              {step === 2 ? (
+                <form onSubmit={handleIndexer} className="flex flex-col gap-4">
+                  <label htmlFor="setup-indexer-endpoint" className="grid gap-2 text-sm">
+                    Prowlarr endpoint
+                    <Input
+                      id="setup-indexer-endpoint"
+                      value={indexerEndpoint}
+                      onChange={(event) => setIndexerEndpoint(event.target.value)}
+                      required
+                    />
+                  </label>
+                  <label htmlFor="setup-indexer-api-key" className="grid gap-2 text-sm">
+                    API Key
+                    <Input
+                      id="setup-indexer-api-key"
+                      value={indexerApiKey}
+                      onChange={(event) => setIndexerApiKey(event.target.value)}
+                      type="password"
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={submitting}>
+                      {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                      Save and continue
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setStep(3)}>
+                      Skip
+                    </Button>
+                  </div>
+                </form>
+              ) : null}
+
+              {step === 3 ? (
+                <form onSubmit={handleDownloader} className="flex flex-col gap-4">
+                  <div className="grid gap-2 text-sm">
+                    <span>Downloader</span>
+                    <Select
+                      value={downloaderKind}
+                      onValueChange={(value) => handleDownloaderKindChange((value || 'zpan') as DownloaderKind)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {(['zpan', 'qbittorrent', 'transmission', 'aria2'] as DownloaderKind[]).map((kind) => (
+                            <SelectItem key={kind} value={kind}>
+                              {getDownloaderKindLabel(kind)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <label htmlFor="setup-downloader-endpoint" className="grid gap-2 text-sm">
+                    Endpoint
+                    <Input
+                      id="setup-downloader-endpoint"
+                      value={downloaderEndpoint}
+                      onChange={(event) => setDownloaderEndpoint(event.target.value)}
+                      required
+                    />
+                  </label>
+                  {downloaderKind === 'zpan' || downloaderKind === 'aria2' ? (
+                    <label htmlFor="setup-downloader-api-key" className="grid gap-2 text-sm">
+                      {downloaderKind === 'aria2' ? 'Secret' : 'API Key'}
+                      <Input
+                        id="setup-downloader-api-key"
+                        value={downloaderApiKey}
+                        onChange={(event) => setDownloaderApiKey(event.target.value)}
+                        type="password"
+                      />
+                    </label>
+                  ) : null}
+                  {downloaderKind === 'qbittorrent' || downloaderKind === 'transmission' ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label htmlFor="setup-downloader-username" className="grid gap-2 text-sm">
+                        Username
+                        <Input
+                          id="setup-downloader-username"
+                          value={downloaderUsername}
+                          onChange={(event) => setDownloaderUsername(event.target.value)}
+                        />
+                      </label>
+                      <label htmlFor="setup-downloader-password" className="grid gap-2 text-sm">
+                        Password
+                        <Input
+                          id="setup-downloader-password"
+                          value={downloaderPassword}
+                          onChange={(event) => setDownloaderPassword(event.target.value)}
+                          type="password"
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                  <label htmlFor="setup-downloader-option" className="grid gap-2 text-sm">
+                    {getDownloaderOptionLabel(downloaderKind)}
+                    <Input
+                      id="setup-downloader-option"
+                      value={downloaderOption}
+                      onChange={(event) => setDownloaderOption(event.target.value)}
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={submitting}>
+                      {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                      Finish
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => void onComplete()}>
+                      Skip
+                    </Button>
+                  </div>
+                </form>
+              ) : null}
+            </Card>
+          </div>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function getDefaultDownloaderEndpoint(kind: DownloaderKind) {
+  if (kind === 'zpan') return 'https://zpan.space'
+  if (kind === 'qbittorrent') return 'http://127.0.0.1:8080'
+  if (kind === 'transmission') return 'http://127.0.0.1:9091'
+  return 'http://127.0.0.1:6800/jsonrpc'
+}
+
+function getDownloaderKindLabel(kind: DownloaderKind) {
+  if (kind === 'zpan') return 'ZPan'
+  if (kind === 'qbittorrent') return 'qBittorrent'
+  if (kind === 'transmission') return 'Transmission'
+  return 'aria2'
+}
+
+function getDownloaderOptionLabel(kind: DownloaderKind) {
+  if (kind === 'zpan') return 'Target folder'
+  if (kind === 'qbittorrent') return 'Category'
+  if (kind === 'transmission') return 'Download directory'
+  return 'Directory'
 }
 
 function FavoritesProvider({ children }: { children: ReactNode }) {
@@ -208,8 +773,13 @@ function getMediaKey(item: Pick<MediaSearchItem, 'id' | 'kind'>) {
   return `${item.kind}:${item.id}`
 }
 
+function isAdminUser(user: { role?: string | null }) {
+  return (user.role || '').split(',').includes('admin')
+}
+
 function AuthenticatedShell() {
   const [topbarOverride, setTopbarOverride] = useState<TopbarOverride | null>(null)
+  const { isAdmin } = useAuth()
 
   return (
     <SidebarProvider style={{ '--sidebar-width': '17.5rem' } as CSSProperties}>
@@ -224,8 +794,11 @@ function AuthenticatedShell() {
           <Route path="/series" element={<MediaWorkspace mode="tv" />} />
           <Route path="/series/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
           <Route path="/favorites" element={<FavoritesPage />} />
-          <Route path="/indexers" element={<IndexersPage />} />
-          <Route path="/downloaders" element={<DownloadersPage />} />
+          <Route path="/admin/users" element={isAdmin ? <UsersPage /> : <Navigate to="/" replace />} />
+          <Route path="/admin/media-sources" element={isAdmin ? <MediaSourcesPage /> : <Navigate to="/" replace />} />
+          <Route path="/admin/indexers" element={isAdmin ? <IndexersPage /> : <Navigate to="/" replace />} />
+          <Route path="/admin/downloaders" element={isAdmin ? <DownloadersPage /> : <Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </SidebarInset>
     </SidebarProvider>
@@ -313,13 +886,25 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('favoritesSubtitle'),
     }
   }
-  if (pathname === '/downloaders') {
+  if (pathname === '/admin/users') {
+    return {
+      title: t('users'),
+      subtitle: t('usersSubtitle'),
+    }
+  }
+  if (pathname === '/admin/media-sources') {
+    return {
+      title: t('mediaSources'),
+      subtitle: t('mediaSourcesSubtitle'),
+    }
+  }
+  if (pathname === '/admin/downloaders') {
     return {
       title: t('downloaders'),
       subtitle: t('downloadersSubtitle'),
     }
   }
-  if (pathname === '/indexers') {
+  if (pathname === '/admin/indexers') {
     return {
       title: t('indexers'),
       subtitle: t('indexersSubtitle'),
@@ -356,6 +941,7 @@ function getStateMedia(state: unknown, routeMedia: { kind: MediaKind; id: number
 
 function AppSidebar() {
   const { t } = useTranslation()
+  const { isAdmin } = useAuth()
 
   return (
     <div className="hidden lg:block">
@@ -378,8 +964,20 @@ function AppSidebar() {
             <SidebarLink icon={Film} label={t('movies')} to="/movies" />
             <SidebarLink icon={Tv} label={t('series')} to="/series" />
             <SidebarLink icon={Bookmark} label={t('favorites')} to="/favorites" />
-            <SidebarLink icon={Database} label={t('indexers')} to="/indexers" />
-            <SidebarLink icon={HardDriveDownload} label={t('downloaders')} to="/downloaders" />
+            {isAdmin ? (
+              <>
+                <SidebarMenuItem className="py-2">
+                  <Separator className="bg-sidebar-border" />
+                  <div className="px-2 pt-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                    {t('admin')}
+                  </div>
+                </SidebarMenuItem>
+                <SidebarLink icon={UserRound} label={t('users')} to="/admin/users" />
+                <SidebarLink icon={Database} label={t('mediaSources')} to="/admin/media-sources" />
+                <SidebarLink icon={Database} label={t('indexers')} to="/admin/indexers" />
+                <SidebarLink icon={HardDriveDownload} label={t('downloaders')} to="/admin/downloaders" />
+              </>
+            ) : null}
           </SidebarMenu>
         </SidebarContent>
 
@@ -393,6 +991,7 @@ function AppSidebar() {
 
 function UserPanel() {
   const { i18n, t } = useTranslation()
+  const { refreshSession, user } = useAuth()
   const currentLanguage = getTmdbLanguage(i18n.language)
   const currentLanguageLabel =
     supportedLanguages.find((language) => language.value === currentLanguage)?.label ?? currentLanguage
@@ -401,6 +1000,22 @@ function UserPanel() {
     window.localStorage.setItem('zme.language', language)
     await i18n.changeLanguage(language)
   }
+
+  async function handleSignOut() {
+    await authClient.signOut()
+    await refreshSession()
+  }
+
+  const initials =
+    user.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('')
+      .slice(0, 2) ||
+    user.email[0]?.toUpperCase() ||
+    'U'
 
   return (
     <DropdownMenu>
@@ -414,12 +1029,12 @@ function UserPanel() {
       >
         <Avatar size="lg" className="rounded-lg">
           <AvatarFallback className="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-semibold">
-            S
+            {initials}
           </AvatarFallback>
           <AvatarBadge className="bg-emerald-400" />
         </Avatar>
         <span className="min-w-0 flex-1 text-left">
-          <span className="block truncate font-medium text-sm">saltbo</span>
+          <span className="block truncate font-medium text-sm">{user.name}</span>
           <span className="mt-0.5 flex items-center gap-1.5 truncate text-muted-foreground text-xs">
             <ShieldCheck className="size-3.5 shrink-0 text-emerald-300" />
             {t('signedIn')}
@@ -433,10 +1048,10 @@ function UserPanel() {
         className="dark w-56 border border-sidebar-border bg-sidebar text-sidebar-foreground"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>saltbo</DropdownMenuLabel>
+          <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
           <DropdownMenuItem>
             <ShieldCheck />
-            <span>{t('zpanConnected')}</span>
+            <span>{isAdminUser(user) ? t('administrator') : t('standardUser')}</span>
             <span className="ml-auto size-2 rounded-full bg-emerald-500" aria-hidden />
           </DropdownMenuItem>
           <DropdownMenuSub>
@@ -458,6 +1073,10 @@ function UserPanel() {
               </DropdownMenuRadioGroup>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          <DropdownMenuItem onClick={() => void handleSignOut()}>
+            <LogOut />
+            <span>{t('signOut')}</span>
+          </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

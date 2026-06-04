@@ -20,6 +20,18 @@ export interface FavoriteMediaItem extends MediaSearchItem {
   updatedAt: string
 }
 
+export type UserRole = 'admin' | 'user'
+
+export interface AppUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  banned: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface MediaCredit {
   name: string
   role: string
@@ -94,6 +106,39 @@ export interface IndexerInput {
   description?: string
   kind: IndexerKind
   endpoint: string
+  credentials: Record<string, string>
+  options: Record<string, string>
+  enabled: boolean
+}
+
+export type MediaSourceKind = 'tmdb'
+
+export interface MediaSourceSummary {
+  id: string
+  description: string | null
+  kind: MediaSourceKind
+  enabled: boolean
+  healthStatus: 'unknown' | 'online' | 'offline'
+  healthMessage: string | null
+  healthCheckedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MediaSourceDetails extends MediaSourceSummary {
+  credentials: Record<string, string>
+  options: Record<string, string>
+}
+
+export interface MediaSourceHealth {
+  status: 'online' | 'offline'
+  message: string
+  checkedAt: string
+}
+
+export interface MediaSourceInput {
+  description?: string
+  kind: MediaSourceKind
   credentials: Record<string, string>
   options: Record<string, string>
   enabled: boolean

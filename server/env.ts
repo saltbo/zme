@@ -5,6 +5,7 @@ export interface Env {
     fetch(request: Request): Promise<Response>
   }
   DB: D1Database
+  BETTER_AUTH_SECRET?: string
   TMDB_API_KEY?: string
   TMDB_LANGUAGE?: string
 }

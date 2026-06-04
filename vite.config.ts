@@ -6,29 +6,33 @@ import { defineConfig } from 'vite'
 
 const appPort = Number(process.env.E2E_APP_PORT ?? 5173)
 
-export default defineConfig({
-  build: {
-    outDir: 'dist',
-    emptyOutDir: true,
-  },
-  environments: {
-    zme: {
-      resolve: {
-        conditions: ['browser', 'workerd', 'worker', 'module', 'development|production'],
-        mainFields: ['browser', 'module', 'jsnext:main', 'jsnext'],
+export default defineConfig(() => {
+  const isVitest = process.env.VITEST === 'true'
+
+  return {
+    build: {
+      outDir: 'dist',
+      emptyOutDir: true,
+    },
+    environments: {
+      zme: {
+        resolve: {
+          conditions: ['browser', 'workerd', 'worker', 'module', 'development|production'],
+          mainFields: ['browser', 'module', 'jsnext:main', 'jsnext'],
+        },
       },
     },
-  },
-  plugins: [react(), tailwindcss(), cloudflare()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@server': path.resolve(__dirname, './server'),
-      '@shared': path.resolve(__dirname, './shared'),
+    plugins: [react(), tailwindcss(), !isVitest && cloudflare()].filter(Boolean),
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src'),
+        '@server': path.resolve(__dirname, './server'),
+        '@shared': path.resolve(__dirname, './shared'),
+      },
     },
-  },
-  server: {
-    port: appPort,
-    allowedHosts: process.env.E2E_BASE_URL ? true : undefined,
-  },
+    server: {
+      port: appPort,
+      allowedHosts: process.env.E2E_BASE_URL ? true : undefined,
+    },
+  }
 })

@@ -12,11 +12,10 @@ ZME is a media discovery frontend for saving remote resources into ZPan.
 
 ## Local Development
 
-Create `.dev.vars` with the external services you want to test:
+Create `.dev.vars` with the auth secret:
 
 ```dotenv
-TMDB_API_KEY=your_tmdb_v4_read_access_token
-TMDB_LANGUAGE=zh-CN
+BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 ```
 
 Then run:
@@ -26,4 +25,12 @@ pnpm install
 pnpm dev
 ```
 
-ZME does not run indexers or downloaders inside Workers. Users connect their own Prowlarr and downloader services from the application settings.
+On first launch, ZME opens the onboarding flow to create the first administrator. TMDB is configured in Admin -> Media sources. Indexers and downloaders are also administrator-managed settings.
+
+For deployed Workers, set the auth secret with:
+
+```bash
+wrangler secret put BETTER_AUTH_SECRET
+```
+
+ZME does not run indexers or downloaders inside Workers. Administrators connect Prowlarr and downloader services from the admin area.
