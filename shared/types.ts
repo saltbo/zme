@@ -12,6 +12,29 @@ export interface MediaSearchItem {
   rating: number | null
 }
 
+export interface MediaCredit {
+  name: string
+  role: string
+  portraitUrl: string | null
+}
+
+export interface MediaExternalIds {
+  tmdb: string
+  imdb: string | null
+  tvdb: string | null
+}
+
+export interface MediaDetails extends MediaSearchItem {
+  genres: string[]
+  runtime: string | null
+  language: string | null
+  country: string | null
+  director: string | null
+  writers: string[]
+  cast: MediaCredit[]
+  ids: MediaExternalIds
+}
+
 export interface IndexerSearchItem {
   id: string
   title: string

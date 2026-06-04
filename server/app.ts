@@ -3,10 +3,15 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Env } from './env'
 import { searchIndexers } from './services/prowlarr'
-import { searchMedia } from './services/tmdb'
+import { getMediaDetails, searchMedia } from './services/tmdb'
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1),
+})
+
+const mediaDetailParamsSchema = z.object({
+  kind: z.enum(['movie', 'tv']),
+  id: z.coerce.number().int().positive(),
 })
 
 const routes = new Hono<{ Bindings: Env }>()
@@ -25,6 +30,16 @@ const routes = new Hono<{ Bindings: Env }>()
     const { q } = c.req.valid('query')
     const results = await searchMedia(apiKey, q)
     return c.json({ results })
+  })
+  .get('/media/:kind/:id', zValidator('param', mediaDetailParamsSchema), async (c) => {
+    const apiKey = c.env.TMDB_API_KEY
+    if (!apiKey) {
+      return c.json({ error: 'TMDB_API_KEY is not configured.' }, 500)
+    }
+
+    const { kind, id } = c.req.valid('param')
+    const item = await getMediaDetails(apiKey, kind, id)
+    return c.json({ item })
   })
   .get('/indexers/search', zValidator('query', searchQuerySchema), async (c) => {
     const baseUrl = c.env.PROWLARR_URL

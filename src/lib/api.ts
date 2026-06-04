@@ -1,4 +1,5 @@
 import type { AppType } from '@server/app'
+import type { MediaKind } from '@shared/types'
 import { hc } from 'hono/client'
 
 const client = hc<AppType>('/')
@@ -22,6 +23,21 @@ export async function searchMedia(query: string) {
 
   if (!response.ok) {
     throw new ApiError('Failed to search media.', response.status)
+  }
+
+  return response.json()
+}
+
+export async function getMediaDetails(kind: MediaKind, id: number) {
+  const response = await client.api.media[':kind'][':id'].$get({
+    param: {
+      kind,
+      id: String(id),
+    },
+  })
+
+  if (!response.ok) {
+    throw new ApiError('Failed to load media details.', response.status)
   }
 
   return response.json()

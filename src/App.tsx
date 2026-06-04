@@ -1,4 +1,4 @@
-import type { IndexerSearchItem, MediaKind, MediaSearchItem } from '@shared/types'
+import type { IndexerSearchItem, MediaDetails, MediaKind, MediaSearchItem } from '@shared/types'
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -18,7 +18,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Toaster, toast } from 'sonner'
-import { getZpanSaveUrl, searchIndexers, searchMedia } from './lib/api'
+import { getMediaDetails, getZpanSaveUrl, searchIndexers, searchMedia } from './lib/api'
 import { cn, formatBytes } from './lib/utils'
 
 const libraryItems: MediaSearchItem[] = [
@@ -90,33 +90,6 @@ const libraryItems: MediaSearchItem[] = [
   },
 ]
 
-const mockReleases: IndexerSearchItem[] = [
-  {
-    id: 'demo-1',
-    title: 'Interstellar.2014.2160p.UHD.BluRay.REMUX.HEVC.DTS-HD.MA.5.1',
-    indexer: 'Private Indexer',
-    size: 83_400_000_000,
-    seeders: 142,
-    leechers: 8,
-    publishDate: '2025-10-12T12:00:00.000Z',
-    downloadUrl: null,
-    magnetUrl: 'magnet:?xt=urn:btih:demo-interstellar-remux',
-    infoHash: 'demo-interstellar-remux',
-  },
-  {
-    id: 'demo-2',
-    title: 'Interstellar.2014.1080p.BluRay.x265.10bit.AAC',
-    indexer: 'Public BT',
-    size: 7_900_000_000,
-    seeders: 415,
-    leechers: 22,
-    publishDate: '2025-08-02T12:00:00.000Z',
-    downloadUrl: null,
-    magnetUrl: 'magnet:?xt=urn:btih:demo-interstellar-1080p',
-    infoHash: 'demo-interstellar-1080p',
-  },
-]
-
 const mediaSkeletonKeys = [
   'media-skeleton-1',
   'media-skeleton-2',
@@ -127,41 +100,10 @@ const mediaSkeletonKeys = [
 ]
 const releaseSkeletonKeys = ['release-skeleton-1', 'release-skeleton-2', 'release-skeleton-3', 'release-skeleton-4']
 
-const detailMeta = {
-  genres: ['Sci-Fi', 'Adventure', 'Drama'],
-  runtime: '2h 49m',
-  language: 'English',
-  country: 'United States',
-  director: 'Christopher Nolan',
-  writers: ['Jonathan Nolan', 'Christopher Nolan'],
-  cast: [
-    {
-      name: 'Matthew McConaughey',
-      role: 'Cooper',
-      portraitUrl: 'https://image.tmdb.org/t/p/w342/wJiGedOCZhwMx9DezY8uwbNxmAY.jpg',
-    },
-    {
-      name: 'Anne Hathaway',
-      role: 'Brand',
-      portraitUrl: 'https://image.tmdb.org/t/p/w342/tLelKoPNiyJCSEtQTz1FGv4TLGc.jpg',
-    },
-    {
-      name: 'Jessica Chastain',
-      role: 'Murph',
-      portraitUrl: 'https://image.tmdb.org/t/p/w342/lodMzLKSdrPcBry6TdoDsMN3Vge.jpg',
-    },
-    {
-      name: 'Michael Caine',
-      role: 'Professor Brand',
-      portraitUrl: 'https://image.tmdb.org/t/p/w342/bVZRMlpjTAO2pJK6v90buFgVbSW.jpg',
-    },
-  ],
-  ids: {
-    tmdb: '157336',
-    imdb: 'tt0816692',
-    tvdb: '-',
-  },
-  tags: ['IMAX', 'Space', 'Time dilation', 'Family', 'High bitrate recommended'],
+interface TopbarOverride {
+  pathname: string
+  title: string
+  subtitle: string
 }
 
 export function App() {
@@ -174,29 +116,32 @@ export function App() {
 }
 
 function AuthenticatedShell() {
+  const [topbarOverride, setTopbarOverride] = useState<TopbarOverride | null>(null)
+
   return (
     <main className="min-h-dvh bg-[#f3f0f7] text-[#191420]">
       <Sidebar />
       <div className="min-h-dvh lg:pl-[280px]">
         <MobileHeader />
-        <AppTopbar />
+        <AppTopbar override={topbarOverride} />
         <Routes>
           <Route path="/" element={<MediaWorkspace mode="discover" />} />
           <Route path="/movies" element={<MediaWorkspace mode="movie" />} />
-          <Route path="/movies/:id" element={<MediaDetailPage />} />
+          <Route path="/movies/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
           <Route path="/series" element={<MediaWorkspace mode="tv" />} />
-          <Route path="/series/:id" element={<MediaDetailPage />} />
+          <Route path="/series/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
         </Routes>
       </div>
     </main>
   )
 }
 
-function AppTopbar() {
+function AppTopbar({ override }: { override: TopbarOverride | null }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const pageCopy = getTopbarCopy(location.pathname)
-  const isDetailPage = Boolean(getMediaByPathname(location.pathname))
+  const pageCopy =
+    override?.pathname === location.pathname ? override : getTopbarCopy(location.pathname, location.state)
+  const isDetailPage = Boolean(getRouteMedia(location.pathname))
   const [searchValue, setSearchValue] = useState('')
 
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
@@ -243,12 +188,17 @@ function AppTopbar() {
   )
 }
 
-function getTopbarCopy(pathname: string) {
-  const media = getMediaByPathname(pathname)
-  if (media) {
+function getTopbarCopy(pathname: string, state: unknown) {
+  const routeMedia = getRouteMedia(pathname)
+  if (routeMedia) {
+    const stateMedia = getStateMedia(state, routeMedia)
+    const seededMedia = getSeededMedia(routeMedia.kind, routeMedia.id)
+    const media = stateMedia ?? seededMedia
     return {
-      title: media.title,
-      subtitle: `${media.kind === 'movie' ? 'Movie' : 'Series'} / ${media.releaseYear ?? 'Unknown year'}`,
+      title: media?.title ?? (routeMedia.kind === 'movie' ? 'Movie' : 'Series'),
+      subtitle: media?.releaseYear
+        ? `${routeMedia.kind === 'movie' ? 'Movie' : 'Series'} / ${media.releaseYear}`
+        : `${routeMedia.kind === 'movie' ? 'Movie' : 'Series'} / TMDB ${routeMedia.id}`,
     }
   }
   if (pathname === '/movies') {
@@ -269,18 +219,31 @@ function getTopbarCopy(pathname: string) {
   }
 }
 
-function getMediaByPathname(pathname: string): MediaSearchItem | undefined {
+function getRouteMedia(pathname: string): { kind: MediaKind; id: number } | undefined {
   const movieMatch = pathname.match(/^\/movies\/(\d+)$/)
   if (movieMatch) {
-    return libraryItems.find((item) => item.kind === 'movie' && item.id === Number(movieMatch[1]))
+    return { kind: 'movie', id: Number(movieMatch[1]) }
   }
 
   const seriesMatch = pathname.match(/^\/series\/(\d+)$/)
   if (seriesMatch) {
-    return libraryItems.find((item) => item.kind === 'tv' && item.id === Number(seriesMatch[1]))
+    return { kind: 'tv', id: Number(seriesMatch[1]) }
   }
 
   return undefined
+}
+
+function getSeededMedia(kind: MediaKind, id: number): MediaSearchItem | undefined {
+  return libraryItems.find((item) => item.kind === kind && item.id === id)
+}
+
+function getStateMedia(state: unknown, routeMedia: { kind: MediaKind; id: number }): MediaSearchItem | undefined {
+  if (!state || typeof state !== 'object' || !('media' in state)) return undefined
+
+  const media = (state as { media?: MediaSearchItem }).media
+  if (media?.kind !== routeMedia.kind || media.id !== routeMedia.id) return undefined
+
+  return media
 }
 
 function Sidebar() {
@@ -572,6 +535,14 @@ function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: bool
     )
   }
 
+  if (items.length === 0) {
+    return (
+      <div className="flex min-h-48 items-center justify-center rounded-2xl border border-[#ded6ea] bg-white p-6 text-[#76678d] text-sm">
+        No releases found from configured indexers.
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-x-4 gap-y-7 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
       {items.map((item) => (
@@ -586,7 +557,7 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
 
   return (
     <article className="group">
-      <Link to={detailPath} className="block">
+      <Link to={detailPath} state={{ media: item }} className="block">
         <div className="relative aspect-[2/3] overflow-hidden rounded-[28px] bg-[#21162f] shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-[#21162f]/10 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_28px_58px_rgba(124,58,237,0.24)]">
           {item.posterUrl ? (
             <img
@@ -631,26 +602,83 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
   )
 }
 
-function MediaDetailPage() {
+function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: TopbarOverride | null) => void }) {
   const location = useLocation()
-  const media = getMediaByPathname(location.pathname) ?? libraryItems[2]
-  const [releases, setReleases] = useState<IndexerSearchItem[]>(mockReleases)
+  const routeMedia = getRouteMedia(location.pathname)
+  const routeKind = routeMedia?.kind
+  const routeId = routeMedia?.id
+  const [media, setMedia] = useState<MediaDetails | null>(null)
+  const [loadingMedia, setLoadingMedia] = useState(true)
+  const [mediaError, setMediaError] = useState<string | null>(null)
+  const [releases, setReleases] = useState<IndexerSearchItem[]>([])
   const [loadingReleases, setLoadingReleases] = useState(false)
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false)
 
+  useEffect(() => {
+    if (!routeKind || !routeId) {
+      setMedia(null)
+      setMediaError('Invalid media route.')
+      setLoadingMedia(false)
+      return
+    }
+
+    setLoadingMedia(true)
+    setMediaError(null)
+    getMediaDetails(routeKind, routeId)
+      .then((payload) => setMedia(payload.item))
+      .catch((error: unknown) => {
+        setMedia(null)
+        setMediaError(error instanceof Error ? error.message : 'Unable to load media details.')
+      })
+      .finally(() => setLoadingMedia(false))
+  }, [routeKind, routeId])
+
+  useEffect(() => {
+    if (!media) return
+
+    onTopbarChange({
+      pathname: location.pathname,
+      title: media.title,
+      subtitle: `${media.kind === 'movie' ? 'Movie' : 'Series'} / ${media.releaseYear ?? `TMDB ${media.id}`}`,
+    })
+
+    return () => onTopbarChange(null)
+  }, [location.pathname, media, onTopbarChange])
+
   async function handleFindReleases() {
+    if (!media) return
+
     const releaseQuery = [media.originalTitle, media.releaseYear].filter(Boolean).join(' ')
     setReleaseDialogOpen(true)
     setLoadingReleases(true)
 
     try {
       const payload = await searchIndexers(releaseQuery)
-      setReleases(payload.results.length > 0 ? payload.results : mockReleases)
+      setReleases(payload.results)
     } catch {
-      setReleases(mockReleases)
+      setReleases([])
+      toast.error('Indexer search failed.')
     } finally {
       setLoadingReleases(false)
     }
+  }
+
+  if (loadingMedia) {
+    return (
+      <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <div className="min-h-[560px] animate-pulse rounded-[34px] bg-[#21162f]/18" />
+      </div>
+    )
+  }
+
+  if (!media) {
+    return (
+      <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <div className="flex min-h-80 items-center justify-center rounded-[34px] border border-[#ded6ea] bg-white p-8 text-[#76678d]">
+          {mediaError ?? 'Media not found.'}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -702,21 +730,21 @@ function MediaDetailPage() {
                 <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-white/72 text-sm">
                   <span>{media.releaseYear}</span>
                   <span className="text-white/28">/</span>
-                  <span>{detailMeta.runtime}</span>
+                  <span>{media.runtime ?? 'Unknown runtime'}</span>
                   <span className="text-white/28">/</span>
                   <span className="flex items-center gap-1">
                     <Star className="size-4 fill-[#f6c177] text-[#f6c177]" />
                     {media.rating ? media.rating.toFixed(1) : 'NR'}
                   </span>
                 </div>
-                <div className="mt-3 text-white/62 text-sm">{detailMeta.director}</div>
+                <div className="mt-3 text-white/62 text-sm">{media.director ?? 'Unknown director'}</div>
               </div>
             </div>
 
-            <p className="mt-5 text-white/78 text-base leading-7">{media.overview}</p>
+            <p className="mt-5 line-clamp-5 text-white/78 text-base leading-7">{media.overview}</p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              {detailMeta.genres.map((genre) => (
+              {media.genres.map((genre) => (
                 <span
                   key={genre}
                   className="rounded-full bg-white/12 px-3 py-1.5 font-medium text-white/76 text-xs backdrop-blur"
@@ -782,7 +810,7 @@ function MediaDetailPage() {
                 <span className="text-white/28">/</span>
                 <span>{media.releaseYear}</span>
                 <span className="text-white/28">/</span>
-                <span>{detailMeta.runtime}</span>
+                <span>{media.runtime ?? 'Unknown runtime'}</span>
                 <span className="text-white/28">/</span>
                 <span className="flex items-center gap-1">
                   <Star className="size-4 fill-[#f6c177] text-[#f6c177]" />
@@ -790,19 +818,19 @@ function MediaDetailPage() {
                 </span>
               </div>
 
-              <p className="mt-5 max-w-3xl text-white/78 text-base leading-7 sm:mt-6 sm:text-lg sm:leading-8">
+              <p className="mt-5 line-clamp-7 max-w-3xl text-white/78 text-base leading-7 sm:mt-6 sm:text-lg sm:leading-8">
                 {media.overview}
               </p>
 
               <div className="mt-8 grid max-w-3xl grid-cols-4 divide-x divide-white/10 rounded-[26px] bg-white/10 p-1 text-sm backdrop-blur">
-                <DetailMetric label="Director" value={detailMeta.director} />
-                <DetailMetric label="Runtime" value={detailMeta.runtime} />
-                <DetailMetric label="Language" value={detailMeta.language} />
+                <DetailMetric label="Director" value={media.director ?? 'Unknown'} />
+                <DetailMetric label="Runtime" value={media.runtime ?? 'Unknown'} />
+                <DetailMetric label="Language" value={media.language ?? 'Unknown'} />
                 <DetailMetric label="Rating" value={media.rating ? media.rating.toFixed(1) : 'NR'} />
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
-                {detailMeta.genres.map((genre) => (
+                {media.genres.map((genre) => (
                   <span
                     key={genre}
                     className="rounded-full bg-white/12 px-3 py-1.5 font-medium text-white/76 text-xs backdrop-blur"
@@ -818,22 +846,34 @@ function MediaDetailPage() {
         <div className="bg-[#f8f5fb] px-5 py-7 text-[#21162f] sm:px-8">
           <SectionTitle title="Cast" />
           <div className="-mx-5 mt-4 flex gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
-            {detailMeta.cast.map((person) => (
-              <article key={person.name} className="w-[172px] shrink-0">
-                <div className="aspect-[3/4] overflow-hidden rounded-[26px] bg-[#21162f] shadow-[0_18px_42px_rgba(33,22,47,0.18)]">
-                  <img
-                    src={person.portraitUrl}
-                    alt={person.name}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-                <div className="mt-3">
-                  <div className="line-clamp-2 font-semibold text-sm leading-tight">{person.name}</div>
-                  <div className="mt-1 line-clamp-1 text-[#76678d] text-xs">{person.role}</div>
-                </div>
-              </article>
-            ))}
+            {media.cast.length > 0 ? (
+              media.cast.map((person) => (
+                <article key={`${person.name}-${person.role}`} className="w-[172px] shrink-0">
+                  <div className="aspect-[3/4] overflow-hidden rounded-[26px] bg-[#21162f] shadow-[0_18px_42px_rgba(33,22,47,0.18)]">
+                    {person.portraitUrl ? (
+                      <img
+                        src={person.portraitUrl}
+                        alt={person.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-4 text-center text-white/50 text-sm">
+                        No portrait
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-3">
+                    <div className="line-clamp-2 font-semibold text-sm leading-tight">{person.name}</div>
+                    <div className="mt-1 line-clamp-1 text-[#76678d] text-xs">{person.role}</div>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="flex min-h-40 min-w-full items-center justify-center rounded-2xl border border-[#ded6ea] bg-white text-[#76678d] text-sm">
+                No cast information.
+              </div>
+            )}
           </div>
         </div>
 
@@ -841,13 +881,13 @@ function MediaDetailPage() {
           <section>
             <SectionTitle title="Details" />
             <div className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-              <InfoField label="Director" value={detailMeta.director} />
-              <InfoField label="Writers" value={detailMeta.writers.join(', ')} />
-              <InfoField label="Country" value={detailMeta.country} />
-              <InfoField label="Original language" value={detailMeta.language} />
+              <InfoField label="Director" value={media.director ?? 'Unknown'} />
+              <InfoField label="Writers" value={media.writers.length > 0 ? media.writers.join(', ') : 'Unknown'} />
+              <InfoField label="Country" value={media.country ?? 'Unknown'} />
+              <InfoField label="Original language" value={media.language ?? 'Unknown'} />
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
-              {detailMeta.tags.map((tag) => (
+              {media.genres.map((tag) => (
                 <span key={tag} className="rounded-full bg-[#f0e9ff] px-3 py-1.5 font-medium text-[#6d3fd1] text-xs">
                   {tag}
                 </span>
@@ -858,9 +898,9 @@ function MediaDetailPage() {
           <aside>
             <SectionTitle title="External IDs" />
             <div className="mt-4 divide-y divide-[#ded6ea] text-sm">
-              <IdLine label="TMDB" value={detailMeta.ids.tmdb} />
-              <IdLine label="IMDb" value={detailMeta.ids.imdb} />
-              <IdLine label="TVDB" value={detailMeta.ids.tvdb} />
+              <IdLine label="TMDB" value={media.ids.tmdb} />
+              <IdLine label="IMDb" value={media.ids.imdb ?? '-'} />
+              <IdLine label="TVDB" value={media.ids.tvdb ?? '-'} />
             </div>
           </aside>
         </div>
