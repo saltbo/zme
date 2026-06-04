@@ -1,6 +1,15 @@
 import { parseZmeDownloadCategory } from '@shared/download-metadata'
 import type { DownloadTaskStatus, DownloadTaskSummary, MediaKind } from '@shared/types'
-import { AlertTriangle, CheckCircle2, Clock, DownloadCloud, Gauge, LoaderCircle, Server } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  DownloadCloud,
+  Gauge,
+  LoaderCircle,
+  Server,
+  UploadCloud,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
@@ -133,8 +142,12 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
   const mediaDetails = useMediaDetails(taggedMedia?.kind ?? 'movie', taggedMedia?.tmdbId ?? 0, language)
   const posterMedia = mediaDetails.data ?? null
   const imageUrl = posterMedia?.backdropUrl ?? posterMedia?.posterUrl
+  const displayTitle = posterMedia?.title || getDisplayTitle(task.name)
+  const mediaMeta = getMediaMeta(posterMedia?.kind ?? taggedMedia?.kind ?? null, posterMedia?.releaseYear ?? null, t)
   const progress = getProgress(task)
   const status = getStatusMeta(task.status, t)
+  const primaryProgress = getPrimaryProgress(task.status, progress)
+  const stageMetric = getStageMetric(task, primaryProgress)
 
   return (
     <article className="group">
@@ -142,7 +155,7 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
         {imageUrl ? (
           <img
             src={imageUrl}
-            alt={`${posterMedia?.title ?? task.name} poster`}
+            alt={`${displayTitle} poster`}
             className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
             loading="lazy"
           />
@@ -162,21 +175,27 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
             <status.icon className="size-3.5" />
             {status.label}
           </Badge>
-          <Badge className="h-7 rounded-full border-white/16 bg-black/42 text-white backdrop-blur">
-            {progress.label}
+          <Badge className="h-7 gap-1.5 rounded-full border-white/16 bg-black/42 text-white backdrop-blur">
+            <stageMetric.icon className={cn('size-3.5', stageMetric.className)} />
+            {stageMetric.rate}/s · {stageMetric.progress}
           </Badge>
         </div>
-        <div className="absolute inset-x-0 bottom-0 max-w-2xl p-4 text-white sm:p-5">
-          <h2 className="line-clamp-2 text-balance font-semibold text-xl leading-tight drop-shadow">
-            {getDisplayTitle(task.name)}
-          </h2>
-          <div className="mt-2 flex items-center justify-between gap-3 text-white/82 text-xs">
+        <div className="absolute inset-x-0 bottom-1.5 max-w-2xl p-4 text-white sm:p-5">
+          <h2 className="line-clamp-2 text-balance font-semibold text-xl leading-tight drop-shadow">{displayTitle}</h2>
+          {posterMedia?.overview ? (
+            <p className="mt-2 line-clamp-1 max-w-xl text-sm text-white/76 leading-5">{posterMedia.overview}</p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-white/72 text-xs">
+            {mediaMeta ? <span>{mediaMeta}</span> : null}
+            {mediaMeta ? <span className="text-white/36">/</span> : null}
             <span className="line-clamp-1">{task.downloaderName}</span>
-            <span className="shrink-0 font-medium">{formatRate(task.downloadBps)}/s</span>
+            <span className="text-white/36">/</span>
+            <span className="shrink-0">{formatTaskSize(task.totalBytes, t)}</span>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/18">
-          <div className="h-full bg-white" style={{ width: `${progress.value}%` }} />
+        <div className="absolute inset-x-0 bottom-0 h-1.5 bg-white/18">
+          <div className="absolute inset-y-0 left-0 bg-sky-300" style={{ width: `${progress.download.value}%` }} />
+          <div className="absolute inset-y-0 left-0 bg-emerald-300" style={{ width: `${progress.upload.value}%` }} />
         </div>
       </div>
     </article>
@@ -219,8 +238,32 @@ function getStatusLabel(status: DownloadTaskStatus, t: (key: string) => string) 
 }
 
 function getProgress(task: DownloadTaskSummary) {
-  if (!task.totalBytes || task.totalBytes <= 0) return { value: 0, label: '0%' }
-  const value = Math.min(100, Math.max(0, (task.downloadedBytes / task.totalBytes) * 100))
+  return {
+    download: getByteProgress(task.downloadedBytes, task.totalBytes),
+    upload: getByteProgress(task.storageUploadedBytes, task.totalBytes),
+  }
+}
+
+function getPrimaryProgress(
+  status: DownloadTaskStatus,
+  progress: ReturnType<typeof getProgress>,
+): { value: number; label: string } {
+  return status === 'uploading' || status === 'completed' ? progress.upload : progress.download
+}
+
+function getStageMetric(task: DownloadTaskSummary, progress: { value: number; label: string }) {
+  const uploading = task.status === 'uploading' || task.status === 'completed'
+  return {
+    icon: uploading ? UploadCloud : DownloadCloud,
+    className: uploading ? 'text-emerald-200' : 'text-sky-200',
+    rate: formatRate(uploading ? task.storageUploadBps : task.downloadBps),
+    progress: progress.label,
+  }
+}
+
+function getByteProgress(doneBytes: number, totalBytes: number | null) {
+  if (!totalBytes || totalBytes <= 0) return { value: 0, label: '0%' }
+  const value = Math.min(100, Math.max(0, (doneBytes / totalBytes) * 100))
   return { value, label: `${value.toFixed(value >= 10 ? 0 : 1)}%` }
 }
 
@@ -229,11 +272,20 @@ function formatRate(value: number) {
   return formatBytes(value).replace('Unknown size', '0 B')
 }
 
+function formatTaskSize(value: number | null, t: (key: string) => string) {
+  return value ? formatBytes(value) : t('unknownSize')
+}
+
+function getMediaMeta(kind: MediaKind | null, releaseYear: string | null, t: (key: string) => string) {
+  const parts = [kind ? t(kind === 'movie' ? 'movie' : 'tv') : null, releaseYear].filter(Boolean)
+  return parts.length > 0 ? parts.join(' / ') : null
+}
+
 function getDisplayTitle(name: string) {
   return name
     .replace(/\.torrent$/i, '')
     .replace(/\[[^\]]*]/g, ' ')
-    .replace(/\((19|20)\d{2}\)/g, ' $1 ')
+    .replace(/\((19|20)\d{2}\)/g, ' ')
     .replace(/[._+]+/g, ' ')
     .replace(/\s+-\s+.+$/g, ' ')
     .replace(/\s+/g, ' ')
