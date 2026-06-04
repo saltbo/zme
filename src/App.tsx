@@ -1,4 +1,11 @@
-import type { DownloaderSummary, IndexerSearchItem, MediaDetails, MediaKind, MediaSearchItem } from '@shared/types'
+import type {
+  DownloaderSummary,
+  FavoriteMediaItem,
+  IndexerSearchItem,
+  MediaDetails,
+  MediaKind,
+  MediaSearchItem,
+} from '@shared/types'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -6,6 +13,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Bookmark,
+  BookmarkCheck,
   Clapperboard,
   Database,
   Download,
@@ -22,8 +30,8 @@ import {
   Star,
   Tv,
 } from 'lucide-react'
-import type { CSSProperties, ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import type { CSSProperties, MouseEvent, ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Toaster, toast } from 'sonner'
@@ -65,10 +73,13 @@ import { getTmdbLanguage, supportedLanguages } from './i18n'
 import {
   ApiError,
   createDownload,
+  createFavorite,
+  deleteFavorite,
   getMediaDetails,
   getPopularMedia,
   getTrendingMedia,
   listDownloaders,
+  listFavorites,
   searchIndexers,
   searchMedia,
 } from './lib/api'
@@ -104,15 +115,97 @@ interface ReleaseSearchError {
 type ReleaseSort = 'seeders' | 'date' | 'size-desc' | 'size-asc'
 type ReleaseQuality = 'all' | '2160p' | '1080p' | '720p' | 'other'
 
+interface FavoritesContextValue {
+  items: FavoriteMediaItem[]
+  loading: boolean
+  isFavorite: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
+  toggleFavorite: (item: MediaSearchItem) => Promise<void>
+}
+
+const FavoritesContext = createContext<FavoritesContextValue | null>(null)
+
 export function App() {
   return (
     <BrowserRouter>
       <TooltipProvider>
-        <AuthenticatedShell />
+        <FavoritesProvider>
+          <AuthenticatedShell />
+        </FavoritesProvider>
         <Toaster richColors />
       </TooltipProvider>
     </BrowserRouter>
   )
+}
+
+function FavoritesProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
+  const [items, setItems] = useState<FavoriteMediaItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    listFavorites()
+      .then((payload) => {
+        if (!cancelled) setItems(payload.items)
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) toast.error(error instanceof Error ? error.message : t('favoritesLoadFailed'))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [t])
+
+  const favoriteKeys = useMemo(() => new Set(items.map((item) => getMediaKey(item))), [items])
+
+  const isFavorite = useCallback(
+    (item: Pick<MediaSearchItem, 'id' | 'kind'>) => favoriteKeys.has(getMediaKey(item)),
+    [favoriteKeys],
+  )
+
+  const toggleFavorite = useCallback(
+    async (item: MediaSearchItem) => {
+      const key = getMediaKey(item)
+      if (favoriteKeys.has(key)) {
+        await deleteFavorite(item.kind, item.id)
+        setItems((current) => current.filter((favorite) => getMediaKey(favorite) !== key))
+        toast.success(t('favoriteRemoved'))
+        return
+      }
+
+      const payload = await createFavorite(item)
+      setItems((current) => [payload.item, ...current.filter((favorite) => getMediaKey(favorite) !== key)])
+      toast.success(t('favoriteAdded'))
+    },
+    [favoriteKeys, t],
+  )
+
+  const value = useMemo(
+    () => ({
+      items,
+      loading,
+      isFavorite,
+      toggleFavorite,
+    }),
+    [items, loading, isFavorite, toggleFavorite],
+  )
+
+  return <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>
+}
+
+function useFavorites() {
+  const context = useContext(FavoritesContext)
+  if (!context) throw new Error('FavoritesProvider is missing.')
+  return context
+}
+
+function getMediaKey(item: Pick<MediaSearchItem, 'id' | 'kind'>) {
+  return `${item.kind}:${item.id}`
 }
 
 function AuthenticatedShell() {
@@ -130,6 +223,7 @@ function AuthenticatedShell() {
           <Route path="/movies/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
           <Route path="/series" element={<MediaWorkspace mode="tv" />} />
           <Route path="/series/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
+          <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/indexers" element={<IndexersPage />} />
           <Route path="/downloaders" element={<DownloadersPage />} />
         </Routes>
@@ -213,6 +307,12 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('seriesSubtitle'),
     }
   }
+  if (pathname === '/favorites') {
+    return {
+      title: t('favorites'),
+      subtitle: t('favoritesSubtitle'),
+    }
+  }
   if (pathname === '/downloaders') {
     return {
       title: t('downloaders'),
@@ -277,7 +377,7 @@ function AppSidebar() {
             <SidebarLink icon={Home} label={t('discover')} to="/" />
             <SidebarLink icon={Film} label={t('movies')} to="/movies" />
             <SidebarLink icon={Tv} label={t('series')} to="/series" />
-            <SidebarLink icon={Download} label={t('requests')} to="/" muted />
+            <SidebarLink icon={Bookmark} label={t('favorites')} to="/favorites" />
             <SidebarLink icon={Database} label={t('indexers')} to="/indexers" />
             <SidebarLink icon={HardDriveDownload} label={t('downloaders')} to="/downloaders" />
           </SidebarMenu>
@@ -411,10 +511,11 @@ function MobileHeader() {
           Private
         </Badge>
       </div>
-      <nav className="mt-3 grid grid-cols-3 gap-2">
+      <nav className="mt-3 grid grid-cols-4 gap-2">
         <MobileNavLink label={t('discover')} to="/" />
         <MobileNavLink label={t('movies')} to="/movies" />
         <MobileNavLink label={t('series')} to="/series" />
+        <MobileNavLink label={t('favorites')} to="/favorites" />
       </nav>
     </header>
   )
@@ -474,6 +575,24 @@ function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <FilterBar mode={mode} resultCount={visibleMedia.length} />
       <MediaWall items={visibleMedia} loading={loadingMedia} />
+    </div>
+  )
+}
+
+function FavoritesPage() {
+  const { items, loading } = useFavorites()
+  const { t } = useTranslation()
+
+  return (
+    <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+      <FilterBar mode="favorites" resultCount={items.length} />
+      {loading ? <MediaWall items={[]} loading /> : null}
+      {!loading && items.length > 0 ? <MediaWall items={items} loading={false} /> : null}
+      {!loading && items.length === 0 ? (
+        <Card className="flex min-h-80 items-center justify-center p-8 text-center text-muted-foreground">
+          {t('noFavorites')}
+        </Card>
+      ) : null}
     </div>
   )
 }
@@ -582,8 +701,16 @@ function MediaRail({
   )
 }
 
-function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind; resultCount: number }) {
+function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind | 'favorites'; resultCount: number }) {
   const { t } = useTranslation()
+  const copy =
+    mode === 'favorites'
+      ? t('favoritesOnly')
+      : mode === 'discover'
+        ? t('mixedDiscoveryWall')
+        : mode === 'movie'
+          ? t('moviesOnly')
+          : t('seriesOnly')
 
   return (
     <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -591,14 +718,20 @@ function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind; result
         <Badge variant="secondary" className="h-8 rounded-full px-3 font-semibold">
           {resultCount} {t('titles')}
         </Badge>
-        <span className="text-muted-foreground text-sm">
-          {mode === 'discover' ? t('mixedDiscoveryWall') : mode === 'movie' ? t('moviesOnly') : t('seriesOnly')}
-        </span>
+        <span className="text-muted-foreground text-sm">{copy}</span>
       </div>
       <div className="zme-x-scroll flex gap-2 overflow-x-auto pb-1">
         <FilterChip
           active
-          label={mode === 'discover' ? t('recommended') : mode === 'movie' ? t('latestMovies') : t('latestSeries')}
+          label={
+            mode === 'favorites'
+              ? t('favorites')
+              : mode === 'discover'
+                ? t('recommended')
+                : mode === 'movie'
+                  ? t('latestMovies')
+                  : t('latestSeries')
+          }
         />
         <FilterChip label="4K" />
         <FilterChip label="1080p" />
@@ -659,7 +792,19 @@ function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: bool
 
 function MediaCard({ item }: { item: MediaSearchItem }) {
   const { t } = useTranslation()
+  const { isFavorite, toggleFavorite } = useFavorites()
+  const favorited = isFavorite(item)
   const detailPath = item.kind === 'movie' ? `/movies/${item.id}` : `/series/${item.id}`
+
+  async function handleFavoriteClick(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    try {
+      await toggleFavorite(item)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('favoriteToggleFailed'))
+    }
+  }
 
   return (
     <Card className="group gap-0 overflow-visible bg-transparent p-0 ring-0">
@@ -678,12 +823,16 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
           <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
           <Button
             type="button"
-            aria-label="Bookmark"
+            onClick={(event) => void handleFavoriteClick(event)}
+            aria-label={favorited ? t('removeFavorite') : t('addFavorite')}
             variant="secondary"
             size="icon-lg"
-            className="absolute top-3 right-3 rounded-full opacity-0 shadow-lg shadow-black/20 backdrop-blur transition group-hover:opacity-100"
+            className={cn(
+              'absolute top-3 right-3 rounded-full shadow-lg shadow-black/20 backdrop-blur transition group-hover:opacity-100',
+              favorited ? 'opacity-100' : 'opacity-0',
+            )}
           >
-            <Bookmark />
+            {favorited ? <BookmarkCheck /> : <Bookmark />}
           </Button>
           <div className="absolute inset-x-0 bottom-0 p-4 text-white">
             <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
@@ -713,6 +862,7 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
 function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: TopbarOverride | null) => void }) {
   const location = useLocation()
   const { i18n, t } = useTranslation()
+  const { isFavorite, toggleFavorite } = useFavorites()
   const routeMedia = getRouteMedia(location.pathname)
   const routeKind = routeMedia?.kind
   const routeId = routeMedia?.id
@@ -778,6 +928,16 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
     }
   }
 
+  async function handleToggleFavorite() {
+    if (!media) return
+
+    try {
+      await toggleFavorite(media)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('favoriteToggleFailed'))
+    }
+  }
+
   if (loadingMedia) {
     return (
       <div className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
@@ -836,11 +996,12 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                       type="button"
                       variant="secondary"
                       size="icon-lg"
+                      onClick={() => void handleToggleFavorite()}
                       className="size-11 rounded-xl bg-white/12 text-white/82 backdrop-blur"
-                      aria-label="Request"
-                      title="Request"
+                      aria-label={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
+                      title={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
                     >
-                      <Bookmark />
+                      {isFavorite(media) ? <BookmarkCheck /> : <Bookmark />}
                     </Button>
                   </div>
                 </div>
@@ -912,11 +1073,12 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                     type="button"
                     variant="secondary"
                     size="icon-lg"
+                    onClick={() => void handleToggleFavorite()}
                     className="size-11 rounded-xl bg-white/12 text-white/82 backdrop-blur"
-                    aria-label="Request"
-                    title="Request"
+                    aria-label={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
+                    title={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
                   >
-                    <Bookmark />
+                    {isFavorite(media) ? <BookmarkCheck /> : <Bookmark />}
                   </Button>
                 </div>
               </div>

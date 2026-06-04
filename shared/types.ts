@@ -12,6 +12,14 @@ export interface MediaSearchItem {
   rating: number | null
 }
 
+export type FavoriteMediaInput = MediaSearchItem
+
+export interface FavoriteMediaItem extends MediaSearchItem {
+  favoriteId: string
+  favoritedAt: string
+  updatedAt: string
+}
+
 export interface MediaCredit {
   name: string
   role: string

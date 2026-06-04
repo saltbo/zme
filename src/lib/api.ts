@@ -1,5 +1,5 @@
 import type { AppType } from '@server/app'
-import type { CreateDownloadInput, DownloaderInput, IndexerInput, MediaKind } from '@shared/types'
+import type { CreateDownloadInput, DownloaderInput, FavoriteMediaInput, IndexerInput, MediaKind } from '@shared/types'
 import { hc } from 'hono/client'
 
 const client = hc<AppType>('/')
@@ -95,6 +95,43 @@ export async function searchIndexers(query: string) {
 
   if (!response.ok) {
     throw await apiError(response, 'Failed to search indexers.')
+  }
+
+  return response.json()
+}
+
+export async function listFavorites() {
+  const response = await client.api.favorites.$get()
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to load favorites.')
+  }
+
+  return response.json()
+}
+
+export async function createFavorite(input: FavoriteMediaInput) {
+  const response = await client.api.favorites.$post({
+    json: input,
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to save favorite.')
+  }
+
+  return response.json()
+}
+
+export async function deleteFavorite(kind: MediaKind, id: number) {
+  const response = await client.api.favorites[':kind'][':id'].$delete({
+    param: {
+      kind,
+      id: String(id),
+    },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to remove favorite.')
   }
 
   return response.json()

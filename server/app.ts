@@ -12,6 +12,7 @@ import {
   submitDownload,
   updateDownloader,
 } from './services/downloaders'
+import { deleteFavorite, getFavorite, listFavorites, saveFavorite } from './services/favorites'
 import {
   checkIndexerHealth,
   createIndexer,
@@ -33,8 +34,22 @@ const mediaDetailParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
 
+const favoriteParamsSchema = mediaDetailParamsSchema
+
 const languageQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
+})
+
+const favoriteSchema = z.object({
+  id: z.number().int().positive(),
+  kind: z.enum(['movie', 'tv']),
+  title: z.string().trim().min(1),
+  originalTitle: z.string(),
+  overview: z.string(),
+  posterUrl: z.string().nullable(),
+  backdropUrl: z.string().nullable(),
+  releaseYear: z.string().nullable(),
+  rating: z.number().nullable(),
 })
 
 const popularQuerySchema = z.object({
@@ -143,6 +158,26 @@ const routes = new Hono<{ Bindings: Env }>()
         notConfigured ? 503 : 502,
       )
     }
+  })
+  .get('/favorites', async (c) => {
+    const items = await listFavorites(createDb(c.env))
+    return c.json({ items })
+  })
+  .get('/favorites/:kind/:id', zValidator('param', favoriteParamsSchema), async (c) => {
+    const { kind, id } = c.req.valid('param')
+    const item = await getFavorite(createDb(c.env), kind, id)
+    if (!item) return c.json({ error: 'Favorite not found.' }, 404)
+    return c.json({ item })
+  })
+  .post('/favorites', zValidator('json', favoriteSchema), async (c) => {
+    const item = await saveFavorite(createDb(c.env), c.req.valid('json'))
+    return c.json({ item }, 201)
+  })
+  .delete('/favorites/:kind/:id', zValidator('param', favoriteParamsSchema), async (c) => {
+    const { kind, id } = c.req.valid('param')
+    const deleted = await deleteFavorite(createDb(c.env), kind, id)
+    if (!deleted) return c.json({ error: 'Favorite not found.' }, 404)
+    return c.json({ kind, id })
   })
   .get('/indexers', async (c) => {
     const items = await listIndexers(createDb(c.env))

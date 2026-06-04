@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const downloaders = sqliteTable('downloaders', {
   id: text('id').primaryKey(),
@@ -34,7 +34,29 @@ export const indexers = sqliteTable('indexers', {
   updatedAt: text('updated_at').notNull(),
 })
 
+export const favorites = sqliteTable(
+  'favorites',
+  {
+    id: text('id').primaryKey(),
+    mediaKey: text('media_key').notNull(),
+    kind: text('kind', { enum: ['movie', 'tv'] }).notNull(),
+    tmdbId: integer('tmdb_id').notNull(),
+    title: text('title').notNull(),
+    originalTitle: text('original_title').notNull(),
+    overview: text('overview').notNull(),
+    posterUrl: text('poster_url'),
+    backdropUrl: text('backdrop_url'),
+    releaseYear: text('release_year'),
+    rating: real('rating'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [uniqueIndex('favorites_media_key_idx').on(table.mediaKey)],
+)
+
 export type Downloader = typeof downloaders.$inferSelect
 export type NewDownloader = typeof downloaders.$inferInsert
 export type Indexer = typeof indexers.$inferSelect
 export type NewIndexer = typeof indexers.$inferInsert
+export type Favorite = typeof favorites.$inferSelect
+export type NewFavorite = typeof favorites.$inferInsert
