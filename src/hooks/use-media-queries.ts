@@ -18,11 +18,11 @@ export function usePopularMedia(kind: MediaKind, language: string, options?: { e
   })
 }
 
-export function useMediaSearch(query: string, language: string) {
+export function useMediaSearch(query: string, language: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.media.search(query, language),
     queryFn: async () => (await searchMedia(query, language)).results,
-    enabled: query.length > 0,
+    enabled: query.length > 0 && options?.enabled !== false,
   })
 }
 

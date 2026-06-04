@@ -1,5 +1,5 @@
 import type { IndexerSearchItem } from '@shared/types'
-import { isProwlarrProxyDownloadUrl, stripProwlarrApiKey, useProwlarrBaseUrl } from './download-source'
+import { applyProwlarrBaseUrl, isProwlarrProxyDownloadUrl, stripProwlarrApiKey } from './download-source'
 
 interface ProwlarrSearchItem {
   guid?: string
@@ -94,7 +94,7 @@ function resolveDownloadFields(item: ProwlarrSearchItem, baseUrl: string) {
   }
 
   const proxyUrl = [item.magnetUrl, item.downloadUrl].find((value) => value && isProwlarrProxyDownloadUrl(value))
-  if (proxyUrl) return { downloadUrl: stripProwlarrApiKey(useProwlarrBaseUrl(proxyUrl, baseUrl)), magnetUrl: null }
+  if (proxyUrl) return { downloadUrl: stripProwlarrApiKey(applyProwlarrBaseUrl(proxyUrl, baseUrl)), magnetUrl: null }
 
   if (item.downloadUrl) {
     return {

@@ -185,11 +185,54 @@ export interface DownloaderInput {
   enabled: boolean
 }
 
+export type DownloadTaskStatus =
+  | 'queued'
+  | 'assigned'
+  | 'running'
+  | 'billing_paused'
+  | 'uploading'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+
+export interface DownloadTaskSummary {
+  id: string
+  downloaderId: string
+  downloaderName: string
+  downloaderKind: DownloaderKind
+  sourceType: 'http' | 'magnet' | 'torrent_url'
+  sourceUri: string
+  name: string
+  targetFolder: string
+  category: string | null
+  tags: string[]
+  status: DownloadTaskStatus
+  downloadedBytes: number
+  storageUploadedBytes: number
+  totalBytes: number | null
+  downloadBps: number
+  storageUploadBps: number
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export interface DownloadTaskPage {
+  items: DownloadTaskSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface CreateDownloadInput {
   downloaderId: string
   uri: string
   sourceType: 'magnet' | 'torrent_url'
   title?: string
+  category?: string
+  tags?: string[]
 }
 
 export interface CreateDownloadResult {

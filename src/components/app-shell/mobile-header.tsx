@@ -22,11 +22,12 @@ export function MobileHeader() {
           Private
         </Badge>
       </div>
-      <nav className="mt-3 grid grid-cols-4 gap-2">
+      <nav className="mt-3 grid grid-cols-5 gap-2">
         <MobileNavLink label={t('discover')} to="/" />
         <MobileNavLink label={t('movies')} to="/movies" />
         <MobileNavLink label={t('series')} to="/series" />
         <MobileNavLink label={t('favorites')} to="/favorites" />
+        <MobileNavLink label={t('downloads')} to="/downloads" />
       </nav>
     </header>
   )

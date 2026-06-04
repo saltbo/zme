@@ -271,6 +271,7 @@ function ReleaseSearchContent({
 
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
         <ReleasePanel
+          media={media}
           items={visibleItems}
           loading={loading}
           error={error}
@@ -387,6 +388,7 @@ function ReleaseStatusPill({
 
 function ReleasePanel({
   downloaders,
+  media,
   items,
   loading,
   loadingDownloaders,
@@ -395,6 +397,7 @@ function ReleasePanel({
   filtered,
 }: {
   downloaders: DownloaderSummary[]
+  media: MediaSearchItem
   items: IndexerSearchItem[]
   loading: boolean
   loadingDownloaders: boolean
@@ -466,7 +469,13 @@ function ReleasePanel({
   return (
     <div className="flex flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
       {items.map((item) => (
-        <ReleaseRow key={item.id} item={item} downloaders={downloaders} loadingDownloaders={loadingDownloaders} />
+        <ReleaseRow
+          key={item.id}
+          media={media}
+          item={item}
+          downloaders={downloaders}
+          loadingDownloaders={loadingDownloaders}
+        />
       ))}
     </div>
   )
@@ -474,10 +483,12 @@ function ReleasePanel({
 
 function ReleaseRow({
   downloaders,
+  media,
   item,
   loadingDownloaders,
 }: {
   downloaders: DownloaderSummary[]
+  media: MediaSearchItem
   item: IndexerSearchItem
   loadingDownloaders: boolean
 }) {
@@ -499,6 +510,8 @@ function ReleaseRow({
         uri: source.uri,
         sourceType: source.sourceType,
         title,
+        category: media.kind,
+        tags: getMediaTags(media, item),
       })
       toast.success(t('downloadSubmitted'))
     } catch (error) {
@@ -576,6 +589,14 @@ function ReleaseRow({
       </DropdownMenu>
     </Card>
   )
+}
+
+function getMediaTags(media: MediaSearchItem, item: IndexerSearchItem) {
+  return [
+    `tmdbId=${item.tmdbId ?? media.id}`,
+    item.imdbId ? `imdbId=${item.imdbId}` : null,
+    item.tvdbId ? `tvdbId=${item.tvdbId}` : null,
+  ].filter((tag): tag is string => Boolean(tag))
 }
 
 function getDownloadSource(item: IndexerSearchItem) {

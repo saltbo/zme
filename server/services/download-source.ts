@@ -37,7 +37,7 @@ export function isProwlarrProxyDownloadUrl(value: string) {
   }
 }
 
-export function useProwlarrBaseUrl(value: string, baseUrl: string) {
+export function applyProwlarrBaseUrl(value: string, baseUrl: string) {
   const url = new URL(value)
   const base = new URL(baseUrl)
   url.protocol = base.protocol

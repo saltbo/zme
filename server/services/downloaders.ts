@@ -153,7 +153,10 @@ export async function submitDownload(
 async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise<CreateDownloadInput> {
   if (input.sourceType !== 'torrent_url') return input
 
-  const rows = await db.select().from(indexers).where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
+  const rows = await db
+    .select()
+    .from(indexers)
+    .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
   const matchingIndexers = rows.filter((indexer) => indexerMatchesUrl(indexer, input.uri))
   if (matchingIndexers.length === 0) return input
 
@@ -169,7 +172,9 @@ async function resolveProwlarrSource(
   for (const indexer of rows) {
     const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
     if (!credentials.apiKey) continue
-    const resolved = await resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, credentials.apiKey)).catch(() => null)
+    const resolved = await resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, credentials.apiKey)).catch(
+      () => null,
+    )
     if (resolved) return resolved
   }
 
@@ -325,6 +330,8 @@ async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) 
       source: { type: input.sourceType, uri: input.uri },
       targetFolder: options.targetFolder || '',
       name: input.title,
+      category: input.category,
+      tags: input.tags,
     }),
   })
 

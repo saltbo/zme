@@ -5,6 +5,7 @@ import type {
   DownloaderHealth,
   DownloaderInput,
   DownloaderSummary,
+  DownloadTaskPage,
   FavoriteMediaInput,
   FavoriteMediaItem,
   IndexerDetails,
@@ -244,6 +245,17 @@ export async function checkDownloaderHealth(id: string) {
     'Failed to check downloader health.',
     { method: 'POST' },
   )
+}
+
+export async function listDownloadTasks(input: { status?: string; page: number; pageSize: number }) {
+  return apiRequest<DownloadTaskPage>(
+    `/api/downloads${query({ status: input.status, page: input.page, pageSize: input.pageSize })}`,
+    'Failed to load downloads.',
+  )
+}
+
+export function downloadTaskEventsUrl() {
+  return '/api/downloads/events'
 }
 
 export async function createDownload(input: CreateDownloadInput) {

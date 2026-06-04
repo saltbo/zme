@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isProwlarrProxyDownloadUrl, useProwlarrBaseUrl } from './download-source'
+import { applyProwlarrBaseUrl, isProwlarrProxyDownloadUrl } from './download-source'
 
 describe('download source helpers', () => {
   it('detects sanitized Prowlarr proxy download urls', () => {
@@ -9,8 +9,8 @@ describe('download source helpers', () => {
   })
 
   it('replaces local Prowlarr origins with the configured indexer origin', () => {
-    expect(
-      useProwlarrBaseUrl('http://127.0.0.1:9696/1/download?link=encoded', 'https://prowlarr.example.com'),
-    ).toBe('https://prowlarr.example.com/1/download?link=encoded')
+    expect(applyProwlarrBaseUrl('http://127.0.0.1:9696/1/download?link=encoded', 'https://prowlarr.example.com')).toBe(
+      'https://prowlarr.example.com/1/download?link=encoded',
+    )
   })
 })

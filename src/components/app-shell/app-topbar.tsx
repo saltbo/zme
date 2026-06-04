@@ -90,6 +90,12 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('favoritesSubtitle'),
     }
   }
+  if (pathname === '/downloads') {
+    return {
+      title: t('downloads'),
+      subtitle: t('downloadsSubtitle'),
+    }
+  }
   if (pathname === '/settings') {
     return {
       title: t('settings'),

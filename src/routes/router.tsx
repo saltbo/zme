@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router'
 import { AuthenticatedShell } from '@/components/app-shell/authenticated-shell'
 import { useAuth } from '@/contexts/auth'
 import { AuthGate } from '@/routes/auth-gate'
+import { DownloadsPage } from '@/routes/downloads'
 import { FavoritesPage } from '@/routes/favorites'
 import { IndexersPage } from '@/routes/indexers'
 import { MediaDetailPage } from '@/routes/media-detail'
@@ -50,6 +51,10 @@ export const router = createBrowserRouter([
           {
             path: 'favorites',
             element: <FavoritesPage />,
+          },
+          {
+            path: 'downloads',
+            element: <DownloadsPage />,
           },
           {
             path: 'settings',

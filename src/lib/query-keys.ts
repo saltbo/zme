@@ -4,6 +4,7 @@ export const queryKeys = {
   setupStatus: ['setup-status'] as const,
   favorites: ['favorites'] as const,
   downloaders: ['downloaders'] as const,
+  downloadTasks: (status: string) => ['download-tasks', status] as const,
   indexers: ['indexers'] as const,
   mediaSources: ['media-sources'] as const,
   users: ['users'] as const,

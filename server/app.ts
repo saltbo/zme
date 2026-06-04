@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { type AuthSession, type AuthUser, createAuth } from './auth'
 import { createDb } from './db/client'
 import type { Env } from './env'
+import { listDownloadTasks, streamDownloadTaskEvents } from './services/download-tasks'
 import {
   checkDownloaderHealth,
   createDownloader,
@@ -130,6 +131,16 @@ const createDownloadSchema = z.object({
   uri: z.string().trim().min(1),
   sourceType: z.enum(['magnet', 'torrent_url']),
   title: z.string().trim().optional(),
+  category: z.string().trim().min(1).max(120).optional(),
+  tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+})
+
+const downloadsQuerySchema = z.object({
+  status: z
+    .enum(['queued', 'assigned', 'running', 'billing_paused', 'uploading', 'completed', 'failed', 'canceled'])
+    .optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
 })
 
 const setupAdminSchema = z.object({
@@ -392,6 +403,15 @@ routes.post('/downloaders/:id/health', zValidator('param', idParamsSchema), asyn
   const health = await checkDownloaderHealth(createDb(c.env), c.get('user').id, id)
   if (!health) return c.json({ error: 'Downloader not found.' }, 404)
   return c.json({ health })
+})
+
+routes.get('/downloads', zValidator('query', downloadsQuerySchema), async (c) => {
+  const result = await listDownloadTasks(createDb(c.env), c.get('user').id, c.req.valid('query'))
+  return c.json(result)
+})
+
+routes.get('/downloads/events', async (c) => {
+  return streamDownloadTaskEvents(createDb(c.env), c.get('user').id, c.req.raw.signal)
 })
 
 routes.post('/downloads', zValidator('json', createDownloadSchema), async (c) => {
