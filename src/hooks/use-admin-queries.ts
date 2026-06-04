@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { listDownloaders, listIndexers, listMediaSources } from '@/lib/api'
+import { listIndexers, listMediaSources } from '@/lib/api'
 import { authClient } from '@/lib/auth-client'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -10,13 +10,6 @@ export interface ManagedUser {
   role?: string | null
   banned?: boolean | null
   createdAt?: string | Date
-}
-
-export function useDownloaders() {
-  return useQuery({
-    queryKey: queryKeys.downloaders,
-    queryFn: async () => (await listDownloaders()).items,
-  })
 }
 
 export function useIndexers() {

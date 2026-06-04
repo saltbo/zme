@@ -90,6 +90,12 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('favoritesSubtitle'),
     }
   }
+  if (pathname === '/settings') {
+    return {
+      title: t('settings'),
+      subtitle: t('settingsSubtitle'),
+    }
+  }
   if (pathname === '/admin/users') {
     return {
       title: t('users'),
@@ -100,12 +106,6 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
     return {
       title: t('mediaSources'),
       subtitle: t('mediaSourcesSubtitle'),
-    }
-  }
-  if (pathname === '/admin/downloaders') {
-    return {
-      title: t('downloaders'),
-      subtitle: t('downloadersSubtitle'),
     }
   }
   if (pathname === '/admin/indexers') {

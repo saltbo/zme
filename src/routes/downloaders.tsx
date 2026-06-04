@@ -19,7 +19,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { useDownloaders } from '@/hooks/use-admin-queries'
+import { useDownloaders } from '@/hooks/use-downloader-queries'
 import { checkDownloaderHealth, createDownloader, deleteDownloader, getDownloader, updateDownloader } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
@@ -51,6 +51,14 @@ const initialForm: DownloaderFormState = {
 }
 
 export function DownloadersPage() {
+  return (
+    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+      <DownloadersPanel />
+    </main>
+  )
+}
+
+export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const downloaders = useDownloaders()
@@ -159,15 +167,15 @@ export function DownloadersPage() {
     }
   }
 
-  return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
-      <div className="flex items-center justify-end">
-        <Button type="button" onClick={() => setCreateOpen(true)}>
-          <Plus data-icon="inline-start" />
-          {t('addDownloader')}
-        </Button>
-      </div>
+  const addButton = (
+    <Button type="button" onClick={() => setCreateOpen(true)}>
+      <Plus data-icon="inline-start" />
+      {t('addDownloader')}
+    </Button>
+  )
 
+  const content = (
+    <>
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
           <SheetHeader>
@@ -240,7 +248,27 @@ export function DownloadersPage() {
           </div>
         </TooltipProvider>
       ) : null}
-    </main>
+    </>
+  )
+
+  if (framed) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('downloaders')}</CardTitle>
+          <CardDescription>{t('downloadersSubtitle')}</CardDescription>
+          <CardAction>{addButton}</CardAction>
+        </CardHeader>
+        <CardContent>{content}</CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-end">{addButton}</div>
+      {content}
+    </>
   )
 }
 

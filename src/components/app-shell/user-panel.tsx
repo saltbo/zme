@@ -1,5 +1,6 @@
-import { LogOut, Settings, ShieldCheck } from 'lucide-react'
+import { LogOut, Settings, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router'
 import { Avatar, AvatarBadge, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -20,6 +21,7 @@ import { getTmdbLanguage, supportedLanguages } from '@/i18n'
 import { authClient } from '@/lib/auth-client'
 
 export function UserPanel() {
+  const navigate = useNavigate()
   const { i18n, t } = useTranslation()
   const { refreshSession, user } = useAuth()
   const currentLanguage = getTmdbLanguage(i18n.language)
@@ -83,6 +85,10 @@ export function UserPanel() {
             <ShieldCheck />
             <span>{isAdminUser(user) ? t('administrator') : t('standardUser')}</span>
             <span className="ml-auto size-2 rounded-full bg-emerald-500" aria-hidden />
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate('/settings')}>
+            <SlidersHorizontal />
+            <span>{t('settings')}</span>
           </DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>

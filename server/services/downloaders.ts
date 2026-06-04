@@ -47,20 +47,25 @@ interface ZpanOptions {
   targetFolder?: string
 }
 
-export async function listDownloaders(db: Db): Promise<DownloaderSummary[]> {
-  const rows = await db.select().from(downloaders).orderBy(downloaders.createdAt)
+export async function listDownloaders(db: Db, userId: string): Promise<DownloaderSummary[]> {
+  const rows = await db.select().from(downloaders).where(eq(downloaders.userId, userId)).orderBy(downloaders.createdAt)
   return rows.map(toSummary)
 }
 
-export async function getDownloader(db: Db, id: string): Promise<DownloaderDetails | null> {
-  const rows = await db.select().from(downloaders).where(eq(downloaders.id, id)).limit(1)
+export async function getDownloader(db: Db, userId: string, id: string): Promise<DownloaderDetails | null> {
+  const rows = await db
+    .select()
+    .from(downloaders)
+    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+    .limit(1)
   return rows[0] ? toDetails(rows[0]) : null
 }
 
-export async function createDownloader(db: Db, input: DownloaderInput): Promise<DownloaderSummary> {
+export async function createDownloader(db: Db, userId: string, input: DownloaderInput): Promise<DownloaderSummary> {
   const now = new Date().toISOString()
   const row: Downloader = {
     id: crypto.randomUUID(),
+    userId,
     description: input.description || null,
     kind: input.kind,
     endpoint: input.endpoint,
@@ -78,7 +83,12 @@ export async function createDownloader(db: Db, input: DownloaderInput): Promise<
   return toSummary(row)
 }
 
-export async function updateDownloader(db: Db, id: string, input: DownloaderInput): Promise<DownloaderSummary | null> {
+export async function updateDownloader(
+  db: Db,
+  userId: string,
+  id: string,
+  input: DownloaderInput,
+): Promise<DownloaderSummary | null> {
   const updatedAt = new Date().toISOString()
   const rows = await db
     .update(downloaders)
@@ -91,22 +101,29 @@ export async function updateDownloader(db: Db, id: string, input: DownloaderInpu
       enabled: input.enabled,
       updatedAt,
     })
-    .where(eq(downloaders.id, id))
+    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
     .returning()
 
   return rows[0] ? toSummary(rows[0]) : null
 }
 
-export async function deleteDownloader(db: Db, id: string): Promise<boolean> {
-  const rows = await db.delete(downloaders).where(eq(downloaders.id, id)).returning({ id: downloaders.id })
+export async function deleteDownloader(db: Db, userId: string, id: string): Promise<boolean> {
+  const rows = await db
+    .delete(downloaders)
+    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+    .returning({ id: downloaders.id })
   return rows.length > 0
 }
 
-export async function submitDownload(db: Db, input: CreateDownloadInput): Promise<CreateDownloadResult> {
+export async function submitDownload(
+  db: Db,
+  userId: string,
+  input: CreateDownloadInput,
+): Promise<CreateDownloadResult> {
   const rows = await db
     .select()
     .from(downloaders)
-    .where(and(eq(downloaders.id, input.downloaderId), eq(downloaders.enabled, true)))
+    .where(and(eq(downloaders.id, input.downloaderId), eq(downloaders.userId, userId), eq(downloaders.enabled, true)))
     .limit(1)
   const downloader = rows[0]
   if (!downloader) throw new Error('Downloader is not available.')
@@ -127,8 +144,12 @@ export async function submitDownload(db: Db, input: CreateDownloadInput): Promis
   }
 }
 
-export async function checkDownloaderHealth(db: Db, id: string): Promise<DownloaderHealth | null> {
-  const rows = await db.select().from(downloaders).where(eq(downloaders.id, id)).limit(1)
+export async function checkDownloaderHealth(db: Db, userId: string, id: string): Promise<DownloaderHealth | null> {
+  const rows = await db
+    .select()
+    .from(downloaders)
+    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+    .limit(1)
   const downloader = rows[0]
   if (!downloader) return null
 
@@ -142,7 +163,7 @@ export async function checkDownloaderHealth(db: Db, id: string): Promise<Downloa
       healthCheckedAt: checkedAt,
       updatedAt: checkedAt,
     })
-    .where(eq(downloaders.id, id))
+    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
     .returning()
 
   const updated = rowsAfterUpdate[0]

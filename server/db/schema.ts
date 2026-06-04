@@ -57,6 +57,7 @@ export const verification = sqliteTable('verification', {
 
 export const downloaders = sqliteTable('downloaders', {
   id: text('id').primaryKey(),
+  userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
   description: text('description'),
   kind: text('kind', { enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] }).notNull(),
   endpoint: text('endpoint').notNull(),

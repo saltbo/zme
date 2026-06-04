@@ -173,8 +173,6 @@ routes.use('*', async (c, next) => {
 
 routes.use('/indexers/*', requireAdminExceptIndexerSearchMiddleware)
 routes.use('/indexers', requireAdminMiddleware)
-routes.use('/downloaders', requireAdminExceptDownloaderListMiddleware)
-routes.use('/downloaders/*', requireAdminMiddleware)
 routes.use('/media-sources', requireAdminMiddleware)
 routes.use('/media-sources/*', requireAdminMiddleware)
 
@@ -353,19 +351,19 @@ routes.post('/indexers/:id/health', zValidator('param', idParamsSchema), async (
 })
 
 routes.get('/downloaders', async (c) => {
-  const items = await listDownloaders(createDb(c.env))
+  const items = await listDownloaders(createDb(c.env), c.get('user').id)
   return c.json({ items })
 })
 
 routes.get('/downloaders/:id', zValidator('param', idParamsSchema), async (c) => {
   const { id } = c.req.valid('param')
-  const item = await getDownloader(createDb(c.env), id)
+  const item = await getDownloader(createDb(c.env), c.get('user').id, id)
   if (!item) return c.json({ error: 'Downloader not found.' }, 404)
   return c.json({ item })
 })
 
 routes.post('/downloaders', zValidator('json', downloaderSchema), async (c) => {
-  const item = await createDownloader(createDb(c.env), c.req.valid('json'))
+  const item = await createDownloader(createDb(c.env), c.get('user').id, c.req.valid('json'))
   return c.json({ item }, 201)
 })
 
@@ -375,7 +373,7 @@ routes.patch(
   zValidator('json', downloaderSchema),
   async (c) => {
     const { id } = c.req.valid('param')
-    const item = await updateDownloader(createDb(c.env), id, c.req.valid('json'))
+    const item = await updateDownloader(createDb(c.env), c.get('user').id, id, c.req.valid('json'))
     if (!item) return c.json({ error: 'Downloader not found.' }, 404)
     return c.json({ item })
   },
@@ -383,21 +381,21 @@ routes.patch(
 
 routes.delete('/downloaders/:id', zValidator('param', idParamsSchema), async (c) => {
   const { id } = c.req.valid('param')
-  const deleted = await deleteDownloader(createDb(c.env), id)
+  const deleted = await deleteDownloader(createDb(c.env), c.get('user').id, id)
   if (!deleted) return c.json({ error: 'Downloader not found.' }, 404)
   return c.json({ id })
 })
 
 routes.post('/downloaders/:id/health', zValidator('param', idParamsSchema), async (c) => {
   const { id } = c.req.valid('param')
-  const health = await checkDownloaderHealth(createDb(c.env), id)
+  const health = await checkDownloaderHealth(createDb(c.env), c.get('user').id, id)
   if (!health) return c.json({ error: 'Downloader not found.' }, 404)
   return c.json({ health })
 })
 
 routes.post('/downloads', zValidator('json', createDownloadSchema), async (c) => {
   try {
-    const item = await submitDownload(createDb(c.env), c.req.valid('json'))
+    const item = await submitDownload(createDb(c.env), c.get('user').id, c.req.valid('json'))
     return c.json({ item }, 201)
   } catch (error) {
     return c.json({ error: error instanceof Error ? error.message : 'Download submission failed.' }, 502)
@@ -426,17 +424,6 @@ async function requireAdminExceptIndexerSearchMiddleware(
   next: () => Promise<void>,
 ) {
   if (c.req.path.endsWith('/indexers/search')) {
-    await next()
-    return
-  }
-  return requireAdminMiddleware(c, next)
-}
-
-async function requireAdminExceptDownloaderListMiddleware(
-  c: Parameters<MiddlewareHandler<AppEnv>>[0],
-  next: () => Promise<void>,
-) {
-  if (c.req.method === 'GET') {
     await next()
     return
   }

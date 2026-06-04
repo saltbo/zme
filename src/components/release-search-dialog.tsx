@@ -32,7 +32,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useDownloaders } from '@/hooks/use-admin-queries'
+import { useDownloaders } from '@/hooks/use-downloader-queries'
 import { createDownload } from '@/lib/api'
 import { cn, formatBytes } from '@/lib/utils'
 

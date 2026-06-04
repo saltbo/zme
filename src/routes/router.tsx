@@ -3,12 +3,12 @@ import { createBrowserRouter, Navigate } from 'react-router'
 import { AuthenticatedShell } from '@/components/app-shell/authenticated-shell'
 import { useAuth } from '@/contexts/auth'
 import { AuthGate } from '@/routes/auth-gate'
-import { DownloadersPage } from '@/routes/downloaders'
 import { FavoritesPage } from '@/routes/favorites'
 import { IndexersPage } from '@/routes/indexers'
 import { MediaDetailPage } from '@/routes/media-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
+import { SettingsPage } from '@/routes/settings'
 import { UsersPage } from '@/routes/users'
 
 export const router = createBrowserRouter([
@@ -52,6 +52,10 @@ export const router = createBrowserRouter([
             element: <FavoritesPage />,
           },
           {
+            path: 'settings',
+            element: <SettingsPage />,
+          },
+          {
             path: 'admin/users',
             element: (
               <AdminRoute>
@@ -72,14 +76,6 @@ export const router = createBrowserRouter([
             element: (
               <AdminRoute>
                 <IndexersPage />
-              </AdminRoute>
-            ),
-          },
-          {
-            path: 'admin/downloaders',
-            element: (
-              <AdminRoute>
-                <DownloadersPage />
               </AdminRoute>
             ),
           },
