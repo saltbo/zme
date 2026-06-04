@@ -1,0 +1,68 @@
+{
+  "name": "zme",
+  "version": "0.0.1",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "packageManager": "pnpm@10.30.2",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "prepare": "husky"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.7.6",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@vitejs/plugin-react-swc": "^4.3.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "hono": "^4.12.23",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router": "^7.16.0",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@cloudflare/vite-plugin": "^1.39.2",
+    "@cloudflare/workers-types": "^4.20260505.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "husky": "^9.1.7",
+    "jsdom": "^29.0.2",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.2",
+    "vitest": "^4.1.2",
+    "wrangler": "^4.95.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,json,jsonc}": "biome check --write --no-errors-on-unmatched"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "esbuild",
+      "workerd"
+    ]
+  },
+  "volta": {
+    "node": "24.14.1",
+    "pnpm": "10.30.2"
+  }
+}
