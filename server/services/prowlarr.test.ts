@@ -6,9 +6,8 @@ describe('searchProwlarr', () => {
     vi.unstubAllGlobals()
   })
 
-  it('resolves Prowlarr proxy download urls before returning results', async () => {
-    const proxyUrl = 'https://prowlarr.local/11/download?apikey=secret&link=encoded&file=release.torrent'
-    const magnetUrl = 'magnet:?xt=urn:btih:abc'
+  it('strips Prowlarr API keys from proxy download urls before returning results', async () => {
+    const proxyUrl = 'http://127.0.0.1:9696/11/download?apikey=secret&link=encoded&file=release.torrent'
     const fetch = vi.fn().mockImplementation((url: URL | string) => {
       const value = url.toString()
       if (value.includes('/api/v1/search')) {
@@ -25,27 +24,20 @@ describe('searchProwlarr', () => {
         )
       }
 
-      return Promise.resolve(
-        new Response(null, {
-          status: 302,
-          headers: { location: magnetUrl },
-        }),
-      )
+      throw new Error(`Unexpected fetch: ${value}`)
     })
     vi.stubGlobal('fetch', fetch)
 
     const results = await searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })
 
     expect(results).toHaveLength(1)
-    expect(results[0].downloadUrl).toBeNull()
-    expect(results[0].magnetUrl).toBe(magnetUrl)
-    expect(results[0].id).toBe(magnetUrl)
+    expect(results[0].downloadUrl).toBe('https://prowlarr.local/11/download?link=encoded&file=release.torrent')
+    expect(results[0].magnetUrl).toBeNull()
     expect(JSON.stringify(results)).not.toContain('apikey=secret')
   })
 
-  it('resolves Prowlarr proxy urls returned in the magnet field', async () => {
+  it('moves Prowlarr proxy urls returned in the magnet field to the download field', async () => {
     const proxyUrl = 'https://prowlarr.local/1/download?apikey=secret&link=encoded&file=release.torrent'
-    const magnetUrl = 'magnet:?xt=urn:btih:def'
     const fetch = vi.fn().mockImplementation((url: URL | string) => {
       const value = url.toString()
       if (value.includes('/api/v1/search')) {
@@ -62,20 +54,14 @@ describe('searchProwlarr', () => {
         )
       }
 
-      return Promise.resolve(
-        new Response(null, {
-          status: 301,
-          headers: { location: magnetUrl },
-        }),
-      )
+      throw new Error(`Unexpected fetch: ${value}`)
     })
     vi.stubGlobal('fetch', fetch)
 
     const results = await searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })
 
-    expect(results[0].downloadUrl).toBeNull()
-    expect(results[0].magnetUrl).toBe(magnetUrl)
+    expect(results[0].downloadUrl).toBe('https://prowlarr.local/1/download?link=encoded&file=release.torrent')
+    expect(results[0].magnetUrl).toBeNull()
     expect(JSON.stringify(results)).not.toContain('apikey=secret')
-    expect(JSON.stringify(results)).not.toContain('/download?')
   })
 })

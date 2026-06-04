@@ -8,7 +8,8 @@ import type {
 } from '@shared/types'
 import { and, eq } from 'drizzle-orm'
 import type { createDb } from '../db/client'
-import { type Downloader, downloaders } from '../db/schema'
+import { type Downloader, downloaders, type Indexer, indexers } from '../db/schema'
+import { isProwlarrProxyDownloadUrl, resolveProwlarrProxyDownloadUrl, withProwlarrApiKey } from './download-source'
 
 type Db = ReturnType<typeof createDb>
 
@@ -45,6 +46,10 @@ interface ZpanCredentials {
 
 interface ZpanOptions {
   targetFolder?: string
+}
+
+interface ProwlarrCredentials {
+  apiKey?: string
 }
 
 export async function listDownloaders(db: Db, userId: string): Promise<DownloaderSummary[]> {
@@ -127,20 +132,59 @@ export async function submitDownload(
     .limit(1)
   const downloader = rows[0]
   if (!downloader) throw new Error('Downloader is not available.')
+  const resolvedInput = await resolveDownloadInput(db, input)
 
   if (downloader.kind === 'zpan') {
-    await submitToZpan(downloader, input)
+    await submitToZpan(downloader, resolvedInput)
   } else if (downloader.kind === 'qbittorrent') {
-    await submitToQbittorrent(downloader, input)
+    await submitToQbittorrent(downloader, resolvedInput)
   } else if (downloader.kind === 'transmission') {
-    await submitToTransmission(downloader, input)
+    await submitToTransmission(downloader, resolvedInput)
   } else {
-    await submitToAria2(downloader, input)
+    await submitToAria2(downloader, resolvedInput)
   }
 
   return {
     downloaderId: downloader.id,
     status: 'submitted',
+  }
+}
+
+async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise<CreateDownloadInput> {
+  if (input.sourceType !== 'torrent_url' || !isProwlarrProxyDownloadUrl(input.uri)) return input
+
+  const source = await resolveProwlarrSource(db, input.uri)
+  return source ? { ...input, ...source } : input
+}
+
+async function resolveProwlarrSource(db: Db, uri: string): Promise<Pick<CreateDownloadInput, 'uri' | 'sourceType'> | null> {
+  const rows = await db.select().from(indexers).where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
+  const sorted = sortIndexersForProxyUrl(rows, uri)
+
+  for (const indexer of sorted) {
+    const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
+    if (!credentials.apiKey) continue
+    const resolved = await resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, credentials.apiKey)).catch(() => null)
+    if (resolved) return resolved
+  }
+
+  return null
+}
+
+function sortIndexersForProxyUrl(rows: Indexer[], uri: string): Indexer[] {
+  const host = getUrlHost(uri)
+  return [...rows].sort((left, right) => Number(indexerMatchesHost(right, host)) - Number(indexerMatchesHost(left, host)))
+}
+
+function indexerMatchesHost(indexer: Indexer, host: string | null) {
+  return Boolean(host && getUrlHost(indexer.endpoint) === host)
+}
+
+function getUrlHost(value: string) {
+  try {
+    return new URL(value).host
+  } catch {
+    return null
   }
 }
 
