@@ -45,6 +45,7 @@ export interface MediaExternalIds {
 }
 
 export interface MediaDetails extends MediaSearchItem {
+  aliases: string[]
   genres: string[]
   runtime: string | null
   language: string | null
@@ -74,6 +75,7 @@ export interface IndexerSearchItem {
   indexerFlags: string[]
   imdbId: number | null
   tmdbId: number | null
+  tvdbId: number | null
 }
 
 export type IndexerKind = 'prowlarr'

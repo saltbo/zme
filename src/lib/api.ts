@@ -110,9 +110,27 @@ export async function getPopularMedia(kind: MediaKind, language: string) {
   )
 }
 
-export async function searchIndexers(queryValue: string) {
+export async function searchIndexers(input: {
+  query: string
+  title?: string
+  aliases?: string[]
+  year?: string | null
+  kind?: MediaKind
+  imdbId?: string | null
+  tmdbId?: number | null
+  tvdbId?: number | null
+}) {
   return apiRequest<{ results: IndexerSearchItem[] }>(
-    `/api/indexers/search${query({ q: queryValue })}`,
+    `/api/indexers/search${query({
+      q: input.query,
+      title: input.title,
+      aliases: input.aliases?.join('|'),
+      year: input.year ?? undefined,
+      kind: input.kind,
+      imdbId: input.imdbId ?? undefined,
+      tmdbId: input.tmdbId ?? undefined,
+      tvdbId: input.tvdbId ?? undefined,
+    })}`,
     'Failed to search indexers.',
   )
 }

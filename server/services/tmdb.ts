@@ -36,6 +36,19 @@ interface TmdbDetailsResponse extends TmdbSearchResult {
     imdb_id?: string | null
     tvdb_id?: number | null
   }
+  translations?: {
+    translations?: Array<{
+      iso_639_1?: string
+      data?: {
+        title?: string
+        name?: string
+      }
+    }>
+  }
+  alternative_titles?: {
+    titles?: Array<{ title?: string }>
+    results?: Array<{ title?: string }>
+  }
 }
 
 interface TmdbCredit {
@@ -96,7 +109,7 @@ export async function getMediaDetails(
   const endpoint = kind === 'movie' ? 'movie' : 'tv'
   const url = new URL(`${TMDB_API_BASE}/${endpoint}/${id}`)
   url.searchParams.set('language', language)
-  url.searchParams.set('append_to_response', 'credits,external_ids')
+  url.searchParams.set('append_to_response', 'credits,external_ids,translations,alternative_titles')
 
   const response = await fetchTmdb(apiKey, url)
   const payload = (await response.json()) as TmdbDetailsResponse
@@ -161,6 +174,7 @@ function toMediaDetails(kind: MediaKind, item: TmdbDetailsResponse): MediaDetail
 
   return {
     ...searchItem,
+    aliases: getAliasTitles(kind, item, searchItem),
     genres: (item.genres ?? []).map((genre) => genre.name).filter((name): name is string => Boolean(name)),
     runtime: typeof runtimeMinutes === 'number' && runtimeMinutes > 0 ? formatRuntime(runtimeMinutes) : null,
     language: item.original_language?.toUpperCase() ?? null,
@@ -174,6 +188,30 @@ function toMediaDetails(kind: MediaKind, item: TmdbDetailsResponse): MediaDetail
       tvdb: item.external_ids?.tvdb_id ? String(item.external_ids.tvdb_id) : null,
     },
   }
+}
+
+function getAliasTitles(kind: MediaKind, item: TmdbDetailsResponse, searchItem: MediaSearchItem): string[] {
+  const values = new Set<string>()
+  const add = (value: string | undefined) => {
+    const normalized = value?.trim()
+    if (normalized && normalized !== searchItem.title && normalized !== searchItem.originalTitle) {
+      values.add(normalized)
+    }
+  }
+
+  for (const translation of item.translations?.translations ?? []) {
+    if (translation.iso_639_1 !== 'en') continue
+    add(kind === 'movie' ? translation.data?.title : translation.data?.name)
+  }
+
+  for (const title of item.alternative_titles?.titles ?? []) {
+    add(title.title)
+  }
+  for (const title of item.alternative_titles?.results ?? []) {
+    add(title.title)
+  }
+
+  return [...values].slice(0, 6)
 }
 
 function getCrewNames(crew: TmdbCredit[] | undefined, jobs: string[]): string[] {

@@ -1,6 +1,5 @@
 import type {
   DownloaderKind,
-  DownloaderSummary,
   FavoriteMediaItem,
   IndexerSearchItem,
   MediaDetails,
@@ -11,21 +10,17 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import {
-  AlertTriangle,
   ArrowLeft,
   Bookmark,
   BookmarkCheck,
   Clapperboard,
   Database,
-  Download,
   Film,
   HardDriveDownload,
   Home,
   LoaderCircle,
   LogOut,
-  RefreshCw,
   Search,
-  ServerOff,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -34,7 +29,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import type { CSSProperties, FormEvent, MouseEvent, ReactNode } from 'react'
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   BrowserRouter,
@@ -48,7 +43,7 @@ import {
   useSearchParams,
 } from 'react-router'
 import { Toaster, toast } from 'sonner'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ReleaseSearchDialog, type ReleaseSearchError } from '@/components/release-search-dialog'
 import { Avatar, AvatarBadge, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -69,7 +64,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   SidebarContent,
   SidebarFooter,
@@ -86,7 +80,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { getTmdbLanguage, supportedLanguages } from './i18n'
 import {
   ApiError,
-  createDownload,
   createDownloader,
   createFavorite,
   createIndexer,
@@ -97,13 +90,12 @@ import {
   getPopularMedia,
   getSetupStatus,
   getTrendingMedia,
-  listDownloaders,
   listFavorites,
   searchIndexers,
   searchMedia,
 } from './lib/api'
 import { authClient } from './lib/auth-client'
-import { cn, formatBytes } from './lib/utils'
+import { cn } from './lib/utils'
 import { DownloadersPage } from './routes/downloaders'
 import { IndexersPage } from './routes/indexers'
 import { MediaSourcesPage } from './routes/media-sources'
@@ -119,23 +111,11 @@ const mediaSkeletonKeys = [
   'media-skeleton-5',
   'media-skeleton-6',
 ]
-const releaseSkeletonKeys = ['release-skeleton-1', 'release-skeleton-2', 'release-skeleton-3', 'release-skeleton-4']
-
 interface TopbarOverride {
   pathname: string
   title: string
   subtitle: string
 }
-
-interface ReleaseSearchError {
-  title: string
-  description: string
-  action: string
-  tone: 'configuration' | 'connection' | 'generic'
-}
-
-type ReleaseSort = 'seeders' | 'date' | 'size-desc' | 'size-asc'
-type ReleaseQuality = 'all' | '2160p' | '1080p' | '720p' | 'other'
 
 interface FavoritesContextValue {
   items: FavoriteMediaItem[]
@@ -1401,6 +1381,41 @@ function FilterChip({ label, active }: { label: string; active?: boolean }) {
   )
 }
 
+function getReleaseSearchInput(media: MediaDetails) {
+  const title = media.originalTitle || media.title
+  const query = [title, media.releaseYear].filter(Boolean).join(' ')
+  const tmdbId = Number(media.ids.tmdb)
+  const tvdbId = Number(media.ids.tvdb)
+  const imdbId = normalizeImdbId(media.ids.imdb)
+  const hasTmdbId = Number.isFinite(tmdbId) && tmdbId > 0
+  const hasTvdbId = Number.isFinite(tvdbId) && tvdbId > 0
+  const label =
+    media.kind === 'tv' && hasTvdbId
+      ? `TVDB ${tvdbId}`
+      : imdbId
+        ? `IMDb ${imdbId}`
+        : hasTmdbId
+          ? `TMDB ${tmdbId}`
+          : query
+
+  return {
+    query,
+    title,
+    aliases: media.aliases,
+    year: media.releaseYear,
+    kind: media.kind,
+    tmdbId: hasTmdbId ? tmdbId : undefined,
+    tvdbId: hasTvdbId ? tvdbId : undefined,
+    imdbId,
+    label,
+  }
+}
+
+function normalizeImdbId(value: string | null): string | undefined {
+  if (!value) return undefined
+  return /^tt\d+$/i.test(value) ? value.toLowerCase() : undefined
+}
+
 function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: boolean }) {
   const { t } = useTranslation()
 
@@ -1553,15 +1568,15 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
   async function handleFindReleases() {
     if (!media) return
 
-    const releaseQuery = [media.originalTitle, media.releaseYear].filter(Boolean).join(' ')
-    setReleaseQuery(releaseQuery)
+    const searchInput = getReleaseSearchInput(media)
+    setReleaseQuery(searchInput.label)
     setReleaseDialogOpen(true)
     setLoadingReleases(true)
     setReleaseError(null)
     setReleases([])
 
     try {
-      const payload = await searchIndexers(releaseQuery)
+      const payload = await searchIndexers(searchInput)
       setReleases(payload.results)
     } catch (error) {
       setReleases([])
@@ -1900,544 +1915,4 @@ function getReleaseSearchError(error: unknown, t: (key: string) => string): Rele
     action: t('retrySearch'),
     tone: 'generic',
   }
-}
-
-function getReleaseStatus({
-  loading,
-  error,
-  resultCount,
-  t,
-}: {
-  loading: boolean
-  error: ReleaseSearchError | null
-  resultCount: number
-  t: (key: string) => string
-}) {
-  if (loading) {
-    return {
-      icon: <LoaderCircle className="size-4 animate-spin" />,
-      label: t('searchingIndexers'),
-      className: 'bg-primary/10 text-primary',
-    }
-  }
-
-  if (error) {
-    return {
-      icon: error.tone === 'configuration' ? <ServerOff className="size-4" /> : <AlertTriangle className="size-4" />,
-      label: error.tone === 'configuration' ? t('configurationNeeded') : t('searchUnavailable'),
-      className: 'bg-destructive/10 text-destructive',
-    }
-  }
-
-  return {
-    icon: <Database className="size-4" />,
-    label: `${resultCount} ${t('results')}`,
-    className: resultCount > 0 ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
-  }
-}
-
-function ReleaseStatusPill({
-  status,
-}: {
-  status: {
-    icon: ReactNode
-    label: string
-    className: string
-  }
-}) {
-  return (
-    <div
-      className={cn(
-        'inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-3 font-medium text-sm',
-        status.className,
-      )}
-    >
-      {status.icon}
-      <span>{status.label}</span>
-    </div>
-  )
-}
-
-function getReleaseQuality(item: IndexerSearchItem): ReleaseQuality {
-  const title = item.title.toLowerCase()
-
-  if (title.includes('2160p') || title.includes('4k') || title.includes('uhd')) return '2160p'
-  if (title.includes('1080p')) return '1080p'
-  if (title.includes('720p')) return '720p'
-  return 'other'
-}
-
-function getReleaseIndexers(items: IndexerSearchItem[]) {
-  return Array.from(new Set(items.map((item) => item.indexer))).sort((left, right) => left.localeCompare(right))
-}
-
-function sortReleases(items: IndexerSearchItem[], sort: ReleaseSort) {
-  return [...items].sort((left, right) => {
-    if (sort === 'date') {
-      return new Date(right.publishDate || 0).getTime() - new Date(left.publishDate || 0).getTime()
-    }
-
-    if (sort === 'size-desc') {
-      return (right.size || 0) - (left.size || 0)
-    }
-
-    if (sort === 'size-asc') {
-      return (left.size || 0) - (right.size || 0)
-    }
-
-    return (right.seeders || 0) - (left.seeders || 0)
-  })
-}
-
-function filterReleases({
-  items,
-  keyword,
-  indexer,
-  quality,
-  sort,
-}: {
-  items: IndexerSearchItem[]
-  keyword: string
-  indexer: string
-  quality: ReleaseQuality
-  sort: ReleaseSort
-}) {
-  const normalizedKeyword = keyword.trim().toLowerCase()
-  const filtered = items.filter((item) => {
-    const matchesKeyword =
-      normalizedKeyword.length === 0 ||
-      item.title.toLowerCase().includes(normalizedKeyword) ||
-      item.indexer.toLowerCase().includes(normalizedKeyword)
-    const matchesIndexer = indexer === 'all' || item.indexer === indexer
-    const matchesQuality = quality === 'all' || getReleaseQuality(item) === quality
-
-    return matchesKeyword && matchesIndexer && matchesQuality
-  })
-
-  return sortReleases(filtered, sort)
-}
-
-function formatReleaseDate(value: string | null, language: string, t: (key: string) => string) {
-  if (!value) return t('unknownDate')
-
-  const publishedAt = dayjs(value)
-  if (!publishedAt.isValid()) return t('unknownDate')
-
-  return publishedAt.locale(language === 'zh' ? 'zh-cn' : 'en').fromNow()
-}
-
-function getDownloaderLabel(item: DownloaderSummary) {
-  const kind =
-    item.kind === 'zpan'
-      ? 'ZPan'
-      : item.kind === 'qbittorrent'
-        ? 'qBittorrent'
-        : item.kind === 'transmission'
-          ? 'Transmission'
-          : 'aria2'
-
-  return item.description ? `${kind} · ${item.description}` : kind
-}
-
-function ReleaseSearchDialog({
-  media,
-  query,
-  items,
-  loading,
-  error,
-  onClose,
-  onSearch,
-}: {
-  media: MediaSearchItem
-  query: string
-  items: IndexerSearchItem[]
-  loading: boolean
-  error: ReleaseSearchError | null
-  onClose: () => void
-  onSearch: () => void
-}) {
-  const { t } = useTranslation()
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [keyword, setKeyword] = useState('')
-  const [indexer, setIndexer] = useState('all')
-  const [quality, setQuality] = useState<ReleaseQuality>('all')
-  const [sort, setSort] = useState<ReleaseSort>('seeders')
-  const [downloaders, setDownloaders] = useState<DownloaderSummary[]>([])
-  const [loadingDownloaders, setLoadingDownloaders] = useState(false)
-  const indexers = getReleaseIndexers(items)
-  const indexerItems = [
-    { label: t('allIndexers'), value: 'all' },
-    ...indexers.map((item) => ({ label: item, value: item })),
-  ]
-  const qualityItems = [
-    { label: t('allQualities'), value: 'all' },
-    { label: '2160p / 4K', value: '2160p' },
-    { label: '1080p', value: '1080p' },
-    { label: '720p', value: '720p' },
-    { label: t('otherQuality'), value: 'other' },
-  ]
-  const sortItems = [
-    { label: t('sortBySeeders'), value: 'seeders' },
-    { label: t('sortByDate'), value: 'date' },
-    { label: t('sortByLargest'), value: 'size-desc' },
-    { label: t('sortBySmallest'), value: 'size-asc' },
-  ]
-  const visibleItems = filterReleases({ items, keyword, indexer, quality, sort })
-  const status = getReleaseStatus({ loading, error, resultCount: visibleItems.length, t })
-  const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all'
-  const enabledDownloaders = downloaders.filter((item) => item.enabled)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoadingDownloaders(true)
-    listDownloaders()
-      .then((payload) => {
-        if (!cancelled) setDownloaders(payload.items)
-      })
-      .catch((downloadersError: unknown) => {
-        if (!cancelled) {
-          toast.error(downloadersError instanceof Error ? downloadersError.message : t('downloadersLoadFailed'))
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingDownloaders(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [t])
-
-  return (
-    <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <SheetContent
-        ref={contentRef}
-        initialFocus={contentRef}
-        side="bottom"
-        className="mx-auto max-h-[92vh] max-w-6xl gap-0 overflow-hidden rounded-t-xl border bg-background p-0 sm:mb-4 sm:rounded-xl"
-      >
-        <SheetHeader className="border-b bg-card py-3 pr-14 pl-4 sm:pr-16 sm:pl-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Database />
-              </div>
-              <div className="min-w-0">
-                <SheetTitle className="truncate text-base">{media.title}</SheetTitle>
-                <SheetDescription className="truncate text-xs">
-                  {t('indexerSearch')} · {query}
-                </SheetDescription>
-              </div>
-            </div>
-            <ReleaseStatusPill status={status} />
-          </div>
-        </SheetHeader>
-
-        <div className="border-b bg-muted/30 px-4 py-3 sm:px-5">
-          <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_150px_130px_160px_auto] lg:items-center">
-            <div className="relative min-w-0">
-              <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-4 text-muted-foreground" />
-              <Input
-                value={keyword}
-                onChange={(event) => setKeyword(event.target.value)}
-                placeholder={t('filterReleases')}
-                className="pl-8"
-              />
-            </div>
-
-            <Select items={indexerItems} value={indexer} onValueChange={(value) => setIndexer(value || 'all')}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t('allIndexers')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">{t('allIndexers')}</SelectItem>
-                  {indexers.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            <Select
-              items={qualityItems}
-              value={quality}
-              onValueChange={(value) => setQuality((value || 'all') as ReleaseQuality)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t('allQualities')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">{t('allQualities')}</SelectItem>
-                  <SelectItem value="2160p">2160p / 4K</SelectItem>
-                  <SelectItem value="1080p">1080p</SelectItem>
-                  <SelectItem value="720p">720p</SelectItem>
-                  <SelectItem value="other">{t('otherQuality')}</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            <Select
-              items={sortItems}
-              value={sort}
-              onValueChange={(value) => setSort((value || 'seeders') as ReleaseSort)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t('sortReleases')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="seeders">{t('sortBySeeders')}</SelectItem>
-                  <SelectItem value="date">{t('sortByDate')}</SelectItem>
-                  <SelectItem value="size-desc">{t('sortByLargest')}</SelectItem>
-                  <SelectItem value="size-asc">{t('sortBySmallest')}</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            <Button
-              type="button"
-              onClick={onSearch}
-              variant={error ? 'default' : 'outline'}
-              className="lg:justify-self-end"
-            >
-              {loading ? (
-                <LoaderCircle data-icon="inline-start" className="animate-spin" />
-              ) : (
-                <RefreshCw data-icon="inline-start" />
-              )}
-              {error ? t('retrySearch') : t('searchAgain')}
-            </Button>
-          </div>
-          {!loading && !error ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-              <SlidersHorizontal className="size-3.5" />
-              <span>{t('showingReleases', { shown: visibleItems.length, total: items.length })}</span>
-              {hasFilters ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => {
-                    setKeyword('')
-                    setIndexer('all')
-                    setQuality('all')
-                  }}
-                >
-                  {t('clearFilters')}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="max-h-[68vh] overflow-auto p-4 sm:p-5">
-          <ReleasePanel
-            items={visibleItems}
-            loading={loading}
-            error={error}
-            onRetry={onSearch}
-            filtered={hasFilters}
-            downloaders={enabledDownloaders}
-            loadingDownloaders={loadingDownloaders}
-          />
-        </div>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
-function ReleasePanel({
-  downloaders,
-  items,
-  loading,
-  loadingDownloaders,
-  error,
-  onRetry,
-  filtered,
-}: {
-  downloaders: DownloaderSummary[]
-  items: IndexerSearchItem[]
-  loading: boolean
-  loadingDownloaders: boolean
-  error: ReleaseSearchError | null
-  onRetry: () => void
-  filtered: boolean
-}) {
-  const { t } = useTranslation()
-
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-        {releaseSkeletonKeys.map((key) => (
-          <Card key={key} className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
-            <CardContent className="px-0">
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="mt-3 h-3 w-1/2" />
-              <div className="mt-4 flex gap-2">
-                <Skeleton className="h-5 w-20 rounded-full" />
-                <Skeleton className="h-5 w-24 rounded-full" />
-              </div>
-            </CardContent>
-            <Skeleton className="h-11 rounded-lg" />
-          </Card>
-        ))}
-      </div>
-    )
-  }
-
-  if (error) {
-    const Icon = error.tone === 'configuration' ? ServerOff : AlertTriangle
-    return (
-      <Alert
-        variant={error.tone === 'generic' ? 'default' : 'destructive'}
-        className="min-h-64 items-start rounded-xl p-5 animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
-      >
-        <Icon className="mt-0.5" />
-        <AlertTitle className="text-base">{error.title}</AlertTitle>
-        <AlertDescription className="max-w-2xl">{error.description}</AlertDescription>
-        <div className="col-start-2 mt-4">
-          <Button
-            type="button"
-            onClick={onRetry}
-            size="sm"
-            variant={error.tone === 'generic' ? 'outline' : 'destructive'}
-          >
-            <RefreshCw data-icon="inline-start" />
-            {error.action}
-          </Button>
-        </div>
-      </Alert>
-    )
-  }
-
-  if (items.length === 0) {
-    return (
-      <Card className="flex min-h-64 items-center justify-center p-6 text-center animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-        <CardContent className="flex max-w-md flex-col items-center px-0">
-          <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <Search className="size-5" />
-          </div>
-          <h3 className="mt-4 font-semibold">{filtered ? t('noFilteredReleasesTitle') : t('noReleasesTitle')}</h3>
-          <p className="mt-2 text-muted-foreground text-sm">{filtered ? t('noFilteredReleases') : t('noReleases')}</p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-      {items.map((item) => (
-        <ReleaseRow key={item.id} item={item} downloaders={downloaders} loadingDownloaders={loadingDownloaders} />
-      ))}
-    </div>
-  )
-}
-
-function ReleaseRow({
-  downloaders,
-  item,
-  loadingDownloaders,
-}: {
-  downloaders: DownloaderSummary[]
-  item: IndexerSearchItem
-  loadingDownloaders: boolean
-}) {
-  const { i18n, t } = useTranslation()
-  const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
-  const uri = item.magnetUrl || item.downloadUrl
-  const title = item.fileName || item.title
-
-  async function handleDownload(downloaderId: string) {
-    if (!uri) {
-      toast.error(t('releaseMissingUrl'))
-      return
-    }
-
-    setSubmittingDownloaderId(downloaderId)
-    try {
-      await createDownload({
-        downloaderId,
-        uri,
-        title,
-      })
-      toast.success(t('downloadSubmitted'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
-    } finally {
-      setSubmittingDownloaderId(null)
-    }
-  }
-
-  const submitting = Boolean(submittingDownloaderId)
-  const disabled = !uri || loadingDownloaders || downloaders.length === 0 || submitting
-
-  return (
-    <Card className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
-      <CardContent className="min-w-0 px-0">
-        <div className="mb-2 flex flex-wrap gap-2">
-          <Badge variant="secondary">{item.indexer}</Badge>
-          <Badge variant="outline">
-            {item.seeders ?? 0} {t('seeders')}
-          </Badge>
-          <Badge variant="outline">
-            {item.leechers ?? 0} {t('leechers')}
-          </Badge>
-          {item.protocol ? <Badge variant="outline">{item.protocol}</Badge> : null}
-          {item.indexerFlags.map((flag) => (
-            <Badge key={flag} variant="secondary">
-              {flag}
-            </Badge>
-          ))}
-        </div>
-        <h3 className="line-clamp-2 font-semibold text-sm leading-5">{title}</h3>
-        <div className="mt-2 flex flex-wrap gap-3 text-muted-foreground text-xs">
-          <span>{formatBytes(item.size)}</span>
-          <span>{item.files !== null ? t('filesCount', { count: item.files }) : t('unknownFiles')}</span>
-          <span>{formatReleaseDate(item.publishDate, i18n.language, t)}</span>
-          {item.categories.length > 0 ? <span>{item.categories.slice(0, 2).join(' / ')}</span> : null}
-          <span>{item.infoHash ? t('magnetReady') : t('torrentUrl')}</span>
-          {item.infoUrl ? (
-            <a
-              className="font-medium text-primary hover:underline"
-              href={item.infoUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('sourcePage')}
-            </a>
-          ) : null}
-        </div>
-      </CardContent>
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button type="button" size="lg" className="h-11" disabled={disabled} />}>
-          {submitting ? (
-            <LoaderCircle data-icon="inline-start" className="animate-spin" />
-          ) : (
-            <Download data-icon="inline-start" />
-          )}
-          {loadingDownloaders
-            ? t('loadingDownloaders')
-            : downloaders.length === 0
-              ? t('noDownloadersAvailable')
-              : t('downloadTo')}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
-            {downloaders.map((downloader) => (
-              <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader.id)}>
-                <HardDriveDownload />
-                <span className="truncate">{getDownloaderLabel(downloader)}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </Card>
-  )
 }

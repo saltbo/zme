@@ -17,13 +17,29 @@ interface ProwlarrSearchItem {
   infoHash?: string
   categories?: Array<{ name?: string }>
   indexerFlags?: string[]
-  imdbId?: number
-  tmdbId?: number
+  imdbId?: number | string
+  tmdbId?: number | string
+  tvdbId?: number | string
 }
 
-export async function searchProwlarr(baseUrl: string, apiKey: string, query: string): Promise<IndexerSearchItem[]> {
+export interface ProwlarrSearchInput {
+  query: string
+  title?: string
+  year?: string
+  aliases?: string[]
+  kind?: 'movie' | 'tv'
+  imdbId?: string
+  tmdbId?: number
+  tvdbId?: number
+}
+
+export async function searchProwlarr(
+  baseUrl: string,
+  apiKey: string,
+  input: ProwlarrSearchInput,
+): Promise<IndexerSearchItem[]> {
   const url = new URL('/api/v1/search', normalizeBaseUrl(baseUrl))
-  url.searchParams.set('query', query)
+  url.searchParams.set('query', input.query)
   url.searchParams.set('type', 'search')
   url.searchParams.set('indexerIds', '-2')
 
@@ -61,11 +77,17 @@ function toIndexerSearchItem(item: ProwlarrSearchItem): IndexerSearchItem {
     infoHash: item.infoHash || null,
     categories: item.categories?.flatMap((category) => (category.name ? [category.name] : [])) || [],
     indexerFlags: item.indexerFlags || [],
-    imdbId: typeof item.imdbId === 'number' && item.imdbId > 0 ? item.imdbId : null,
-    tmdbId: typeof item.tmdbId === 'number' && item.tmdbId > 0 ? item.tmdbId : null,
+    imdbId: parsePositiveNumber(item.imdbId),
+    tmdbId: parsePositiveNumber(item.tmdbId),
+    tvdbId: parsePositiveNumber(item.tvdbId),
   }
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+}
+
+function parsePositiveNumber(value: number | string | undefined): number | null {
+  const parsed = typeof value === 'string' ? Number(value) : value
+  return typeof parsed === 'number' && Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }

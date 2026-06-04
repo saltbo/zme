@@ -2,7 +2,7 @@ import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, In
 import { and, eq } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { type Indexer, indexers } from '../db/schema'
-import { searchProwlarr } from './prowlarr'
+import { type ProwlarrSearchInput, searchProwlarr } from './prowlarr'
 
 type Db = ReturnType<typeof createDb>
 
@@ -65,22 +65,124 @@ export async function deleteIndexer(db: Db, id: string): Promise<boolean> {
   return rows.length > 0
 }
 
-export async function searchIndexers(db: Db, query: string): Promise<IndexerSearchItem[]> {
+export async function searchIndexers(db: Db, input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
   const rows = await db
     .select()
     .from(indexers)
     .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
   if (rows.length === 0) throw new Error('No enabled indexers are configured.')
 
-  const results = await Promise.allSettled(rows.map((row) => searchConfiguredIndexer(row, query)))
+  const searches = getSearchInputs(input)
+  const results = await Promise.allSettled(searches.map((search) => searchEnabledIndexers(rows, search)))
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
-  if (items.length > 0) return items
+  if (items.length > 0) return uniqueById(filterExactMediaMatches(items, input))
 
   const firstError = results.find((result) => result.status === 'rejected')
   if (firstError?.status === 'rejected' && firstError.reason instanceof Error) {
     throw firstError.reason
   }
+  return []
+}
+
+async function searchEnabledIndexers(rows: Indexer[], input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
+  const results = await Promise.allSettled(rows.map((row) => searchConfiguredIndexer(row, input)))
+  const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
+  if (items.length > 0) return items
+
+  const firstError = results.find((result) => result.status === 'rejected')
+  const hasSuccessfulSearch = results.some((result) => result.status === 'fulfilled')
+  if (hasSuccessfulSearch) return []
+
+  if (firstError?.status === 'rejected' && firstError.reason instanceof Error) {
+    throw firstError.reason
+  }
   throw new Error('Indexer search failed.')
+}
+
+function filterExactMediaMatches(items: IndexerSearchItem[], input: ProwlarrSearchInput): IndexerSearchItem[] {
+  const imdbId = parseImdbNumber(input.imdbId)
+  return items.filter((item) => {
+    if (imdbId && item.imdbId === imdbId) return true
+    if (input.tmdbId && item.tmdbId === input.tmdbId) return true
+    if (input.tvdbId && item.tvdbId === input.tvdbId) return true
+    if (item.imdbId || item.tmdbId || item.tvdbId) return false
+    return matchesExpectedTitle(item, input)
+  })
+}
+
+function getSearchInputs(input: ProwlarrSearchInput): ProwlarrSearchInput[] {
+  const titles = uniqueStrings([input.title, ...(input.aliases ?? [])]).slice(0, 3)
+  if (titles.length === 0) return [input]
+
+  return titles.map((title) => ({
+    ...input,
+    query: [title, input.year].filter(Boolean).join(' '),
+  }))
+}
+
+function uniqueById(items: IndexerSearchItem[]): IndexerSearchItem[] {
+  const seen = new Set<string>()
+  const unique: IndexerSearchItem[] = []
+  for (const item of items) {
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
+    unique.push(item)
+  }
+  return unique
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>()
+  const unique: string[] = []
+  for (const value of values) {
+    const normalized = value?.trim()
+    if (!normalized) continue
+    const key = normalized.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(normalized)
+  }
+  return unique
+}
+
+function parseImdbNumber(value: string | undefined): number | null {
+  if (!value) return null
+  const match = value.match(/^tt(\d+)$/i)
+  if (!match) return null
+  const parsed = Number(match[1])
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function matchesExpectedTitle(item: IndexerSearchItem, input: ProwlarrSearchInput): boolean {
+  if (input.kind === 'movie' && looksLikeMovieCollection(item.title)) return false
+
+  const expectedTitles = uniqueStrings([input.title, ...(input.aliases ?? []), stripYear(input.query)])
+    .map(normalizeReleaseText)
+    .filter(Boolean)
+  const releaseTitle = normalizeReleaseText(item.title)
+  if (!expectedTitles.some((title) => releaseTitle.includes(title))) return false
+  if (!input.year) return true
+
+  return releaseTitle.includes(input.year)
+}
+
+function looksLikeMovieCollection(value: string): boolean {
+  const normalized = normalizeReleaseText(value)
+  return normalized.includes('合集') || normalized.includes('collection')
+}
+
+function stripYear(value: string): string {
+  return value.replace(/\b(19|20)\d{2}\b/g, '').trim()
+}
+
+function normalizeReleaseText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/['']/g, '')
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
 }
 
 export async function checkIndexerHealth(db: Db, id: string): Promise<IndexerHealth | null> {
@@ -133,10 +235,10 @@ function toDetails(row: Indexer): IndexerDetails {
   }
 }
 
-async function searchConfiguredIndexer(indexer: Indexer, query: string): Promise<IndexerSearchItem[]> {
+async function searchConfiguredIndexer(indexer: Indexer, input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
   const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
   if (!credentials.apiKey) throw new Error('Prowlarr API key is missing.')
-  return searchProwlarr(indexer.endpoint, credentials.apiKey, query)
+  return searchProwlarr(indexer.endpoint, credentials.apiKey, input)
 }
 
 async function probeIndexer(indexer: Indexer): Promise<{ status: 'online' | 'offline'; message: string }> {

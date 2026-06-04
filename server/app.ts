@@ -48,6 +48,25 @@ const searchQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
 })
 
+const indexerSearchQuerySchema = z.object({
+  q: z.string().trim().min(1),
+  title: z.string().trim().min(1).optional(),
+  aliases: z.string().trim().optional(),
+  year: z
+    .string()
+    .trim()
+    .regex(/^(19|20)\d{2}$/)
+    .optional(),
+  kind: z.enum(['movie', 'tv']).optional(),
+  imdbId: z
+    .string()
+    .trim()
+    .regex(/^tt\d+$/i)
+    .optional(),
+  tmdbId: z.coerce.number().int().positive().optional(),
+  tvdbId: z.coerce.number().int().positive().optional(),
+})
+
 const mediaDetailParamsSchema = z.object({
   kind: z.enum(['movie', 'tv']),
   id: z.coerce.number().int().positive(),
@@ -193,10 +212,19 @@ routes.get(
   },
 )
 
-routes.get('/indexers/search', zValidator('query', searchQuerySchema), async (c) => {
-  const { q } = c.req.valid('query')
+routes.get('/indexers/search', zValidator('query', indexerSearchQuerySchema), async (c) => {
+  const { q, title, aliases, year, kind, imdbId, tmdbId, tvdbId } = c.req.valid('query')
   try {
-    const results = await searchIndexers(createDb(c.env), q)
+    const results = await searchIndexers(createDb(c.env), {
+      query: q,
+      title,
+      aliases: parseAliases(aliases),
+      year,
+      kind,
+      imdbId,
+      tmdbId,
+      tvdbId,
+    })
     return c.json({ results })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Indexer search failed.'
@@ -210,6 +238,14 @@ routes.get('/indexers/search', zValidator('query', searchQuerySchema), async (c)
     )
   }
 })
+
+function parseAliases(value: string | undefined): string[] {
+  if (!value) return []
+  return value
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
 
 routes.get('/favorites', async (c) => {
   const items = await listFavorites(createDb(c.env), c.get('user').id)
