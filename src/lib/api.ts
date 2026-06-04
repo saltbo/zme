@@ -1,5 +1,5 @@
 import type { AppType } from '@server/app'
-import type { MediaKind } from '@shared/types'
+import type { CreateDownloadInput, DownloaderInput, MediaKind } from '@shared/types'
 import { hc } from 'hono/client'
 
 const client = hc<AppType>('/')
@@ -109,6 +109,89 @@ export async function getZpanSaveUrl(uri: string) {
 
   if (!response.ok) {
     throw await apiError(response, 'Failed to build ZPan save URL.')
+  }
+
+  return response.json()
+}
+
+export async function listDownloaders() {
+  const response = await client.api.downloaders.$get()
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to load downloaders.')
+  }
+
+  return response.json()
+}
+
+export async function createDownloader(input: DownloaderInput) {
+  const response = await client.api.downloaders.$post({
+    json: input,
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to create downloader.')
+  }
+
+  return response.json()
+}
+
+export async function getDownloader(id: string) {
+  const response = await client.api.downloaders[':id'].$get({
+    param: { id },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to load downloader.')
+  }
+
+  return response.json()
+}
+
+export async function updateDownloader(id: string, input: DownloaderInput) {
+  const response = await client.api.downloaders[':id'].$patch({
+    param: { id },
+    json: input,
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to update downloader.')
+  }
+
+  return response.json()
+}
+
+export async function deleteDownloader(id: string) {
+  const response = await client.api.downloaders[':id'].$delete({
+    param: { id },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to delete downloader.')
+  }
+
+  return response.json()
+}
+
+export async function checkDownloaderHealth(id: string) {
+  const response = await client.api.downloaders[':id'].health.$post({
+    param: { id },
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to check downloader health.')
+  }
+
+  return response.json()
+}
+
+export async function createDownload(input: CreateDownloadInput) {
+  const response = await client.api.downloads.$post({
+    json: input,
+  })
+
+  if (!response.ok) {
+    throw await apiError(response, 'Failed to submit download.')
   }
 
   return response.json()

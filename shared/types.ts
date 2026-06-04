@@ -59,3 +59,49 @@ export interface IndexerSearchItem {
 export interface SaveTarget {
   url: string
 }
+
+export type DownloaderKind = 'zpan' | 'qbittorrent' | 'transmission' | 'aria2'
+
+export interface DownloaderSummary {
+  id: string
+  description: string | null
+  kind: DownloaderKind
+  endpoint: string
+  enabled: boolean
+  healthStatus: 'unknown' | 'online' | 'offline'
+  healthMessage: string | null
+  healthCheckedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DownloaderDetails extends DownloaderSummary {
+  credentials: Record<string, string>
+  options: Record<string, string>
+}
+
+export interface DownloaderHealth {
+  status: 'online' | 'offline'
+  message: string
+  checkedAt: string
+}
+
+export interface DownloaderInput {
+  description?: string
+  kind: DownloaderKind
+  endpoint: string
+  credentials: Record<string, string>
+  options: Record<string, string>
+  enabled: boolean
+}
+
+export interface CreateDownloadInput {
+  downloaderId: string
+  uri: string
+  title?: string
+}
+
+export interface CreateDownloadResult {
+  downloaderId: string
+  status: 'submitted'
+}

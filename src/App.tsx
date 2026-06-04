@@ -1,16 +1,16 @@
-import type { IndexerSearchItem, MediaDetails, MediaKind, MediaSearchItem } from '@shared/types'
+import type { DownloaderSummary, IndexerSearchItem, MediaDetails, MediaKind, MediaSearchItem } from '@shared/types'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowUpRight,
   Bookmark,
   Clapperboard,
   Database,
   Download,
   Film,
+  HardDriveDownload,
   Home,
   LoaderCircle,
   RefreshCw,
@@ -64,14 +64,16 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { getTmdbLanguage, supportedLanguages } from './i18n'
 import {
   ApiError,
+  createDownload,
   getMediaDetails,
   getPopularMedia,
   getTrendingMedia,
-  getZpanSaveUrl,
+  listDownloaders,
   searchIndexers,
   searchMedia,
 } from './lib/api'
 import { cn, formatBytes } from './lib/utils'
+import { DownloadersPage } from './routes/downloaders'
 
 dayjs.extend(relativeTime)
 
@@ -127,6 +129,7 @@ function AuthenticatedShell() {
           <Route path="/movies/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
           <Route path="/series" element={<MediaWorkspace mode="tv" />} />
           <Route path="/series/:id" element={<MediaDetailPage onTopbarChange={setTopbarOverride} />} />
+          <Route path="/downloaders" element={<DownloadersPage />} />
         </Routes>
       </SidebarInset>
     </SidebarProvider>
@@ -208,6 +211,12 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('seriesSubtitle'),
     }
   }
+  if (pathname === '/downloaders') {
+    return {
+      title: t('downloaders'),
+      subtitle: t('downloadersSubtitle'),
+    }
+  }
   return {
     title: t('discover'),
     subtitle: t('discoverSubtitle'),
@@ -261,7 +270,7 @@ function AppSidebar() {
             <SidebarLink icon={Film} label={t('movies')} to="/movies" />
             <SidebarLink icon={Tv} label={t('series')} to="/series" />
             <SidebarLink icon={Download} label={t('requests')} to="/" muted />
-            <SidebarLink icon={Settings} label={t('sources')} to="/" muted />
+            <SidebarLink icon={HardDriveDownload} label={t('downloaders')} to="/downloaders" />
           </SidebarMenu>
         </SidebarContent>
 
@@ -1203,6 +1212,19 @@ function formatReleaseDate(value: string | null, language: string, t: (key: stri
   return publishedAt.locale(language === 'zh' ? 'zh-cn' : 'en').fromNow()
 }
 
+function getDownloaderLabel(item: DownloaderSummary) {
+  const kind =
+    item.kind === 'zpan'
+      ? 'ZPan'
+      : item.kind === 'qbittorrent'
+        ? 'qBittorrent'
+        : item.kind === 'transmission'
+          ? 'Transmission'
+          : 'aria2'
+
+  return item.description ? `${kind} · ${item.description}` : kind
+}
+
 function ReleaseSearchDialog({
   media,
   query,
@@ -1226,6 +1248,8 @@ function ReleaseSearchDialog({
   const [indexer, setIndexer] = useState('all')
   const [quality, setQuality] = useState<ReleaseQuality>('all')
   const [sort, setSort] = useState<ReleaseSort>('seeders')
+  const [downloaders, setDownloaders] = useState<DownloaderSummary[]>([])
+  const [loadingDownloaders, setLoadingDownloaders] = useState(false)
   const indexers = getReleaseIndexers(items)
   const indexerItems = [
     { label: t('allIndexers'), value: 'all' },
@@ -1247,6 +1271,28 @@ function ReleaseSearchDialog({
   const visibleItems = filterReleases({ items, keyword, indexer, quality, sort })
   const status = getReleaseStatus({ loading, error, resultCount: visibleItems.length, t })
   const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all'
+  const enabledDownloaders = downloaders.filter((item) => item.enabled)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingDownloaders(true)
+    listDownloaders()
+      .then((payload) => {
+        if (!cancelled) setDownloaders(payload.items)
+      })
+      .catch((downloadersError: unknown) => {
+        if (!cancelled) {
+          toast.error(downloadersError instanceof Error ? downloadersError.message : t('downloadersLoadFailed'))
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDownloaders(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [t])
 
   return (
     <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -1376,7 +1422,15 @@ function ReleaseSearchDialog({
         </div>
 
         <div className="max-h-[68vh] overflow-auto p-4 sm:p-5">
-          <ReleasePanel items={visibleItems} loading={loading} error={error} onRetry={onSearch} filtered={hasFilters} />
+          <ReleasePanel
+            items={visibleItems}
+            loading={loading}
+            error={error}
+            onRetry={onSearch}
+            filtered={hasFilters}
+            downloaders={enabledDownloaders}
+            loadingDownloaders={loadingDownloaders}
+          />
         </div>
       </SheetContent>
     </Sheet>
@@ -1384,14 +1438,18 @@ function ReleaseSearchDialog({
 }
 
 function ReleasePanel({
+  downloaders,
   items,
   loading,
+  loadingDownloaders,
   error,
   onRetry,
   filtered,
 }: {
+  downloaders: DownloaderSummary[]
   items: IndexerSearchItem[]
   loading: boolean
+  loadingDownloaders: boolean
   error: ReleaseSearchError | null
   onRetry: () => void
   filtered: boolean
@@ -1460,30 +1518,49 @@ function ReleasePanel({
   return (
     <div className="flex flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
       {items.map((item) => (
-        <ReleaseRow key={item.id} item={item} />
+        <ReleaseRow key={item.id} item={item} downloaders={downloaders} loadingDownloaders={loadingDownloaders} />
       ))}
     </div>
   )
 }
 
-function ReleaseRow({ item }: { item: IndexerSearchItem }) {
+function ReleaseRow({
+  downloaders,
+  item,
+  loadingDownloaders,
+}: {
+  downloaders: DownloaderSummary[]
+  item: IndexerSearchItem
+  loadingDownloaders: boolean
+}) {
   const { i18n, t } = useTranslation()
+  const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
   const uri = item.magnetUrl || item.downloadUrl
   const title = item.fileName || item.title
 
-  async function handleSave() {
+  async function handleDownload(downloaderId: string) {
     if (!uri) {
       toast.error(t('releaseMissingUrl'))
       return
     }
 
+    setSubmittingDownloaderId(downloaderId)
     try {
-      const payload = await getZpanSaveUrl(uri)
-      window.location.assign(payload.url)
+      await createDownload({
+        downloaderId,
+        uri,
+        title,
+      })
+      toast.success(t('downloadSubmitted'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('openZpanFailed'))
+      toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
+    } finally {
+      setSubmittingDownloaderId(null)
     }
   }
+
+  const submitting = Boolean(submittingDownloaderId)
+  const disabled = !uri || loadingDownloaders || downloaders.length === 0 || submitting
 
   return (
     <Card className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
@@ -1522,10 +1599,31 @@ function ReleaseRow({ item }: { item: IndexerSearchItem }) {
           ) : null}
         </div>
       </CardContent>
-      <Button type="button" onClick={() => void handleSave()} size="lg" className="h-11" disabled={!uri}>
-        {t('saveToZpan')}
-        <ArrowUpRight data-icon="inline-end" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button type="button" size="lg" className="h-11" disabled={disabled} />}>
+          {submitting ? (
+            <LoaderCircle data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <Download data-icon="inline-start" />
+          )}
+          {loadingDownloaders
+            ? t('loadingDownloaders')
+            : downloaders.length === 0
+              ? t('noDownloadersAvailable')
+              : t('downloadTo')}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
+            {downloaders.map((downloader) => (
+              <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader.id)}>
+                <HardDriveDownload />
+                <span className="truncate">{getDownloaderLabel(downloader)}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Card>
   )
 }
