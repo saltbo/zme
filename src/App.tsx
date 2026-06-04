@@ -317,7 +317,7 @@ function LoginPage({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
 }
 
 function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState(() => getOnboardingStep())
   const [name, setName] = useState('Admin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -339,10 +339,10 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
     setSubmitting(true)
     try {
       await createInitialAdmin({ name, email, password })
+      setOnboardingStep(setStep, 1)
       const result = await authClient.signIn.email({ email, password })
       if (result.error) throw new Error(result.error.message || 'Sign in failed.')
       toast.success('Administrator created.')
-      setStep(1)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Setup failed.')
     } finally {
@@ -353,7 +353,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
   async function handleMediaSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!tmdbApiKey.trim()) {
-      setStep(2)
+      setOnboardingStep(setStep, 2)
       return
     }
 
@@ -367,7 +367,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
         enabled: true,
       })
       toast.success('Media source saved.')
-      setStep(2)
+      setOnboardingStep(setStep, 2)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save media source.')
     } finally {
@@ -378,7 +378,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
   async function handleIndexer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!indexerApiKey.trim()) {
-      setStep(3)
+      setOnboardingStep(setStep, 3)
       return
     }
 
@@ -393,7 +393,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
         enabled: true,
       })
       toast.success('Indexer saved.')
-      setStep(3)
+      setOnboardingStep(setStep, 3)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save indexer.')
     } finally {
@@ -404,6 +404,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
   async function handleDownloader(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!downloaderEndpoint.trim()) {
+      clearOnboardingStep()
       await onComplete()
       return
     }
@@ -434,6 +435,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
         enabled: true,
       })
       toast.success('Downloader saved.')
+      clearOnboardingStep()
       await onComplete()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save downloader.')
@@ -552,7 +554,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
                       {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
                       Save and continue
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                    <Button type="button" variant="outline" onClick={() => setOnboardingStep(setStep, 2)}>
                       Skip
                     </Button>
                   </div>
@@ -584,7 +586,7 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
                       {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
                       Save and continue
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => setStep(3)}>
+                    <Button type="button" variant="outline" onClick={() => setOnboardingStep(setStep, 3)}>
                       Skip
                     </Button>
                   </div>
@@ -667,7 +669,14 @@ function OnboardingPage({ onComplete }: { onComplete: () => Promise<void> }) {
                       {submitting ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
                       Finish
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => void onComplete()}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        clearOnboardingStep()
+                        void onComplete()
+                      }}
+                    >
                       Skip
                     </Button>
                   </div>
@@ -700,6 +709,21 @@ function getDownloaderOptionLabel(kind: DownloaderKind) {
   if (kind === 'qbittorrent') return 'Category'
   if (kind === 'transmission') return 'Download directory'
   return 'Directory'
+}
+
+function getOnboardingStep() {
+  const value = window.sessionStorage.getItem('zme.onboarding.step')
+  const step = Number(value)
+  return Number.isInteger(step) && step >= 0 && step <= 3 ? step : 0
+}
+
+function setOnboardingStep(setStep: (step: number) => void, step: number) {
+  window.sessionStorage.setItem('zme.onboarding.step', String(step))
+  setStep(step)
+}
+
+function clearOnboardingStep() {
+  window.sessionStorage.removeItem('zme.onboarding.step')
 }
 
 function FavoritesProvider({ children }: { children: ReactNode }) {
