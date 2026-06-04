@@ -38,14 +38,22 @@ export interface MediaDetails extends MediaSearchItem {
 export interface IndexerSearchItem {
   id: string
   title: string
+  fileName: string | null
   indexer: string
   size: number | null
   seeders: number | null
   leechers: number | null
+  files: number | null
+  protocol: string | null
   publishDate: string | null
   downloadUrl: string | null
   magnetUrl: string | null
+  infoUrl: string | null
   infoHash: string | null
+  categories: string[]
+  indexerFlags: string[]
+  imdbId: number | null
+  tmdbId: number | null
 }
 
 export interface SaveTarget {

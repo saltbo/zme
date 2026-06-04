@@ -3,14 +3,22 @@ import type { IndexerSearchItem } from '@shared/types'
 interface ProwlarrSearchItem {
   guid?: string
   title?: string
+  fileName?: string
   indexer?: string
   size?: number
   seeders?: number
   leechers?: number
+  files?: number
+  protocol?: string
   publishDate?: string
   downloadUrl?: string
   magnetUrl?: string
+  infoUrl?: string
   infoHash?: string
+  categories?: Array<{ name?: string }>
+  indexerFlags?: string[]
+  imdbId?: number
+  tmdbId?: number
 }
 
 export async function searchIndexers(baseUrl: string, apiKey: string, query: string): Promise<IndexerSearchItem[]> {
@@ -39,14 +47,22 @@ function toIndexerSearchItem(item: ProwlarrSearchItem): IndexerSearchItem {
   return {
     id,
     title: item.title || 'Untitled release',
+    fileName: item.fileName || null,
     indexer: item.indexer || 'Unknown',
     size: typeof item.size === 'number' ? item.size : null,
     seeders: typeof item.seeders === 'number' ? item.seeders : null,
     leechers: typeof item.leechers === 'number' ? item.leechers : null,
+    files: typeof item.files === 'number' ? item.files : null,
+    protocol: item.protocol || null,
     publishDate: item.publishDate || null,
     downloadUrl: item.downloadUrl || null,
     magnetUrl: item.magnetUrl || null,
+    infoUrl: item.infoUrl || null,
     infoHash: item.infoHash || null,
+    categories: item.categories?.flatMap((category) => (category.name ? [category.name] : [])) || [],
+    indexerFlags: item.indexerFlags || [],
+    imdbId: typeof item.imdbId === 'number' && item.imdbId > 0 ? item.imdbId : null,
+    tmdbId: typeof item.tmdbId === 'number' && item.tmdbId > 0 ? item.tmdbId : null,
   }
 }
 

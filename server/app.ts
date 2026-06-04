@@ -81,12 +81,28 @@ const routes = new Hono<{ Bindings: Env }>()
     const baseUrl = c.env.PROWLARR_URL
     const apiKey = c.env.PROWLARR_API_KEY
     if (!baseUrl || !apiKey) {
-      return c.json({ results: [] })
+      return c.json(
+        {
+          code: 'INDEXER_NOT_CONFIGURED',
+          error: 'Indexer search is not configured.',
+        },
+        503,
+      )
     }
 
     const { q } = c.req.valid('query')
-    const results = await searchIndexers(baseUrl, apiKey, q)
-    return c.json({ results })
+    try {
+      const results = await searchIndexers(baseUrl, apiKey, q)
+      return c.json({ results })
+    } catch (error) {
+      return c.json(
+        {
+          code: 'INDEXER_SEARCH_FAILED',
+          error: error instanceof Error ? error.message : 'Indexer search failed.',
+        },
+        502,
+      )
+    }
   })
   .get('/zpan/save-url', zValidator('query', z.object({ uri: z.string().trim().min(1) })), (c) => {
     const zpanBaseUrl = c.env.ZPAN_BASE_URL || 'http://localhost:5174'

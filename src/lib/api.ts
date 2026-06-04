@@ -8,9 +8,19 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly code?: string,
   ) {
     super(message)
     this.name = 'ApiError'
+  }
+}
+
+async function apiError(response: Response, fallbackMessage: string): Promise<ApiError> {
+  try {
+    const payload = (await response.clone().json()) as { error?: string; code?: string }
+    return new ApiError(payload.error || fallbackMessage, response.status, payload.code)
+  } catch {
+    return new ApiError(fallbackMessage, response.status)
   }
 }
 
@@ -23,7 +33,7 @@ export async function searchMedia(query: string, language: string) {
   })
 
   if (!response.ok) {
-    throw new ApiError('Failed to search media.', response.status)
+    throw await apiError(response, 'Failed to search media.')
   }
 
   return response.json()
@@ -41,7 +51,7 @@ export async function getMediaDetails(kind: MediaKind, id: number, language: str
   })
 
   if (!response.ok) {
-    throw new ApiError('Failed to load media details.', response.status)
+    throw await apiError(response, 'Failed to load media details.')
   }
 
   return response.json()
@@ -55,7 +65,7 @@ export async function getTrendingMedia(language: string) {
   })
 
   if (!response.ok) {
-    throw new ApiError('Failed to load trending media.', response.status)
+    throw await apiError(response, 'Failed to load trending media.')
   }
 
   return response.json()
@@ -70,7 +80,7 @@ export async function getPopularMedia(kind: MediaKind, language: string) {
   })
 
   if (!response.ok) {
-    throw new ApiError('Failed to load popular media.', response.status)
+    throw await apiError(response, 'Failed to load popular media.')
   }
 
   return response.json()
@@ -84,7 +94,7 @@ export async function searchIndexers(query: string) {
   })
 
   if (!response.ok) {
-    throw new ApiError('Failed to search indexers.', response.status)
+    throw await apiError(response, 'Failed to search indexers.')
   }
 
   return response.json()
@@ -98,7 +108,7 @@ export async function getZpanSaveUrl(uri: string) {
   })
 
   if (!response.ok) {
-    throw new ApiError('Failed to build ZPan save URL.', response.status)
+    throw await apiError(response, 'Failed to build ZPan save URL.')
   }
 
   return response.json()
