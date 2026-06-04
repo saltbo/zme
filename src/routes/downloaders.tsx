@@ -286,11 +286,13 @@ function DownloaderForm({
   submitLabel: string
 }) {
   const { t } = useTranslation()
+  const downloaderKindItems = downloaderKinds.map((kind) => ({ label: getDownloaderKindLabel(kind), value: kind }))
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4">
       <Field label={t('downloaderKind')}>
         <Select
+          items={downloaderKindItems}
           value={form.kind}
           onValueChange={(value) => {
             const kind = (value || 'zpan') as DownloaderKind

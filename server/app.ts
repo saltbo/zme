@@ -34,7 +34,14 @@ import {
   updateMediaSource,
 } from './services/media-sources'
 import { createInitialAdmin, isInitialized } from './services/setup'
-import { getMediaDetails, getPopularMedia, getTrendingMedia, searchMedia } from './services/tmdb'
+import {
+  discoverMedia,
+  getMediaDetails,
+  getPopularMedia,
+  getTrendingMedia,
+  listMediaGenres,
+  searchMedia,
+} from './services/tmdb'
 
 type AppEnv = {
   Bindings: Env
@@ -89,11 +96,34 @@ const favoriteSchema = z.object({
   backdropUrl: z.string().nullable(),
   releaseYear: z.string().nullable(),
   rating: z.number().nullable(),
+  genres: z.array(z.string()).optional(),
 })
 
 const popularQuerySchema = z.object({
   kind: z.enum(['movie', 'tv']),
   language: z.string().trim().min(2).optional(),
+})
+
+const discoverQuerySchema = z.object({
+  kind: z.enum(['movie', 'tv']),
+  language: z.string().trim().min(2).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  sortBy: z
+    .enum(['popularity.desc', 'vote_average.desc', 'primary_release_date.desc', 'first_air_date.desc'])
+    .default('popularity.desc'),
+  genreId: z.coerce.number().int().positive().optional(),
+  originCountry: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{2}$/)
+    .optional(),
+  year: z.coerce
+    .number()
+    .int()
+    .min(1900)
+    .max(new Date().getFullYear() + 2)
+    .optional(),
+  ratingGte: z.coerce.number().min(0).max(10).optional(),
 })
 
 const downloaderSchema = z.object({
@@ -219,6 +249,23 @@ routes.get('/media/popular', zValidator('query', popularQuerySchema), async (c) 
   const source = await getActiveTmdbSource(createDb(c.env), language)
   const results = await getPopularMedia(source.apiKey, kind, source.language)
   return c.json({ results })
+})
+
+routes.get('/media/discover', zValidator('query', discoverQuerySchema), async (c) => {
+  const input = c.req.valid('query')
+  const source = await getActiveTmdbSource(createDb(c.env), input.language)
+  const page = await discoverMedia(source.apiKey, {
+    ...input,
+    language: source.language,
+  })
+  return c.json(page)
+})
+
+routes.get('/media/genres', zValidator('query', popularQuerySchema), async (c) => {
+  const { kind, language } = c.req.valid('query')
+  const source = await getActiveTmdbSource(createDb(c.env), language)
+  const genres = await listMediaGenres(source.apiKey, kind, source.language)
+  return c.json({ genres })
 })
 
 routes.get(

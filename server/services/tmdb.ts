@@ -1,7 +1,18 @@
-import type { MediaCredit, MediaDetails, MediaKind, MediaSearchItem } from '@shared/types'
+import type {
+  MediaCredit,
+  MediaDetails,
+  MediaDiscoverInput,
+  MediaDiscoverPage,
+  MediaGenre,
+  MediaKind,
+  MediaSearchItem,
+} from '@shared/types'
 
 interface TmdbSearchResponse {
   results?: TmdbSearchResult[]
+  page?: number
+  total_pages?: number
+  total_results?: number
 }
 
 interface TmdbSearchResult {
@@ -17,6 +28,7 @@ interface TmdbSearchResult {
   release_date?: string
   first_air_date?: string
   vote_average?: number
+  genre_ids?: number[]
 }
 
 interface TmdbDetailsResponse extends TmdbSearchResult {
@@ -59,6 +71,10 @@ interface TmdbCredit {
   profile_path?: string | null
 }
 
+interface TmdbGenreResponse {
+  genres?: Array<{ id?: number; name?: string }>
+}
+
 const TMDB_API_BASE = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
@@ -68,11 +84,15 @@ export async function searchMedia(apiKey: string, query: string, language: strin
   url.searchParams.set('language', language)
   url.searchParams.set('include_adult', 'false')
 
-  const response = await fetchTmdb(apiKey, url)
+  const [response, movieGenres, tvGenres] = await Promise.all([
+    fetchTmdb(apiKey, url),
+    listGenreMap(apiKey, 'movie', language),
+    listGenreMap(apiKey, 'tv', language),
+  ])
   const payload = (await response.json()) as TmdbSearchResponse
   return (payload.results ?? [])
     .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
-    .map(toMediaSearchItem)
+    .map((item) => toMediaSearchItem(item, item.media_type === 'movie' ? movieGenres : tvGenres))
     .filter((item): item is MediaSearchItem => item !== null)
 }
 
@@ -80,11 +100,15 @@ export async function getTrendingMedia(apiKey: string, language: string): Promis
   const url = new URL(`${TMDB_API_BASE}/trending/all/day`)
   url.searchParams.set('language', language)
 
-  const response = await fetchTmdb(apiKey, url)
+  const [response, movieGenres, tvGenres] = await Promise.all([
+    fetchTmdb(apiKey, url),
+    listGenreMap(apiKey, 'movie', language),
+    listGenreMap(apiKey, 'tv', language),
+  ])
   const payload = (await response.json()) as TmdbSearchResponse
   return (payload.results ?? [])
     .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
-    .map(toMediaSearchItem)
+    .map((item) => toMediaSearchItem(item, item.media_type === 'movie' ? movieGenres : tvGenres))
     .filter((item): item is MediaSearchItem => item !== null)
 }
 
@@ -93,11 +117,54 @@ export async function getPopularMedia(apiKey: string, kind: MediaKind, language:
   const url = new URL(`${TMDB_API_BASE}/${endpoint}/popular`)
   url.searchParams.set('language', language)
 
-  const response = await fetchTmdb(apiKey, url)
+  const [response, genres] = await Promise.all([fetchTmdb(apiKey, url), listGenreMap(apiKey, kind, language)])
   const payload = (await response.json()) as TmdbSearchResponse
   return (payload.results ?? [])
-    .map((item) => toMediaSearchItem({ ...item, media_type: kind }))
+    .map((item) => toMediaSearchItem({ ...item, media_type: kind }, genres))
     .filter((item): item is MediaSearchItem => item !== null)
+}
+
+export async function discoverMedia(apiKey: string, input: MediaDiscoverInput): Promise<MediaDiscoverPage> {
+  const endpoint = input.kind === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`${TMDB_API_BASE}/discover/${endpoint}`)
+  url.searchParams.set('language', input.language)
+  url.searchParams.set('include_adult', 'false')
+  url.searchParams.set('page', String(input.page))
+  url.searchParams.set('sort_by', input.sortBy ?? 'popularity.desc')
+
+  if (input.genreId) url.searchParams.set('with_genres', String(input.genreId))
+  if (input.originCountry) url.searchParams.set('with_origin_country', input.originCountry)
+  if (input.ratingGte) url.searchParams.set('vote_average.gte', String(input.ratingGte))
+  if (input.year) {
+    url.searchParams.set(input.kind === 'movie' ? 'primary_release_year' : 'first_air_date_year', String(input.year))
+  }
+
+  const [response, genres] = await Promise.all([
+    fetchTmdb(apiKey, url),
+    listGenreMap(apiKey, input.kind, input.language),
+  ])
+  const payload = (await response.json()) as TmdbSearchResponse
+
+  return {
+    results: (payload.results ?? [])
+      .map((item) => toMediaSearchItem({ ...item, media_type: input.kind }, genres))
+      .filter((item): item is MediaSearchItem => item !== null),
+    page: payload.page ?? input.page,
+    totalPages: payload.total_pages ?? input.page,
+    totalResults: payload.total_results ?? 0,
+  }
+}
+
+export async function listMediaGenres(apiKey: string, kind: MediaKind, language: string): Promise<MediaGenre[]> {
+  const endpoint = kind === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`${TMDB_API_BASE}/genre/${endpoint}/list`)
+  url.searchParams.set('language', language)
+
+  const response = await fetchTmdb(apiKey, url)
+  const payload = (await response.json()) as TmdbGenreResponse
+  return (payload.genres ?? [])
+    .filter((genre): genre is { id: number; name: string } => Boolean(genre.id && genre.name))
+    .map((genre) => ({ id: genre.id, name: genre.name }))
 }
 
 export async function getMediaDetails(
@@ -131,7 +198,7 @@ async function fetchTmdb(apiKey: string, url: URL): Promise<Response> {
   return response
 }
 
-function toMediaSearchItem(item: TmdbSearchResult): MediaSearchItem | null {
+function toMediaSearchItem(item: TmdbSearchResult, genreMap = new Map<number, string>()): MediaSearchItem | null {
   if (!item.id || (item.media_type !== 'movie' && item.media_type !== 'tv')) {
     return null
   }
@@ -155,7 +222,12 @@ function toMediaSearchItem(item: TmdbSearchResult): MediaSearchItem | null {
     backdropUrl: item.backdrop_path ? `${TMDB_IMAGE_BASE}/w780${item.backdrop_path}` : null,
     releaseYear: date ? date.slice(0, 4) : null,
     rating: typeof item.vote_average === 'number' ? item.vote_average : null,
+    genres: (item.genre_ids ?? []).map((id) => genreMap.get(id)).filter((name): name is string => Boolean(name)),
   }
+}
+
+async function listGenreMap(apiKey: string, kind: MediaKind, language: string): Promise<Map<number, string>> {
+  return new Map((await listMediaGenres(apiKey, kind, language)).map((genre) => [genre.id, genre.name]))
 }
 
 function toMediaDetails(kind: MediaKind, item: TmdbDetailsResponse): MediaDetails {

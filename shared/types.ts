@@ -10,6 +10,36 @@ export interface MediaSearchItem {
   backdropUrl: string | null
   releaseYear: string | null
   rating: number | null
+  genres: string[]
+}
+
+export type MediaDiscoverSort =
+  | 'popularity.desc'
+  | 'vote_average.desc'
+  | 'primary_release_date.desc'
+  | 'first_air_date.desc'
+
+export interface MediaDiscoverInput {
+  kind: MediaKind
+  language: string
+  page: number
+  sortBy?: MediaDiscoverSort
+  genreId?: number
+  originCountry?: string
+  year?: number
+  ratingGte?: number
+}
+
+export interface MediaDiscoverPage {
+  results: MediaSearchItem[]
+  page: number
+  totalPages: number
+  totalResults: number
+}
+
+export interface MediaGenre {
+  id: number
+  name: string
 }
 
 export type FavoriteMediaInput = MediaSearchItem

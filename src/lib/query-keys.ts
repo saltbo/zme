@@ -1,4 +1,4 @@
-import type { MediaKind } from '@shared/types'
+import type { MediaDiscoverInput, MediaKind } from '@shared/types'
 
 export const queryKeys = {
   setupStatus: ['setup-status'] as const,
@@ -11,6 +11,8 @@ export const queryKeys = {
   media: {
     trending: (language: string) => ['media', 'trending', language] as const,
     popular: (kind: MediaKind, language: string) => ['media', 'popular', kind, language] as const,
+    discover: (input: Omit<MediaDiscoverInput, 'page'>) => ['media', 'discover', input] as const,
+    genres: (kind: MediaKind, language: string) => ['media', 'genres', kind, language] as const,
     search: (query: string, language: string) => ['media', 'search', query, language] as const,
     details: (kind: MediaKind, id: number, language: string) => ['media', 'details', kind, id, language] as const,
   },

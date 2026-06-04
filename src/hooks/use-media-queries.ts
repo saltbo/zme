@@ -1,6 +1,13 @@
-import type { MediaKind } from '@shared/types'
-import { useQuery } from '@tanstack/react-query'
-import { getMediaDetails, getPopularMedia, getTrendingMedia, searchMedia } from '@/lib/api'
+import type { MediaDiscoverInput, MediaKind } from '@shared/types'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import {
+  discoverMedia,
+  getMediaDetails,
+  getPopularMedia,
+  getTrendingMedia,
+  listMediaGenres,
+  searchMedia,
+} from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useTrendingMedia(language: string) {
@@ -14,6 +21,24 @@ export function usePopularMedia(kind: MediaKind, language: string, options?: { e
   return useQuery({
     queryKey: queryKeys.media.popular(kind, language),
     queryFn: async () => (await getPopularMedia(kind, language)).results,
+    enabled: options?.enabled,
+  })
+}
+
+export function useDiscoverMedia(input: Omit<MediaDiscoverInput, 'page'>, options?: { enabled?: boolean }) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.media.discover(input),
+    queryFn: async ({ pageParam }) => discoverMedia({ ...input, page: pageParam }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined),
+    enabled: options?.enabled,
+  })
+}
+
+export function useMediaGenres(kind: MediaKind, language: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.media.genres(kind, language),
+    queryFn: async () => (await listMediaGenres(kind, language)).genres,
     enabled: options?.enabled,
   })
 }

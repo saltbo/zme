@@ -101,6 +101,7 @@ function toFavoriteMediaItem(row: Favorite): FavoriteMediaItem {
     backdropUrl: row.backdropUrl,
     releaseYear: row.releaseYear,
     rating: row.rating,
+    genres: [],
   }
 }
 

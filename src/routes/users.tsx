@@ -256,6 +256,10 @@ function UserForm({
   requirePassword?: boolean
 }) {
   const { t } = useTranslation()
+  const roleItems = [
+    { label: t('standardUser'), value: 'user' },
+    { label: t('administrator'), value: 'admin' },
+  ]
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4">
@@ -293,7 +297,11 @@ function UserForm({
       ) : null}
       <div className="grid gap-2 text-sm">
         <span>{t('role')}</span>
-        <Select value={form.role} onValueChange={(role) => onChange({ ...form, role: role as UserFormState['role'] })}>
+        <Select
+          items={roleItems}
+          value={form.role}
+          onValueChange={(role) => onChange({ ...form, role: role as UserFormState['role'] })}
+        >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>

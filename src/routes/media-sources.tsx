@@ -247,6 +247,10 @@ function MediaSourceForm({
   submitLabel: string
 }) {
   const { t } = useTranslation()
+  const languageItems = [
+    { label: '中文', value: 'zh-CN' },
+    { label: 'English', value: 'en-US' },
+  ]
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4 p-4">
@@ -261,6 +265,7 @@ function MediaSourceForm({
       </Field>
       <Field label={t('defaultLanguage')}>
         <Select
+          items={languageItems}
           value={form.language}
           onValueChange={(language) => onChange({ ...form, language: language || 'zh-CN' })}
         >

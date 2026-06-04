@@ -28,6 +28,14 @@ export function OnboardingPage({ onComplete }: { onComplete: () => Promise<void>
   const [downloaderOption, setDownloaderOption] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const steps = ['Administrator', 'Media source', 'Indexer', 'Downloader']
+  const languageItems = [
+    { label: '中文', value: 'zh-CN' },
+    { label: 'English', value: 'en-US' },
+  ]
+  const downloaderKindItems = (['zpan', 'qbittorrent', 'transmission', 'aria2'] as DownloaderKind[]).map((kind) => ({
+    label: getDownloaderKindLabel(kind),
+    value: kind,
+  }))
 
   async function handleCreateAdmin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -232,7 +240,11 @@ export function OnboardingPage({ onComplete }: { onComplete: () => Promise<void>
                   </label>
                   <div className="grid gap-2 text-sm">
                     <span>Default language</span>
-                    <Select value={tmdbLanguage} onValueChange={(value) => setTmdbLanguage(value || 'zh-CN')}>
+                    <Select
+                      items={languageItems}
+                      value={tmdbLanguage}
+                      onValueChange={(value) => setTmdbLanguage(value || 'zh-CN')}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -293,6 +305,7 @@ export function OnboardingPage({ onComplete }: { onComplete: () => Promise<void>
                   <div className="grid gap-2 text-sm">
                     <span>Downloader</span>
                     <Select
+                      items={downloaderKindItems}
                       value={downloaderKind}
                       onValueChange={(value) => handleDownloaderKindChange((value || 'zpan') as DownloaderKind)}
                     >

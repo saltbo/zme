@@ -14,6 +14,9 @@ import type {
   IndexerSearchItem,
   IndexerSummary,
   MediaDetails,
+  MediaDiscoverInput,
+  MediaDiscoverPage,
+  MediaGenre,
   MediaKind,
   MediaSearchItem,
   MediaSourceDetails,
@@ -108,6 +111,29 @@ export async function getPopularMedia(kind: MediaKind, language: string) {
   return apiRequest<{ results: MediaSearchItem[] }>(
     `/api/media/popular${query({ kind, language })}`,
     'Failed to load popular media.',
+  )
+}
+
+export async function discoverMedia(input: MediaDiscoverInput) {
+  return apiRequest<MediaDiscoverPage>(
+    `/api/media/discover${query({
+      kind: input.kind,
+      language: input.language,
+      page: input.page,
+      sortBy: input.sortBy,
+      genreId: input.genreId,
+      originCountry: input.originCountry,
+      year: input.year,
+      ratingGte: input.ratingGte,
+    })}`,
+    'Failed to discover media.',
+  )
+}
+
+export async function listMediaGenres(kind: MediaKind, language: string) {
+  return apiRequest<{ genres: MediaGenre[] }>(
+    `/api/media/genres${query({ kind, language })}`,
+    'Failed to load media genres.',
   )
 }
 
