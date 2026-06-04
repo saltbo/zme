@@ -154,7 +154,8 @@ async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise
   if (input.sourceType !== 'torrent_url' || !isProwlarrProxyDownloadUrl(input.uri)) return input
 
   const source = await resolveProwlarrSource(db, input.uri)
-  return source ? { ...input, ...source } : input
+  if (!source) throw new Error('Prowlarr download URL could not be resolved.')
+  return { ...input, ...source }
 }
 
 async function resolveProwlarrSource(db: Db, uri: string): Promise<Pick<CreateDownloadInput, 'uri' | 'sourceType'> | null> {
