@@ -252,6 +252,20 @@ function getPrimaryProgress(
 }
 
 function getStageMetric(task: DownloadTaskSummary, progress: { value: number; label: string }) {
+  if (task.status === 'running') {
+    return {
+      icon: DownloadCloud,
+      className: 'text-sky-200',
+      label: `${formatRate(task.downloadBps)}/s · ${progress.label}`,
+    }
+  }
+  if (task.status === 'uploading') {
+    return {
+      icon: UploadCloud,
+      className: 'text-emerald-200',
+      label: `${formatRate(task.storageUploadBps)}/s · ${progress.label}`,
+    }
+  }
   if (task.status === 'completed') {
     return {
       icon: CheckCircle2,
@@ -259,12 +273,10 @@ function getStageMetric(task: DownloadTaskSummary, progress: { value: number; la
       label: progress.label,
     }
   }
-  const uploading = task.status === 'uploading'
-  const rate = formatRate(uploading ? task.storageUploadBps : task.downloadBps)
   return {
-    icon: uploading ? UploadCloud : DownloadCloud,
-    className: uploading ? 'text-emerald-200' : 'text-sky-200',
-    label: `${rate}/s · ${progress.label}`,
+    icon: Gauge,
+    className: 'text-white/72',
+    label: progress.label,
   }
 }
 
