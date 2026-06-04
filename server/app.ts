@@ -3,15 +3,25 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import type { Env } from './env'
 import { searchIndexers } from './services/prowlarr'
-import { getMediaDetails, searchMedia } from './services/tmdb'
+import { getMediaDetails, getPopularMedia, getTrendingMedia, searchMedia } from './services/tmdb'
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1),
+  language: z.string().trim().min(2).optional(),
 })
 
 const mediaDetailParamsSchema = z.object({
   kind: z.enum(['movie', 'tv']),
   id: z.coerce.number().int().positive(),
+})
+
+const languageQuerySchema = z.object({
+  language: z.string().trim().min(2).optional(),
+})
+
+const popularQuerySchema = z.object({
+  kind: z.enum(['movie', 'tv']),
+  language: z.string().trim().min(2).optional(),
 })
 
 const routes = new Hono<{ Bindings: Env }>()
@@ -27,20 +37,46 @@ const routes = new Hono<{ Bindings: Env }>()
       return c.json({ error: 'TMDB_API_KEY is not configured.' }, 500)
     }
 
-    const { q } = c.req.valid('query')
-    const results = await searchMedia(apiKey, q)
+    const { q, language } = c.req.valid('query')
+    const results = await searchMedia(apiKey, q, getTmdbLanguage(c.env, language))
     return c.json({ results })
   })
-  .get('/media/:kind/:id', zValidator('param', mediaDetailParamsSchema), async (c) => {
+  .get('/media/trending', zValidator('query', languageQuerySchema), async (c) => {
     const apiKey = c.env.TMDB_API_KEY
     if (!apiKey) {
       return c.json({ error: 'TMDB_API_KEY is not configured.' }, 500)
     }
 
-    const { kind, id } = c.req.valid('param')
-    const item = await getMediaDetails(apiKey, kind, id)
-    return c.json({ item })
+    const { language } = c.req.valid('query')
+    const results = await getTrendingMedia(apiKey, getTmdbLanguage(c.env, language))
+    return c.json({ results })
   })
+  .get('/media/popular', zValidator('query', popularQuerySchema), async (c) => {
+    const apiKey = c.env.TMDB_API_KEY
+    if (!apiKey) {
+      return c.json({ error: 'TMDB_API_KEY is not configured.' }, 500)
+    }
+
+    const { kind, language } = c.req.valid('query')
+    const results = await getPopularMedia(apiKey, kind, getTmdbLanguage(c.env, language))
+    return c.json({ results })
+  })
+  .get(
+    '/media/:kind/:id',
+    zValidator('param', mediaDetailParamsSchema),
+    zValidator('query', languageQuerySchema),
+    async (c) => {
+      const apiKey = c.env.TMDB_API_KEY
+      if (!apiKey) {
+        return c.json({ error: 'TMDB_API_KEY is not configured.' }, 500)
+      }
+
+      const { kind, id } = c.req.valid('param')
+      const { language } = c.req.valid('query')
+      const item = await getMediaDetails(apiKey, kind, id, getTmdbLanguage(c.env, language))
+      return c.json({ item })
+    },
+  )
   .get('/indexers/search', zValidator('query', searchQuerySchema), async (c) => {
     const baseUrl = c.env.PROWLARR_URL
     const apiKey = c.env.PROWLARR_API_KEY
@@ -65,3 +101,7 @@ const app = new Hono<{ Bindings: Env }>().route('/api', routes)
 export type AppType = typeof app
 
 export { app }
+
+function getTmdbLanguage(env: Env, language?: string): string {
+  return language || env.TMDB_LANGUAGE || 'zh-CN'
+}

@@ -14,10 +14,11 @@ export class ApiError extends Error {
   }
 }
 
-export async function searchMedia(query: string) {
+export async function searchMedia(query: string, language: string) {
   const response = await client.api.media.search.$get({
     query: {
       q: query,
+      language,
     },
   })
 
@@ -28,16 +29,48 @@ export async function searchMedia(query: string) {
   return response.json()
 }
 
-export async function getMediaDetails(kind: MediaKind, id: number) {
+export async function getMediaDetails(kind: MediaKind, id: number, language: string) {
   const response = await client.api.media[':kind'][':id'].$get({
     param: {
       kind,
       id: String(id),
     },
+    query: {
+      language,
+    },
   })
 
   if (!response.ok) {
     throw new ApiError('Failed to load media details.', response.status)
+  }
+
+  return response.json()
+}
+
+export async function getTrendingMedia(language: string) {
+  const response = await client.api.media.trending.$get({
+    query: {
+      language,
+    },
+  })
+
+  if (!response.ok) {
+    throw new ApiError('Failed to load trending media.', response.status)
+  }
+
+  return response.json()
+}
+
+export async function getPopularMedia(kind: MediaKind, language: string) {
+  const response = await client.api.media.popular.$get({
+    query: {
+      kind,
+      language,
+    },
+  })
+
+  if (!response.ok) {
+    throw new ApiError('Failed to load popular media.', response.status)
   }
 
   return response.json()

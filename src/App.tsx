@@ -15,80 +15,20 @@ import {
   Tv,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Link, NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Toaster, toast } from 'sonner'
-import { getMediaDetails, getZpanSaveUrl, searchIndexers, searchMedia } from './lib/api'
+import { getTmdbLanguage, type SupportedLanguage, supportedLanguages } from './i18n'
+import {
+  getMediaDetails,
+  getPopularMedia,
+  getTrendingMedia,
+  getZpanSaveUrl,
+  searchIndexers,
+  searchMedia,
+} from './lib/api'
 import { cn, formatBytes } from './lib/utils'
-
-const libraryItems: MediaSearchItem[] = [
-  {
-    id: 155,
-    kind: 'movie',
-    title: 'The Dark Knight',
-    originalTitle: 'The Dark Knight',
-    overview: 'A city crime saga built around pressure, masks, and impossible choices.',
-    posterUrl: 'https://image.tmdb.org/t/p/w342/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/w780/hkBaDkMWbLaf8B1lsWsKX7Ew3Xq.jpg',
-    releaseYear: '2008',
-    rating: 8.5,
-  },
-  {
-    id: 27205,
-    kind: 'movie',
-    title: 'Inception',
-    originalTitle: 'Inception',
-    overview: 'A layered heist film where memory, architecture, and time collapse together.',
-    posterUrl: 'https://image.tmdb.org/t/p/w342/edv5CZvWj09upOsy2Y6IwDhK8bt.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/w780/s3TBrRGB1iav7gFOCNx3H31MoES.jpg',
-    releaseYear: '2010',
-    rating: 8.4,
-  },
-  {
-    id: 157336,
-    kind: 'movie',
-    title: 'Interstellar',
-    originalTitle: 'Interstellar',
-    overview: 'A space odyssey about gravity, family, and the cost of survival.',
-    posterUrl: 'https://image.tmdb.org/t/p/w342/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/w780/xJHokMbljvjADYdit5fK5VQsXEG.jpg',
-    releaseYear: '2014',
-    rating: 8.4,
-  },
-  {
-    id: 603,
-    kind: 'movie',
-    title: 'The Matrix',
-    originalTitle: 'The Matrix',
-    overview: 'A cyberpunk action landmark with clean release naming across most indexers.',
-    posterUrl: 'https://image.tmdb.org/t/p/w342/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/w780/icmmSD4vTTDKOq2vvdulafOGw93.jpg',
-    releaseYear: '1999',
-    rating: 8.2,
-  },
-  {
-    id: 1396,
-    kind: 'tv',
-    title: 'Breaking Bad',
-    originalTitle: 'Breaking Bad',
-    overview: 'A controlled descent from ordinary life into empire, consequence, and myth.',
-    posterUrl: 'https://image.tmdb.org/t/p/w342/3xnWaLQjelJDDF7LT1WBo6f4BRe.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/w780/tsRy63Mu5cu8etL1X7ZLyf7UP1M.jpg',
-    releaseYear: '2008',
-    rating: 8.9,
-  },
-  {
-    id: 66732,
-    kind: 'tv',
-    title: 'Stranger Things',
-    originalTitle: 'Stranger Things',
-    overview: 'Small-town horror, friendship, and a signal from somewhere underneath.',
-    posterUrl: 'https://image.tmdb.org/t/p/w342/uOOtwVbSr4QDjAGIifLDwpb2Pdl.jpg',
-    backdropUrl: 'https://image.tmdb.org/t/p/w780/56v2KjBlU4XaOv9rVYEQypROD7P.jpg',
-    releaseYear: '2016',
-    rating: 8.6,
-  },
-]
 
 const mediaSkeletonKeys = [
   'media-skeleton-1',
@@ -139,8 +79,9 @@ function AuthenticatedShell() {
 function AppTopbar({ override }: { override: TopbarOverride | null }) {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t } = useTranslation()
   const pageCopy =
-    override?.pathname === location.pathname ? override : getTopbarCopy(location.pathname, location.state)
+    override?.pathname === location.pathname ? override : getTopbarCopy(location.pathname, location.state, t)
   const isDetailPage = Boolean(getRouteMedia(location.pathname))
   const [searchValue, setSearchValue] = useState('')
 
@@ -179,7 +120,7 @@ function AppTopbar({ override }: { override: TopbarOverride | null }) {
           <input
             value={searchValue}
             onChange={(event) => setSearchValue(event.target.value)}
-            placeholder="Search movies or series"
+            placeholder={t('searchPlaceholder')}
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#8a7b9c]"
           />
         </form>
@@ -188,34 +129,32 @@ function AppTopbar({ override }: { override: TopbarOverride | null }) {
   )
 }
 
-function getTopbarCopy(pathname: string, state: unknown) {
+function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => string) {
   const routeMedia = getRouteMedia(pathname)
   if (routeMedia) {
     const stateMedia = getStateMedia(state, routeMedia)
-    const seededMedia = getSeededMedia(routeMedia.kind, routeMedia.id)
-    const media = stateMedia ?? seededMedia
     return {
-      title: media?.title ?? (routeMedia.kind === 'movie' ? 'Movie' : 'Series'),
-      subtitle: media?.releaseYear
-        ? `${routeMedia.kind === 'movie' ? 'Movie' : 'Series'} / ${media.releaseYear}`
-        : `${routeMedia.kind === 'movie' ? 'Movie' : 'Series'} / TMDB ${routeMedia.id}`,
+      title: stateMedia?.title ?? (routeMedia.kind === 'movie' ? t('movie') : t('tv')),
+      subtitle: stateMedia?.releaseYear
+        ? `${routeMedia.kind === 'movie' ? t('movie') : t('tv')} / ${stateMedia.releaseYear}`
+        : `${routeMedia.kind === 'movie' ? t('movie') : t('tv')} / TMDB ${routeMedia.id}`,
     }
   }
   if (pathname === '/movies') {
     return {
-      title: 'Movies',
-      subtitle: 'Browse movie metadata.',
+      title: t('movies'),
+      subtitle: t('moviesSubtitle'),
     }
   }
   if (pathname === '/series') {
     return {
-      title: 'Series',
-      subtitle: 'Browse series metadata.',
+      title: t('series'),
+      subtitle: t('seriesSubtitle'),
     }
   }
   return {
-    title: 'Discover',
-    subtitle: 'A private overview of recent requests and media worth saving.',
+    title: t('discover'),
+    subtitle: t('discoverSubtitle'),
   }
 }
 
@@ -233,10 +172,6 @@ function getRouteMedia(pathname: string): { kind: MediaKind; id: number } | unde
   return undefined
 }
 
-function getSeededMedia(kind: MediaKind, id: number): MediaSearchItem | undefined {
-  return libraryItems.find((item) => item.kind === kind && item.id === id)
-}
-
 function getStateMedia(state: unknown, routeMedia: { kind: MediaKind; id: number }): MediaSearchItem | undefined {
   if (!state || typeof state !== 'object' || !('media' in state)) return undefined
 
@@ -247,6 +182,8 @@ function getStateMedia(state: unknown, routeMedia: { kind: MediaKind; id: number
 }
 
 function Sidebar() {
+  const { t } = useTranslation()
+
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-[280px] border-[#d9d1e6] border-r bg-[#21162f] p-5 text-white lg:flex lg:flex-col">
       <Link to="/" className="flex items-center gap-3">
@@ -255,22 +192,22 @@ function Sidebar() {
         </span>
         <div>
           <div className="font-semibold text-xl">ZME</div>
-          <div className="text-[#c8bddc] text-xs">Private media desk</div>
+          <div className="text-[#c8bddc] text-xs">{t('privateDesk')}</div>
         </div>
       </Link>
 
       <nav className="mt-8 space-y-1">
-        <SidebarLink icon={Home} label="Discover" to="/" />
-        <SidebarLink icon={Film} label="Movies" to="/movies" />
-        <SidebarLink icon={Tv} label="Series" to="/series" />
-        <SidebarLink icon={Download} label="Requests" to="/" muted />
-        <SidebarLink icon={Settings} label="Sources" to="/" muted />
+        <SidebarLink icon={Home} label={t('discover')} to="/" />
+        <SidebarLink icon={Film} label={t('movies')} to="/movies" />
+        <SidebarLink icon={Tv} label={t('series')} to="/series" />
+        <SidebarLink icon={Download} label={t('requests')} to="/" muted />
+        <SidebarLink icon={Settings} label={t('sources')} to="/" muted />
       </nav>
 
       <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.06] p-4">
         <div className="flex items-center gap-2 text-[#c8bddc] text-xs uppercase tracking-[0.12em]">
           <ShieldCheck className="size-4 text-[#8ee0c6]" />
-          Signed in
+          {t('signedIn')}
         </div>
         <div className="mt-3 flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-full bg-[#f6c177] font-semibold text-[#21162f]">
@@ -278,11 +215,39 @@ function Sidebar() {
           </div>
           <div className="min-w-0">
             <div className="truncate font-medium text-sm">saltbo</div>
-            <div className="truncate text-[#c8bddc] text-xs">ZPan connected</div>
+            <div className="truncate text-[#c8bddc] text-xs">{t('zpanConnected')}</div>
           </div>
         </div>
+        <LanguageMenu />
       </div>
     </aside>
+  )
+}
+
+function LanguageMenu() {
+  const { i18n, t } = useTranslation()
+  const currentLanguage = getTmdbLanguage(i18n.language)
+
+  async function handleLanguageChange(language: SupportedLanguage) {
+    window.localStorage.setItem('zme.language', language)
+    await i18n.changeLanguage(language)
+  }
+
+  return (
+    <label className="mt-4 block">
+      <span className="mb-1 block text-[#c8bddc] text-xs">{t('language')}</span>
+      <select
+        value={currentLanguage}
+        onChange={(event) => void handleLanguageChange(event.target.value as SupportedLanguage)}
+        className="h-9 w-full rounded-xl border border-white/10 bg-[#2d213c] px-3 text-white text-sm outline-none"
+      >
+        {supportedLanguages.map((language) => (
+          <option key={language.value} value={language.value}>
+            {language.label}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 
@@ -315,6 +280,8 @@ function SidebarLink({
 }
 
 function MobileHeader() {
+  const { t } = useTranslation()
+
   return (
     <header className="border-[#d9d1e6] border-b bg-[#f3f0f7]/90 px-4 py-3 backdrop-blur lg:hidden">
       <div className="flex items-center justify-between">
@@ -330,9 +297,9 @@ function MobileHeader() {
         </div>
       </div>
       <nav className="mt-3 grid grid-cols-3 gap-2">
-        <MobileNavLink label="Discover" to="/" />
-        <MobileNavLink label="Movies" to="/movies" />
-        <MobileNavLink label="Series" to="/series" />
+        <MobileNavLink label={t('discover')} to="/" />
+        <MobileNavLink label={t('movies')} to="/movies" />
+        <MobileNavLink label={t('series')} to="/series" />
       </nav>
     </header>
   )
@@ -355,26 +322,37 @@ function MobileNavLink({ label, to }: { label: string; to: string }) {
 }
 
 function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
+  const { i18n, t } = useTranslation()
   const [searchParams] = useSearchParams()
   const [media, setMedia] = useState<MediaSearchItem[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [loadingMedia, setLoadingMedia] = useState(false)
   const searchQuery = searchParams.get('q')?.trim() ?? ''
+  const tmdbLanguage = getTmdbLanguage(i18n.language)
 
-  const baseItems = useMemo(() => getBaseItems(mode), [mode])
-  const visibleMedia = hasSearched ? media.filter((item) => mode === 'discover' || item.kind === mode) : baseItems
+  const visibleMedia = hasSearched ? media.filter((item) => mode === 'discover' || item.kind === mode) : media
 
   useEffect(() => {
-    if (!searchQuery) return
+    if (!searchQuery) {
+      if (mode === 'discover') return
+
+      setHasSearched(false)
+      setLoadingMedia(true)
+      getPopularMedia(mode, tmdbLanguage)
+        .then((payload) => setMedia(payload.results))
+        .catch((error: unknown) => toast.error(error instanceof Error ? error.message : t('mediaLoadFailed')))
+        .finally(() => setLoadingMedia(false))
+      return
+    }
 
     setLoadingMedia(true)
     setHasSearched(true)
 
-    searchMedia(searchQuery)
+    searchMedia(searchQuery, tmdbLanguage)
       .then((payload) => setMedia(payload.results))
-      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : 'Search failed.'))
+      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : t('searchFailed')))
       .finally(() => setLoadingMedia(false))
-  }, [searchQuery])
+  }, [mode, searchQuery, tmdbLanguage, t])
 
   if (mode === 'discover' && !hasSearched) {
     return <DiscoverPage />
@@ -389,29 +367,46 @@ function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
 }
 
 function DiscoverPage() {
+  const { i18n, t } = useTranslation()
+  const [trending, setTrending] = useState<MediaSearchItem[]>([])
+  const [popularMovies, setPopularMovies] = useState<MediaSearchItem[]>([])
+  const [popularSeries, setPopularSeries] = useState<MediaSearchItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const tmdbLanguage = getTmdbLanguage(i18n.language)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      getTrendingMedia(tmdbLanguage),
+      getPopularMedia('movie', tmdbLanguage),
+      getPopularMedia('tv', tmdbLanguage),
+    ])
+      .then(([trendingPayload, moviesPayload, seriesPayload]) => {
+        setTrending(trendingPayload.results)
+        setPopularMovies(moviesPayload.results)
+        setPopularSeries(seriesPayload.results)
+      })
+      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : t('discoveryLoadFailed')))
+      .finally(() => setLoading(false))
+  }, [tmdbLanguage, t])
+
   return (
     <div className="mx-auto max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <div className="space-y-9">
+        <MediaRail title={t('trending')} subtitle={t('trendingSubtitle')} items={trending} loading={loading} />
         <MediaRail
-          title="Recent requests"
-          subtitle="Continue from recently selected titles"
-          items={[libraryItems[2], libraryItems[4], libraryItems[1]].filter(Boolean)}
-        />
-        <MediaRail
-          title="Trending"
-          subtitle="Popular across connected metadata sources"
-          items={[libraryItems[5], libraryItems[0], libraryItems[3], libraryItems[2]].filter(Boolean)}
-        />
-        <MediaRail
-          title="Movies"
-          subtitle="A quick sample from the movie shelf"
-          items={libraryItems.filter((item) => item.kind === 'movie')}
+          title={t('popularMovies')}
+          subtitle={t('popularMoviesSubtitle')}
+          items={popularMovies}
+          loading={loading}
           moreTo="/movies"
         />
         <MediaRail
-          title="Series"
-          subtitle="A quick sample from the series shelf"
-          items={libraryItems.filter((item) => item.kind === 'tv')}
+          title={t('popularSeries')}
+          subtitle={t('popularSeriesSubtitle')}
+          items={popularSeries}
+          loading={loading}
           moreTo="/series"
         />
       </div>
@@ -424,12 +419,16 @@ function MediaRail({
   subtitle,
   items,
   moreTo,
+  loading,
 }: {
   title: string
   subtitle: string
   items: MediaSearchItem[]
   moreTo?: string
+  loading?: boolean
 }) {
+  const { t } = useTranslation()
+
   return (
     <section>
       <div className="mb-3 flex items-end justify-between gap-4">
@@ -442,54 +441,62 @@ function MediaRail({
             to={moreTo}
             className="shrink-0 rounded-full bg-white px-3 py-1.5 font-medium text-[#6d3fd1] text-sm shadow-sm"
           >
-            View all
+            {t('viewAll')}
           </Link>
         ) : null}
       </div>
       <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        {items.map((item) => (
-          <div key={`rail-${title}-${item.kind}-${item.id}`} className="w-[190px] shrink-0 sm:w-[210px] 2xl:w-[230px]">
-            <MediaCard item={item} />
+        {loading
+          ? mediaSkeletonKeys.map((key) => (
+              <div key={`${title}-${key}`} className="w-[190px] shrink-0 sm:w-[210px] 2xl:w-[230px]">
+                <div className="aspect-[2/3] animate-pulse rounded-[28px] bg-[#ddd4ea]" />
+              </div>
+            ))
+          : items.map((item) => (
+              <div
+                key={`rail-${title}-${item.kind}-${item.id}`}
+                className="w-[190px] shrink-0 sm:w-[210px] 2xl:w-[230px]"
+              >
+                <MediaCard item={item} />
+              </div>
+            ))}
+        {!loading && items.length === 0 ? (
+          <div className="flex min-h-64 min-w-full items-center justify-center rounded-3xl border border-[#ded6ea] bg-white p-8 text-[#76678d]">
+            {t('noMedia')}
           </div>
-        ))}
+        ) : null}
       </div>
     </section>
   )
 }
 
-function getBaseItems(mode: 'discover' | MediaKind) {
-  if (mode === 'movie') return libraryItems.filter((item) => item.kind === 'movie')
-  if (mode === 'tv') return libraryItems.filter((item) => item.kind === 'tv')
-  return [libraryItems[2], libraryItems[4], libraryItems[1], libraryItems[5], libraryItems[0], libraryItems[3]].filter(
-    Boolean,
-  )
-}
-
 function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind; resultCount: number }) {
+  const { t } = useTranslation()
+
   return (
     <div className="mb-5 flex flex-col gap-3 border-[#d9d1e6] border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
         <span className="rounded-full bg-white px-3 py-1.5 font-semibold text-[#21162f] text-sm shadow-sm">
-          {resultCount} titles
+          {resultCount} {t('titles')}
         </span>
         <span className="text-[#76678d] text-sm">
-          {mode === 'discover' ? 'Mixed discovery wall' : mode === 'movie' ? 'Movies only' : 'Series only'}
+          {mode === 'discover' ? t('mixedDiscoveryWall') : mode === 'movie' ? t('moviesOnly') : t('seriesOnly')}
         </span>
       </div>
       <div className="flex gap-2 overflow-x-auto">
         <FilterChip
           active
-          label={mode === 'discover' ? 'Recommended' : mode === 'movie' ? 'Latest movies' : 'Latest series'}
+          label={mode === 'discover' ? t('recommended') : mode === 'movie' ? t('latestMovies') : t('latestSeries')}
         />
         <FilterChip label="4K" />
         <FilterChip label="1080p" />
-        <FilterChip label="Subtitles" />
+        <FilterChip label={t('subtitles')} />
         <button
           type="button"
           className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-[#d8cfe6] bg-white/70 px-3.5 font-medium text-[#5d506f] text-sm transition hover:bg-white"
         >
           <SlidersHorizontal className="size-4" />
-          Filters
+          {t('filters')}
         </button>
       </div>
     </div>
@@ -513,6 +520,8 @@ function FilterChip({ label, active }: { label: string; active?: boolean }) {
 }
 
 function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: boolean }) {
+  const { t } = useTranslation()
+
   if (loading) {
     return (
       <div className="grid gap-x-4 gap-y-7 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
@@ -530,15 +539,7 @@ function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: bool
   if (items.length === 0) {
     return (
       <div className="flex min-h-80 items-center justify-center rounded-3xl border border-[#ded6ea] bg-white p-8 text-[#76678d]">
-        No media matched this view.
-      </div>
-    )
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="flex min-h-48 items-center justify-center rounded-2xl border border-[#ded6ea] bg-white p-6 text-[#76678d] text-sm">
-        No releases found from configured indexers.
+        {t('noMatchedMedia')}
       </div>
     )
   }
@@ -553,6 +554,7 @@ function MediaWall({ items, loading }: { items: MediaSearchItem[]; loading: bool
 }
 
 function MediaCard({ item }: { item: MediaSearchItem }) {
+  const { t } = useTranslation()
   const detailPath = item.kind === 'movie' ? `/movies/${item.id}` : `/series/${item.id}`
 
   return (
@@ -567,7 +569,7 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
               loading="lazy"
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-[#76678d]">No poster</div>
+            <div className="flex h-full items-center justify-center text-[#76678d]">{t('noPoster')}</div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
           <button
@@ -581,9 +583,9 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
             <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
               <span className="flex items-center gap-1 rounded-full bg-white/14 px-2 py-1 backdrop-blur">
                 {item.kind === 'movie' ? <Film className="size-3" /> : <Tv className="size-3" />}
-                {item.kind === 'movie' ? 'Movie' : 'Series'}
+                {item.kind === 'movie' ? t('movie') : t('tv')}
               </span>
-              <span>{item.releaseYear ?? 'Unknown'}</span>
+              <span>{item.releaseYear ?? t('unknown')}</span>
             </div>
             <h2 className="line-clamp-2 text-balance font-semibold text-xl leading-tight drop-shadow">{item.title}</h2>
           </div>
@@ -604,9 +606,11 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
 
 function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: TopbarOverride | null) => void }) {
   const location = useLocation()
+  const { i18n, t } = useTranslation()
   const routeMedia = getRouteMedia(location.pathname)
   const routeKind = routeMedia?.kind
   const routeId = routeMedia?.id
+  const tmdbLanguage = getTmdbLanguage(i18n.language)
   const [media, setMedia] = useState<MediaDetails | null>(null)
   const [loadingMedia, setLoadingMedia] = useState(true)
   const [mediaError, setMediaError] = useState<string | null>(null)
@@ -617,21 +621,21 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
   useEffect(() => {
     if (!routeKind || !routeId) {
       setMedia(null)
-      setMediaError('Invalid media route.')
+      setMediaError(t('invalidMediaRoute'))
       setLoadingMedia(false)
       return
     }
 
     setLoadingMedia(true)
     setMediaError(null)
-    getMediaDetails(routeKind, routeId)
+    getMediaDetails(routeKind, routeId, tmdbLanguage)
       .then((payload) => setMedia(payload.item))
       .catch((error: unknown) => {
         setMedia(null)
-        setMediaError(error instanceof Error ? error.message : 'Unable to load media details.')
+        setMediaError(error instanceof Error ? error.message : t('unableToLoadMediaDetails'))
       })
       .finally(() => setLoadingMedia(false))
-  }, [routeKind, routeId])
+  }, [routeKind, routeId, tmdbLanguage, t])
 
   useEffect(() => {
     if (!media) return
@@ -639,11 +643,11 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
     onTopbarChange({
       pathname: location.pathname,
       title: media.title,
-      subtitle: `${media.kind === 'movie' ? 'Movie' : 'Series'} / ${media.releaseYear ?? `TMDB ${media.id}`}`,
+      subtitle: `${media.kind === 'movie' ? t('movie') : t('tv')} / ${media.releaseYear ?? `TMDB ${media.id}`}`,
     })
 
     return () => onTopbarChange(null)
-  }, [location.pathname, media, onTopbarChange])
+  }, [location.pathname, media, onTopbarChange, t])
 
   async function handleFindReleases() {
     if (!media) return
@@ -657,7 +661,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
       setReleases(payload.results)
     } catch {
       setReleases([])
-      toast.error('Indexer search failed.')
+      toast.error(t('indexerSearchFailed'))
     } finally {
       setLoadingReleases(false)
     }
@@ -675,7 +679,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
     return (
       <div className="mx-auto max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
         <div className="flex min-h-80 items-center justify-center rounded-[34px] border border-[#ded6ea] bg-white p-8 text-[#76678d]">
-          {mediaError ?? 'Media not found.'}
+          {mediaError ?? t('mediaNotFound')}
         </div>
       </div>
     )
@@ -704,7 +708,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                 <div className="flex items-start justify-between gap-2">
                   <div className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-white/12 px-3 font-medium text-white/82 text-xs uppercase tracking-[0.12em] backdrop-blur">
                     {media.kind === 'movie' ? <Film className="size-3.5" /> : <Tv className="size-3.5" />}
-                    {media.kind === 'movie' ? 'Movie' : 'Series'}
+                    {media.kind === 'movie' ? t('movie') : t('tv')}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <button
@@ -730,14 +734,14 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                 <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-white/72 text-sm">
                   <span>{media.releaseYear}</span>
                   <span className="text-white/28">/</span>
-                  <span>{media.runtime ?? 'Unknown runtime'}</span>
+                  <span>{media.runtime ?? t('unknownRuntime')}</span>
                   <span className="text-white/28">/</span>
                   <span className="flex items-center gap-1">
                     <Star className="size-4 fill-[#f6c177] text-[#f6c177]" />
                     {media.rating ? media.rating.toFixed(1) : 'NR'}
                   </span>
                 </div>
-                <div className="mt-3 text-white/62 text-sm">{media.director ?? 'Unknown director'}</div>
+                <div className="mt-3 text-white/62 text-sm">{media.director ?? t('unknownDirector')}</div>
               </div>
             </div>
 
@@ -780,7 +784,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
               <div className="mb-10 flex items-center justify-between gap-6">
                 <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1.5 font-medium text-white/82 text-xs uppercase tracking-[0.12em] backdrop-blur">
                   {media.kind === 'movie' ? <Film className="size-3.5" /> : <Tv className="size-3.5" />}
-                  {media.kind === 'movie' ? 'Movie' : 'Series'}
+                  {media.kind === 'movie' ? t('movie') : t('tv')}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -808,9 +812,9 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
               <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-white/72 text-sm">
                 <span>{media.originalTitle}</span>
                 <span className="text-white/28">/</span>
-                <span>{media.releaseYear}</span>
+                <span>{media.releaseYear ?? t('unknownYear')}</span>
                 <span className="text-white/28">/</span>
-                <span>{media.runtime ?? 'Unknown runtime'}</span>
+                <span>{media.runtime ?? t('unknownRuntime')}</span>
                 <span className="text-white/28">/</span>
                 <span className="flex items-center gap-1">
                   <Star className="size-4 fill-[#f6c177] text-[#f6c177]" />
@@ -823,10 +827,10 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
               </p>
 
               <div className="mt-8 grid max-w-3xl grid-cols-4 divide-x divide-white/10 rounded-[26px] bg-white/10 p-1 text-sm backdrop-blur">
-                <DetailMetric label="Director" value={media.director ?? 'Unknown'} />
-                <DetailMetric label="Runtime" value={media.runtime ?? 'Unknown'} />
-                <DetailMetric label="Language" value={media.language ?? 'Unknown'} />
-                <DetailMetric label="Rating" value={media.rating ? media.rating.toFixed(1) : 'NR'} />
+                <DetailMetric label={t('director')} value={media.director ?? t('unknown')} />
+                <DetailMetric label={t('runtime')} value={media.runtime ?? t('unknown')} />
+                <DetailMetric label={t('originalLanguage')} value={media.language ?? t('unknown')} />
+                <DetailMetric label={t('rating')} value={media.rating ? media.rating.toFixed(1) : 'NR'} />
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
@@ -844,7 +848,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
         </div>
 
         <div className="bg-[#f8f5fb] px-5 py-7 text-[#21162f] sm:px-8">
-          <SectionTitle title="Cast" />
+          <SectionTitle title={t('cast')} />
           <div className="-mx-5 mt-4 flex gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
             {media.cast.length > 0 ? (
               media.cast.map((person) => (
@@ -859,7 +863,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
                       />
                     ) : (
                       <div className="flex h-full items-center justify-center px-4 text-center text-white/50 text-sm">
-                        No portrait
+                        {t('noPortrait')}
                       </div>
                     )}
                   </div>
@@ -871,7 +875,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
               ))
             ) : (
               <div className="flex min-h-40 min-w-full items-center justify-center rounded-2xl border border-[#ded6ea] bg-white text-[#76678d] text-sm">
-                No cast information.
+                {t('noCast')}
               </div>
             )}
           </div>
@@ -879,12 +883,15 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
 
         <div className="grid gap-8 bg-[#f8f5fb] px-5 pb-8 text-[#21162f] sm:px-8 xl:grid-cols-[minmax(0,1fr)_340px]">
           <section>
-            <SectionTitle title="Details" />
+            <SectionTitle title={t('details')} />
             <div className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-              <InfoField label="Director" value={media.director ?? 'Unknown'} />
-              <InfoField label="Writers" value={media.writers.length > 0 ? media.writers.join(', ') : 'Unknown'} />
-              <InfoField label="Country" value={media.country ?? 'Unknown'} />
-              <InfoField label="Original language" value={media.language ?? 'Unknown'} />
+              <InfoField label={t('director')} value={media.director ?? t('unknown')} />
+              <InfoField
+                label={t('writers')}
+                value={media.writers.length > 0 ? media.writers.join(', ') : t('unknown')}
+              />
+              <InfoField label={t('country')} value={media.country ?? t('unknown')} />
+              <InfoField label={t('originalLanguage')} value={media.language ?? t('unknown')} />
             </div>
             <div className="mt-6 flex flex-wrap gap-2">
               {media.genres.map((tag) => (
@@ -896,7 +903,7 @@ function MediaDetailPage({ onTopbarChange }: { onTopbarChange: (override: Topbar
           </section>
 
           <aside>
-            <SectionTitle title="External IDs" />
+            <SectionTitle title={t('externalIds')} />
             <div className="mt-4 divide-y divide-[#ded6ea] text-sm">
               <IdLine label="TMDB" value={media.ids.tmdb} />
               <IdLine label="IMDb" value={media.ids.imdb ?? '-'} />
@@ -963,14 +970,16 @@ function ReleaseSearchDialog({
   onClose: () => void
   onSearch: () => void
 }) {
+  const { t } = useTranslation()
+
   return (
     <div className="fixed inset-0 z-50 flex items-end bg-[#120c1d]/62 p-3 backdrop-blur-sm sm:items-center sm:justify-center sm:p-6">
       <section className="max-h-[86vh] w-full overflow-hidden rounded-[28px] bg-[#f8f5fb] shadow-2xl shadow-black/30 sm:max-w-4xl">
         <header className="flex items-start justify-between gap-4 border-[#ded6ea] border-b p-5">
           <div>
-            <p className="text-[#76678d] text-xs uppercase tracking-[0.12em]">Indexer search</p>
+            <p className="text-[#76678d] text-xs uppercase tracking-[0.12em]">{t('indexerSearch')}</p>
             <h2 className="mt-1 font-semibold text-2xl text-[#21162f]">{media.title}</h2>
-            <p className="mt-1 text-[#685b78] text-sm">Compare releases from configured sources before saving.</p>
+            <p className="mt-1 text-[#685b78] text-sm">{t('compareReleases')}</p>
           </div>
           <button
             type="button"
@@ -983,14 +992,16 @@ function ReleaseSearchDialog({
         </header>
 
         <div className="flex items-center justify-between gap-3 border-[#ded6ea] border-b px-5 py-3">
-          <div className="text-[#76678d] text-sm">{items.length} results</div>
+          <div className="text-[#76678d] text-sm">
+            {items.length} {t('results')}
+          </div>
           <button
             type="button"
             onClick={onSearch}
             className="flex h-10 items-center gap-2 rounded-full bg-[#7c3aed] px-4 font-semibold text-sm text-white"
           >
             <Search className="size-4" />
-            Search again
+            {t('searchAgain')}
           </button>
         </div>
 
@@ -1003,6 +1014,8 @@ function ReleaseSearchDialog({
 }
 
 function ReleaseList({ items, loading }: { items: IndexerSearchItem[]; loading: boolean }) {
+  const { t } = useTranslation()
+
   if (loading) {
     return (
       <div className="space-y-3">
@@ -1012,6 +1025,14 @@ function ReleaseList({ items, loading }: { items: IndexerSearchItem[]; loading: 
             <div className="mt-3 h-3 w-1/2 animate-pulse rounded bg-[#eee7f6]" />
           </div>
         ))}
+      </div>
+    )
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="flex min-h-48 items-center justify-center rounded-2xl border border-[#ded6ea] bg-white p-6 text-[#76678d] text-sm">
+        {t('noReleases')}
       </div>
     )
   }
@@ -1026,11 +1047,12 @@ function ReleaseList({ items, loading }: { items: IndexerSearchItem[]; loading: 
 }
 
 function ReleaseRow({ item }: { item: IndexerSearchItem }) {
+  const { t } = useTranslation()
   const uri = item.magnetUrl || item.downloadUrl
 
   async function handleSave() {
     if (!uri) {
-      toast.error('This release does not include a usable download link.')
+      toast.error(t('releaseMissingUrl'))
       return
     }
 
@@ -1038,7 +1060,7 @@ function ReleaseRow({ item }: { item: IndexerSearchItem }) {
       const payload = await getZpanSaveUrl(uri)
       window.location.assign(payload.url)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Unable to open ZPan.')
+      toast.error(error instanceof Error ? error.message : t('openZpanFailed'))
     }
   }
 
@@ -1050,14 +1072,14 @@ function ReleaseRow({ item }: { item: IndexerSearchItem }) {
             {item.indexer}
           </span>
           <span className="rounded-full bg-[#e8f8f3] px-2.5 py-1 font-medium text-[#247d69] text-xs">
-            {item.seeders ?? 0} seeders
+            {item.seeders ?? 0} {t('seeders')}
           </span>
         </div>
         <h3 className="line-clamp-2 font-semibold text-[#21162f] text-sm leading-5">{item.title}</h3>
         <div className="mt-2 flex flex-wrap gap-3 text-[#76678d] text-xs">
           <span>{formatBytes(item.size)}</span>
-          <span>{item.publishDate ? new Date(item.publishDate).getFullYear() : 'Unknown date'}</span>
-          <span>{item.infoHash ? 'Magnet ready' : 'Torrent URL'}</span>
+          <span>{item.publishDate ? new Date(item.publishDate).getFullYear() : t('unknownDate')}</span>
+          <span>{item.infoHash ? t('magnetReady') : t('torrentUrl')}</span>
         </div>
       </div>
       <button
@@ -1066,7 +1088,7 @@ function ReleaseRow({ item }: { item: IndexerSearchItem }) {
         className="flex h-11 items-center justify-center gap-2 rounded-xl bg-[#7c3aed] px-4 font-semibold text-sm text-white transition hover:bg-[#6d28d9] disabled:cursor-not-allowed disabled:opacity-45"
         disabled={!uri}
       >
-        Save to ZPan
+        {t('saveToZpan')}
         <ArrowUpRight className="size-4" />
       </button>
     </article>

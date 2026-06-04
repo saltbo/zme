@@ -49,23 +49,13 @@ interface TmdbCredit {
 const TMDB_API_BASE = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 
-export async function searchMedia(apiKey: string, query: string): Promise<MediaSearchItem[]> {
+export async function searchMedia(apiKey: string, query: string, language: string): Promise<MediaSearchItem[]> {
   const url = new URL(`${TMDB_API_BASE}/search/multi`)
   url.searchParams.set('query', query)
-  url.searchParams.set('language', 'zh-CN')
+  url.searchParams.set('language', language)
   url.searchParams.set('include_adult', 'false')
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: 'application/json',
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(`TMDB search failed: ${response.status}`)
-  }
-
+  const response = await fetchTmdb(apiKey, url)
   const payload = (await response.json()) as TmdbSearchResponse
   return (payload.results ?? [])
     .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
@@ -73,12 +63,47 @@ export async function searchMedia(apiKey: string, query: string): Promise<MediaS
     .filter((item): item is MediaSearchItem => item !== null)
 }
 
-export async function getMediaDetails(apiKey: string, kind: MediaKind, id: number): Promise<MediaDetails> {
+export async function getTrendingMedia(apiKey: string, language: string): Promise<MediaSearchItem[]> {
+  const url = new URL(`${TMDB_API_BASE}/trending/all/day`)
+  url.searchParams.set('language', language)
+
+  const response = await fetchTmdb(apiKey, url)
+  const payload = (await response.json()) as TmdbSearchResponse
+  return (payload.results ?? [])
+    .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
+    .map(toMediaSearchItem)
+    .filter((item): item is MediaSearchItem => item !== null)
+}
+
+export async function getPopularMedia(apiKey: string, kind: MediaKind, language: string): Promise<MediaSearchItem[]> {
+  const endpoint = kind === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`${TMDB_API_BASE}/${endpoint}/popular`)
+  url.searchParams.set('language', language)
+
+  const response = await fetchTmdb(apiKey, url)
+  const payload = (await response.json()) as TmdbSearchResponse
+  return (payload.results ?? [])
+    .map((item) => toMediaSearchItem({ ...item, media_type: kind }))
+    .filter((item): item is MediaSearchItem => item !== null)
+}
+
+export async function getMediaDetails(
+  apiKey: string,
+  kind: MediaKind,
+  id: number,
+  language: string,
+): Promise<MediaDetails> {
   const endpoint = kind === 'movie' ? 'movie' : 'tv'
   const url = new URL(`${TMDB_API_BASE}/${endpoint}/${id}`)
-  url.searchParams.set('language', 'zh-CN')
+  url.searchParams.set('language', language)
   url.searchParams.set('append_to_response', 'credits,external_ids')
 
+  const response = await fetchTmdb(apiKey, url)
+  const payload = (await response.json()) as TmdbDetailsResponse
+  return toMediaDetails(kind, payload)
+}
+
+async function fetchTmdb(apiKey: string, url: URL): Promise<Response> {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -87,11 +112,10 @@ export async function getMediaDetails(apiKey: string, kind: MediaKind, id: numbe
   })
 
   if (!response.ok) {
-    throw new Error(`TMDB details failed: ${response.status}`)
+    throw new Error(`TMDB request failed: ${response.status}`)
   }
 
-  const payload = (await response.json()) as TmdbDetailsResponse
-  return toMediaDetails(kind, payload)
+  return response
 }
 
 function toMediaSearchItem(item: TmdbSearchResult): MediaSearchItem | null {
