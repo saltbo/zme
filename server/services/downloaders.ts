@@ -151,18 +151,22 @@ export async function submitDownload(
 }
 
 async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise<CreateDownloadInput> {
-  if (input.sourceType !== 'torrent_url' || !isProwlarrProxyDownloadUrl(input.uri)) return input
+  if (input.sourceType !== 'torrent_url') return input
 
-  const source = await resolveProwlarrSource(db, input.uri)
+  const rows = await db.select().from(indexers).where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
+  const matchingIndexers = rows.filter((indexer) => indexerMatchesUrl(indexer, input.uri))
+  if (matchingIndexers.length === 0) return input
+
+  const source = await resolveProwlarrSource(matchingIndexers, input.uri)
   if (!source) throw new Error('Prowlarr download URL could not be resolved.')
   return { ...input, ...source }
 }
 
-async function resolveProwlarrSource(db: Db, uri: string): Promise<Pick<CreateDownloadInput, 'uri' | 'sourceType'> | null> {
-  const rows = await db.select().from(indexers).where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
-  const sorted = sortIndexersForProxyUrl(rows, uri)
-
-  for (const indexer of sorted) {
+async function resolveProwlarrSource(
+  rows: Indexer[],
+  uri: string,
+): Promise<Pick<CreateDownloadInput, 'uri' | 'sourceType'> | null> {
+  for (const indexer of rows) {
     const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
     if (!credentials.apiKey) continue
     const resolved = await resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, credentials.apiKey)).catch(() => null)
@@ -172,13 +176,8 @@ async function resolveProwlarrSource(db: Db, uri: string): Promise<Pick<CreateDo
   return null
 }
 
-function sortIndexersForProxyUrl(rows: Indexer[], uri: string): Indexer[] {
-  const host = getUrlHost(uri)
-  return [...rows].sort((left, right) => Number(indexerMatchesHost(right, host)) - Number(indexerMatchesHost(left, host)))
-}
-
-function indexerMatchesHost(indexer: Indexer, host: string | null) {
-  return Boolean(host && getUrlHost(indexer.endpoint) === host)
+function indexerMatchesUrl(indexer: Indexer, uri: string) {
+  return isProwlarrProxyDownloadUrl(uri) && getUrlHost(indexer.endpoint) === getUrlHost(uri)
 }
 
 function getUrlHost(value: string) {
