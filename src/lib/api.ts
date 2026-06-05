@@ -27,6 +27,7 @@ import type {
   MediaKind,
   MediaPersonCredits,
   MediaSearchItem,
+  MediaSeasonDetails,
   MediaSourceDetails,
   MediaSourceHealth,
   MediaSourceInput,
@@ -107,6 +108,13 @@ export async function getMediaDetails(kind: MediaKind, id: number, language: str
   return apiRequest<{ item: MediaDetails }>(
     `/api/${resource}/${id}${query({ language, watchRegion })}`,
     'Failed to load media details.',
+  )
+}
+
+export async function getSeasonDetails(seriesId: number, seasonNumber: number, language: string) {
+  return apiRequest<{ item: MediaSeasonDetails }>(
+    `/api/series/${seriesId}/seasons/${seasonNumber}${query({ language })}`,
+    'Failed to load season details.',
   )
 }
 

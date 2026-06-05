@@ -3,11 +3,13 @@ import type {
   MediaDetails,
   MediaImage,
   MediaKind,
+  MediaSeasonSummary,
   MediaVideo,
   MediaWatchProviderGroupType,
 } from '@shared/types'
 import { useMutation } from '@tanstack/react-query'
 import {
+  CalendarDays,
   CircleCheck,
   ExternalLink,
   Film,
@@ -82,6 +84,40 @@ function normalizeImdbId(value: string | null): string | undefined {
 }
 
 const watchRegionOptions = ['US', 'JP', 'CN', 'HK', 'TW', 'GB', 'CA', 'AU', 'KR', 'TH'] as const
+const mobileGenreSkeletonKeys = ['mobile-genre-skeleton-1', 'mobile-genre-skeleton-2', 'mobile-genre-skeleton-3']
+const metricSkeletonKeys = ['metric-skeleton-1', 'metric-skeleton-2', 'metric-skeleton-3', 'metric-skeleton-4']
+const desktopGenreSkeletonKeys = ['desktop-genre-skeleton-1', 'desktop-genre-skeleton-2', 'desktop-genre-skeleton-3']
+const detailSkeletonKeys = [
+  'detail-skeleton-1',
+  'detail-skeleton-2',
+  'detail-skeleton-3',
+  'detail-skeleton-4',
+  'detail-skeleton-5',
+  'detail-skeleton-6',
+  'detail-skeleton-7',
+  'detail-skeleton-8',
+]
+const providerGroupSkeletonKeys = [
+  'provider-group-skeleton-1',
+  'provider-group-skeleton-2',
+  'provider-group-skeleton-3',
+]
+const providerSkeletonKeys = [
+  'provider-skeleton-1',
+  'provider-skeleton-2',
+  'provider-skeleton-3',
+  'provider-skeleton-4',
+  'provider-skeleton-5',
+]
+const railSkeletonKeys = ['rail-skeleton-1', 'rail-skeleton-2']
+const railItemSkeletonKeys = [
+  'rail-item-skeleton-1',
+  'rail-item-skeleton-2',
+  'rail-item-skeleton-3',
+  'rail-item-skeleton-4',
+  'rail-item-skeleton-5',
+  'rail-item-skeleton-6',
+]
 
 export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   const location = useLocation()
@@ -384,9 +420,9 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
           </div>
         </div>
 
-        {media.images.length > 0 ? (
-          <MediaGallery media={media} onSelectImage={setSelectedImageIndex} />
-        ) : null}
+        {media.kind === 'tv' ? <SeasonRail media={media} /> : null}
+
+        {media.images.length > 0 ? <MediaGallery media={media} onSelectImage={setSelectedImageIndex} /> : null}
 
         <div className="grid gap-8 bg-background px-5 pb-8 text-foreground sm:px-8 xl:grid-cols-[minmax(0,1fr)_340px]">
           <section>
@@ -572,8 +608,8 @@ function MediaDetailSkeleton() {
               <Skeleton className="h-4 w-2/3 rounded-full bg-white/12" />
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <Skeleton key={index} className="h-7 w-20 rounded-full bg-white/12" />
+              {mobileGenreSkeletonKeys.map((key) => (
+                <Skeleton key={key} className="h-7 w-20 rounded-full bg-white/12" />
               ))}
             </div>
           </div>
@@ -599,13 +635,13 @@ function MediaDetailSkeleton() {
                 <Skeleton className="h-4 w-3/5 rounded-full bg-white/12" />
               </div>
               <div className="mt-8 grid max-w-3xl grid-cols-4 gap-3">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <Skeleton key={index} className="h-16 rounded-2xl bg-white/12" />
+                {metricSkeletonKeys.map((key) => (
+                  <Skeleton key={key} className="h-16 rounded-2xl bg-white/12" />
                 ))}
               </div>
               <div className="mt-6 flex gap-2">
-                {Array.from({ length: 3 }).map((_, index) => (
-                  <Skeleton key={index} className="h-8 w-24 rounded-full bg-white/12" />
+                {desktopGenreSkeletonKeys.map((key) => (
+                  <Skeleton key={key} className="h-8 w-24 rounded-full bg-white/12" />
                 ))}
               </div>
             </div>
@@ -616,8 +652,8 @@ function MediaDetailSkeleton() {
           <div>
             <Skeleton className="h-7 w-24 rounded-lg" />
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, index) => (
-                <div key={index} className="space-y-2 rounded-xl border bg-card p-3">
+              {detailSkeletonKeys.map((key) => (
+                <div key={key} className="space-y-2 rounded-xl border bg-card p-3">
                   <Skeleton className="h-3 w-20 rounded-full" />
                   <Skeleton className="h-5 w-3/4 rounded-full" />
                 </div>
@@ -630,12 +666,12 @@ function MediaDetailSkeleton() {
               <Skeleton className="h-9 w-24 rounded-full" />
             </div>
             <Card className="mt-4 gap-4 p-3">
-              {Array.from({ length: 3 }).map((_, groupIndex) => (
-                <div key={groupIndex}>
+              {providerGroupSkeletonKeys.map((groupKey) => (
+                <div key={groupKey}>
                   <Skeleton className="mb-2 h-3 w-16 rounded-full" />
                   <div className="flex flex-wrap gap-2">
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <Skeleton key={index} className="size-10 rounded-xl" />
+                    {providerSkeletonKeys.map((key) => (
+                      <Skeleton key={`${groupKey}-${key}`} className="size-10 rounded-xl" />
                     ))}
                   </div>
                 </div>
@@ -646,19 +682,84 @@ function MediaDetailSkeleton() {
       </section>
 
       <div className="mt-8 space-y-5">
-        {Array.from({ length: 2 }).map((_, railIndex) => (
-          <Card key={railIndex} className="overflow-hidden p-5 sm:p-6">
+        {railSkeletonKeys.map((key) => (
+          <Card key={key} className="overflow-hidden p-5 sm:p-6">
             <Skeleton className="h-7 w-40 rounded-lg" />
             <Skeleton className="mt-2 h-4 w-64 rounded-full" />
             <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Skeleton key={index} className="aspect-[2/3] rounded-xl" />
+              {railItemSkeletonKeys.map((itemKey) => (
+                <Skeleton key={`${key}-${itemKey}`} className="aspect-[2/3] rounded-xl" />
               ))}
             </div>
           </Card>
         ))}
       </div>
     </div>
+  )
+}
+
+function SeasonRail({ media }: { media: MediaDetails }) {
+  const { t } = useTranslation()
+
+  return (
+    <section className="bg-background px-5 py-7 text-foreground sm:px-8">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <SectionTitle title={t('seasons')} />
+          <p className="mt-1 text-muted-foreground text-sm">{t('seasonsSubtitle', { count: media.seasons.length })}</p>
+        </div>
+      </div>
+      <div className="zme-x-scroll -mx-5 mt-4 flex gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
+        {media.seasons.length > 0 ? (
+          media.seasons.map((season) => <SeasonCard key={season.id} media={media} season={season} />)
+        ) : (
+          <Card className="flex min-h-40 min-w-full items-center justify-center text-muted-foreground text-sm">
+            {t('noSeasons')}
+          </Card>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function SeasonCard({ media, season }: { media: MediaDetails; season: MediaSeasonSummary }) {
+  const { t } = useTranslation()
+  const title =
+    season.seasonNumber === 0 ? t('specialSeason') : season.title || t('seasonNumber', { number: season.seasonNumber })
+
+  return (
+    <Link
+      to={`/series/${media.id}/seasons/${season.seasonNumber}`}
+      state={{ seriesTitle: media.title, season }}
+      className="group/season w-[188px] shrink-0"
+    >
+      <Card className="aspect-[2/3] gap-0 overflow-hidden bg-[#130d1f] p-0 shadow-[0_18px_42px_rgba(33,22,47,0.14)] transition group-hover/season:-translate-y-1 group-hover/season:shadow-[0_24px_54px_rgba(124,58,237,0.18)]">
+        {season.posterUrl ? (
+          <img src={season.posterUrl} alt={title} className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#130d1f] px-4 text-center text-white/62 text-sm">
+            <div className="flex size-16 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/16">
+              <Tv className="size-8 text-white/70" />
+            </div>
+            <span className="line-clamp-2">{title}</span>
+          </div>
+        )}
+      </Card>
+      <CardContent className="mt-3 px-0">
+        <div className="line-clamp-2 font-semibold text-sm leading-tight transition group-hover/season:text-primary">
+          {title}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-xs">
+          {season.airDate ? (
+            <span className="inline-flex items-center gap-1">
+              <CalendarDays className="size-3.5" />
+              {season.airDate.slice(0, 4)}
+            </span>
+          ) : null}
+          {season.episodeCount !== null ? <span>{t('episodesCount', { count: season.episodeCount })}</span> : null}
+        </div>
+      </CardContent>
+    </Link>
   )
 }
 
@@ -720,9 +821,7 @@ function WatchProvidersAside({
                       {provider.logoUrl ? (
                         <img src={provider.logoUrl} alt="" className="size-7 rounded-lg object-cover" loading="lazy" />
                       ) : (
-                        <span className="font-semibold text-muted-foreground text-xs">
-                          {provider.name.slice(0, 1)}
-                        </span>
+                        <span className="font-semibold text-muted-foreground text-xs">{provider.name.slice(0, 1)}</span>
                       )}
                     </a>
                   ))}
@@ -739,9 +838,7 @@ function WatchProvidersAside({
       ) : (
         <Card className="relative mt-4 p-4 text-muted-foreground text-sm">
           {t('noWatchProviders')}
-          {refreshing ? (
-            <Loader2 className="absolute top-4 right-4 size-4 animate-spin text-muted-foreground" />
-          ) : null}
+          {refreshing ? <Loader2 className="absolute top-4 right-4 size-4 animate-spin text-muted-foreground" /> : null}
         </Card>
       )}
     </section>

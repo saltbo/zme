@@ -53,6 +53,7 @@ import {
   getMediaDetails,
   getPersonCredits,
   getPopularMedia,
+  getSeasonDetails,
   getTrendingMedia,
   getWatchClickouts,
   listMediaGenres,
@@ -98,6 +99,11 @@ const mediaDetailParamsSchema = z.object({
 
 const mediaIdParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
+})
+
+const seasonParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  seasonNumber: z.coerce.number().int().min(0),
 })
 
 const personParamsSchema = z.object({
@@ -355,6 +361,19 @@ routes.get(
     const { language, watchRegion } = c.req.valid('query')
     const source = await getActiveTmdbSource(createDb(c.env), language)
     const item = await getMediaDetails(source.apiKey, 'movie', id, source.language, watchRegion)
+    return c.json({ item })
+  },
+)
+
+routes.get(
+  '/series/:id/seasons/:seasonNumber',
+  zValidator('param', seasonParamsSchema),
+  zValidator('query', languageQuerySchema),
+  async (c) => {
+    const { id, seasonNumber } = c.req.valid('param')
+    const { language } = c.req.valid('query')
+    const source = await getActiveTmdbSource(createDb(c.env), language)
+    const item = await getSeasonDetails(source.apiKey, id, seasonNumber, source.language)
     return c.json({ item })
   },
 )

@@ -22,6 +22,8 @@ export const queryKeys = {
     search: (query: string, language: string) => ['media', 'search', query, language] as const,
     details: (kind: MediaKind, id: number, language: string, watchRegion: string) =>
       ['media', 'details', kind, id, language, watchRegion] as const,
+    season: (seriesId: number, seasonNumber: number, language: string) =>
+      ['media', 'season', seriesId, seasonNumber, language] as const,
     watchClickouts: (kind: MediaKind, id: number, watchRegion: string) =>
       ['media', 'watch-clickouts', kind, id, watchRegion] as const,
     personCredits: (id: number, language: string) => ['media', 'person-credits', id, language] as const,

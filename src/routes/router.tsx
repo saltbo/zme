@@ -7,6 +7,7 @@ import { DownloadsPage } from '@/routes/downloads'
 import { IndexersPage } from '@/routes/indexers'
 import { LibraryPage } from '@/routes/library'
 import { MediaDetailPage } from '@/routes/media-detail'
+import { MediaSeasonDetailPage } from '@/routes/media-season-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
 import { PersonCreditsPage } from '@/routes/person-credits'
@@ -52,6 +53,10 @@ export const router = createBrowserRouter([
           {
             path: 'series/:id',
             element: <MediaDetailPage kind="tv" />,
+          },
+          {
+            path: 'series/:id/seasons/:seasonNumber',
+            element: <MediaSeasonDetailPage />,
           },
           {
             path: 'people/:id',

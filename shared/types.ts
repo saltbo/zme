@@ -191,6 +191,33 @@ export interface MediaReleaseInfo {
   releaseDate: string | null
 }
 
+export interface MediaSeasonSummary {
+  id: number
+  seasonNumber: number
+  title: string
+  overview: string
+  posterUrl: string | null
+  airDate: string | null
+  episodeCount: number | null
+  rating: number | null
+}
+
+export interface MediaEpisode {
+  id: number
+  episodeNumber: number
+  title: string
+  overview: string
+  stillUrl: string | null
+  airDate: string | null
+  runtime: string | null
+  rating: number | null
+}
+
+export interface MediaSeasonDetails extends MediaSeasonSummary {
+  seriesId: number
+  episodes: MediaEpisode[]
+}
+
 export interface MediaDetails extends MediaSearchItem {
   aliases: string[]
   genres: string[]
@@ -208,6 +235,7 @@ export interface MediaDetails extends MediaSearchItem {
   images: MediaImage[]
   recommendations: MediaSearchItem[]
   similar: MediaSearchItem[]
+  seasons: MediaSeasonSummary[]
   releaseInfo: MediaReleaseInfo | null
   ids: MediaExternalIds
 }

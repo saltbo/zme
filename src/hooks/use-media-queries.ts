@@ -6,6 +6,7 @@ import {
   getMediaWatchClickouts,
   getPersonCredits,
   getPopularMedia,
+  getSeasonDetails,
   getTrendingMedia,
   listMediaGenres,
   searchMedia,
@@ -62,7 +63,20 @@ export function useMediaDetails(kind: MediaKind, id: number, language: string, w
   })
 }
 
-export function useMediaWatchClickouts(kind: MediaKind, id: number, watchRegion = 'US', options?: { enabled?: boolean }) {
+export function useSeasonDetails(seriesId: number, seasonNumber: number, language: string) {
+  return useQuery({
+    queryKey: queryKeys.media.season(seriesId, seasonNumber, language),
+    queryFn: async () => (await getSeasonDetails(seriesId, seasonNumber, language)).item,
+    enabled: Number.isInteger(seriesId) && seriesId > 0 && Number.isInteger(seasonNumber) && seasonNumber >= 0,
+  })
+}
+
+export function useMediaWatchClickouts(
+  kind: MediaKind,
+  id: number,
+  watchRegion = 'US',
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: queryKeys.media.watchClickouts(kind, id, watchRegion),
     queryFn: async () => (await getMediaWatchClickouts(kind, id, watchRegion)).clickouts,

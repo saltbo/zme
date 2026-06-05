@@ -9,6 +9,8 @@ import type {
   MediaPersonCredits,
   MediaReleaseInfo,
   MediaSearchItem,
+  MediaSeasonDetails,
+  MediaSeasonSummary,
   MediaVideo,
   MediaWatchInfo,
   MediaWatchProviderGroup,
@@ -100,6 +102,34 @@ interface TmdbDetailsResponse extends TmdbSearchResult {
       rating?: string
     }>
   }
+  seasons?: TmdbSeason[]
+}
+
+interface TmdbSeason {
+  id?: number
+  name?: string
+  overview?: string
+  poster_path?: string | null
+  air_date?: string | null
+  episode_count?: number
+  season_number?: number
+  vote_average?: number
+}
+
+interface TmdbSeasonDetailsResponse extends TmdbSeason {
+  _id?: string
+  episodes?: TmdbEpisode[]
+}
+
+interface TmdbEpisode {
+  id?: number
+  name?: string
+  overview?: string
+  still_path?: string | null
+  air_date?: string | null
+  episode_number?: number
+  runtime?: number | null
+  vote_average?: number
 }
 
 interface TmdbWatchProvider {
@@ -303,6 +333,20 @@ export async function getMediaDetails(
   return toMediaDetails(kind, payload, genres, watchRegion)
 }
 
+export async function getSeasonDetails(
+  apiKey: string,
+  seriesId: number,
+  seasonNumber: number,
+  language: string,
+): Promise<MediaSeasonDetails> {
+  const url = new URL(`${TMDB_API_BASE}/tv/${seriesId}/season/${seasonNumber}`)
+  url.searchParams.set('language', language)
+
+  const response = await fetchTmdb(apiKey, url)
+  const payload = (await response.json()) as TmdbSeasonDetailsResponse
+  return toSeasonDetails(seriesId, payload)
+}
+
 export async function getPersonCredits(apiKey: string, id: number, language: string): Promise<MediaPersonCredits> {
   const url = new URL(`${TMDB_API_BASE}/person/${id}`)
   url.searchParams.set('language', language)
@@ -456,12 +500,63 @@ function toMediaDetails(
     images: toMediaImages(item.images),
     recommendations: toMediaResults(kind, item.recommendations?.results ?? [], genreMap),
     similar: toMediaResults(kind, item.similar?.results ?? [], genreMap),
+    seasons: kind === 'tv' ? toSeasonSummaries(item.seasons ?? []) : [],
     releaseInfo: kind === 'movie' ? toMovieReleaseInfo(item.release_dates) : toTvReleaseInfo(item.content_ratings),
     ids: {
       tmdb: String(searchItem.id),
       imdb: item.external_ids?.imdb_id ?? null,
       tvdb: item.external_ids?.tvdb_id ? String(item.external_ids.tvdb_id) : null,
     },
+  }
+}
+
+function toSeasonDetails(seriesId: number, item: TmdbSeasonDetailsResponse): MediaSeasonDetails {
+  const summary = toSeasonSummary(item)
+  if (!summary) {
+    throw new Error('TMDB season response is missing required fields.')
+  }
+
+  return {
+    ...summary,
+    seriesId,
+    episodes: (item.episodes ?? [])
+      .filter((episode): episode is TmdbEpisode & { id: number; episode_number: number; name: string } =>
+        Boolean(episode.id && episode.episode_number && episode.name),
+      )
+      .map((episode) => ({
+        id: episode.id,
+        episodeNumber: episode.episode_number,
+        title: episode.name,
+        overview: episode.overview || '',
+        stillUrl: episode.still_path ? `${TMDB_IMAGE_BASE}/w300${episode.still_path}` : null,
+        airDate: episode.air_date ?? null,
+        runtime: typeof episode.runtime === 'number' && episode.runtime > 0 ? formatRuntime(episode.runtime) : null,
+        rating: typeof episode.vote_average === 'number' ? episode.vote_average : null,
+      })),
+  }
+}
+
+function toSeasonSummaries(seasons: TmdbSeason[]): MediaSeasonSummary[] {
+  return seasons
+    .map(toSeasonSummary)
+    .filter((season): season is MediaSeasonSummary => season !== null)
+    .sort((a, b) => a.seasonNumber - b.seasonNumber)
+}
+
+function toSeasonSummary(season: TmdbSeason): MediaSeasonSummary | null {
+  if (!season.id || typeof season.season_number !== 'number' || !season.name) {
+    return null
+  }
+
+  return {
+    id: season.id,
+    seasonNumber: season.season_number,
+    title: season.name,
+    overview: season.overview || '',
+    posterUrl: season.poster_path ? `${TMDB_IMAGE_BASE}/w342${season.poster_path}` : null,
+    airDate: season.air_date ?? null,
+    episodeCount: typeof season.episode_count === 'number' ? season.episode_count : null,
+    rating: typeof season.vote_average === 'number' ? season.vote_average : null,
   }
 }
 
