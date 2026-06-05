@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getMusicAlbumDetails, listPopularMusicAlbums, searchMusicAlbums } from './music'
+import { discoverMusicAlbums, getMusicAlbumDetails, searchMusicAlbums } from './music'
 
 const releaseGroupMbid = 'f5093c06-23e3-404f-aeaa-40f72885ee3a'
 const releaseMbid = '59211ea4-fb59-49dd-a69e-83d1666a1aa5'
@@ -11,7 +11,7 @@ describe('music provider', () => {
   })
 
   it('searches MusicBrainz release groups as normalized music albums', async () => {
-    const fetch = vi.fn().mockResolvedValue(
+    const fetch = vi.fn().mockImplementation(() =>
       jsonResponse({
         'release-groups': [
           {
@@ -33,9 +33,9 @@ describe('music provider', () => {
     )
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchMusicAlbums({ artist: 'John Coltrane', title: 'Blue Train' })
+    const page = await searchMusicAlbums({ artist: 'John Coltrane', title: 'Blue Train' })
 
-    expect(results).toEqual([
+    expect(page.results).toEqual([
       {
         mediaKey: `musicbrainz:release-group:${releaseGroupMbid}`,
         provider: 'musicbrainz',
@@ -58,6 +58,7 @@ describe('music provider', () => {
         primaryType: 'Album',
         secondaryTypes: ['Compilation'],
         disambiguation: 'classic album',
+        scoreLabel: null,
         coverArt: {
           frontUrl: null,
           frontThumbnailUrl: null,
@@ -90,6 +91,75 @@ describe('music provider', () => {
     expect(fetch.mock.calls[0][0].searchParams.get('query')).toBe('primarytype:album AND Blue Train Miles Davis')
   })
 
+  it('filters release group search by first release year', async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ 'release-groups': [] }))
+    vi.stubGlobal('fetch', fetch)
+
+    await searchMusicAlbums({ tag: 'jazz', releaseType: 'album', year: '2024' })
+
+    expect(fetch.mock.calls[0][0].searchParams.get('query')).toBe(
+      'primarytype:album AND tag:jazz AND firstreleasedate:2024',
+    )
+  })
+
+  it('loads search card cover art through the preferred MusicBrainz release', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: URL | string) => {
+        const value = url.toString()
+        if (value.includes('/ws/2/release-group')) {
+          return Promise.resolve(
+            jsonResponse({
+              'release-groups': [
+                {
+                  id: releaseGroupMbid,
+                  title: 'Blue Train',
+                  'first-release-date': '1958-01',
+                  'primary-type': 'Album',
+                  'artist-credit': [
+                    {
+                      name: 'John Coltrane',
+                      artist: { id: 'b625448e-bf4a-41c3-a421-72ad46cdb831', name: 'John Coltrane' },
+                    },
+                  ],
+                  releases: [
+                    {
+                      id: releaseMbid,
+                      title: 'Blue Train',
+                      date: '1958-01',
+                      country: 'US',
+                      status: 'Official',
+                    },
+                  ],
+                },
+              ],
+            }),
+          )
+        }
+        if (value.includes(`/release/${releaseMbid}`)) {
+          return Promise.resolve(jsonResponse(coverArtResponse()))
+        }
+        if (value.includes(`/release-group/${releaseGroupMbid}`)) {
+          return Promise.resolve(jsonResponse({}, 404))
+        }
+
+        throw new Error(`Unexpected fetch: ${value}`)
+      }),
+    )
+
+    const page = await discoverMusicAlbums({
+      mode: 'genre',
+      genre: 'jazz',
+      range: 'week',
+      chartType: 'albums',
+      releaseType: 'album',
+      page: 1,
+      pageSize: 20,
+    })
+
+    expect(page.results[0]?.coverArt.frontThumbnailUrl).toBe('https://cover.example/front-500.jpg')
+  })
+
   it('loads popular releases from ListenBrainz as release-key music albums', async () => {
     vi.stubGlobal(
       'fetch',
@@ -110,9 +180,16 @@ describe('music provider', () => {
       ),
     )
 
-    const results = await listPopularMusicAlbums()
+    const page = await discoverMusicAlbums({
+      mode: 'popular',
+      range: 'all_time',
+      chartType: 'albums',
+      releaseType: 'album',
+      page: 1,
+      pageSize: 20,
+    })
 
-    expect(results).toEqual([
+    expect(page.results).toEqual([
       expect.objectContaining({
         mediaKey: `musicbrainz:release:${releaseMbid}`,
         resourceType: 'release',
@@ -122,6 +199,48 @@ describe('music provider', () => {
         primaryType: 'Album',
       }),
     ])
+  })
+
+  it('loads popular recordings from ListenBrainz as release-backed track cards', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          payload: {
+            recordings: [
+              {
+                caa_id: 45176091348,
+                caa_release_mbid: releaseMbid,
+                track_name: 'LEMONADE',
+                artist_name: 'aespa',
+                artist_mbids: ['b51c672b-85e0-48fe-8648-470a2422229f'],
+                listen_count: 4139,
+              },
+            ],
+          },
+        }),
+      ),
+    )
+
+    const page = await discoverMusicAlbums({
+      mode: 'popular',
+      range: 'week',
+      chartType: 'tracks',
+      releaseType: 'album',
+      page: 1,
+      pageSize: 20,
+    })
+
+    expect(page.results).toEqual([
+      expect.objectContaining({
+        mediaKey: `musicbrainz:release:${releaseMbid}`,
+        title: 'LEMONADE',
+        artist: 'aespa',
+        primaryType: 'Track',
+        scoreLabel: '4.1K',
+      }),
+    ])
+    expect(page.results[0]?.coverArt.frontThumbnailUrl).toContain(`${releaseMbid}/45176091348-250.jpg`)
   })
 
   it('loads release details with cover art, aliases, media formats, tracks, recordings, and isrcs', async () => {

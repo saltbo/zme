@@ -1,5 +1,6 @@
 import type {
   BookDetails,
+  BookDiscoveryInput,
   BookSearchItem,
   CreateDownloadInput,
   CreateDownloadResult,
@@ -39,6 +40,8 @@ import type {
   MediaWatchClickouts,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
+  MusicDiscoveryInput,
+  ResourcePage,
 } from '@shared/types'
 
 export class ApiError extends Error {
@@ -101,15 +104,24 @@ export async function searchMedia(queryValue: string, language: string) {
   )
 }
 
-export async function searchBooks(queryValue: string) {
-  return apiRequest<{ results: BookSearchItem[] }>(
-    `/api/books/search${query({ q: queryValue })}`,
+export async function searchBooks(input: { query: string; page: number; pageSize?: number }) {
+  return apiRequest<ResourcePage<BookSearchItem>>(
+    `/api/books/search${query({ q: input.query, page: input.page, pageSize: input.pageSize })}`,
     'Failed to search books.',
   )
 }
 
-export async function getTrendingBooks() {
-  return apiRequest<{ results: BookSearchItem[] }>('/api/books/trending', 'Failed to load trending books.')
+export async function discoverBooks(input: BookDiscoveryInput) {
+  return apiRequest<ResourcePage<BookSearchItem>>(
+    `/api/books/discover${query({
+      mode: input.mode,
+      period: input.period,
+      subject: input.subject,
+      page: input.page,
+      pageSize: input.pageSize,
+    })}`,
+    'Failed to load books.',
+  )
 }
 
 export async function getBookDetails(mediaKey: string) {
@@ -191,15 +203,39 @@ export async function listMediaGenres(kind: MediaKind, language: string) {
   )
 }
 
-export async function searchMusicAlbums(input: { query?: string; artist?: string; title?: string }) {
-  return apiRequest<{ results: MusicAlbumSearchItem[] }>(
-    `/api/music/search${query({ q: input.query, artist: input.artist, title: input.title })}`,
+export async function searchMusicAlbums(input: {
+  query?: string
+  artist?: string
+  title?: string
+  page: number
+  pageSize?: number
+}) {
+  return apiRequest<ResourcePage<MusicAlbumSearchItem>>(
+    `/api/music/search${query({
+      q: input.query,
+      artist: input.artist,
+      title: input.title,
+      page: input.page,
+      pageSize: input.pageSize,
+    })}`,
     'Failed to search music albums.',
   )
 }
 
-export async function getPopularMusicAlbums() {
-  return apiRequest<{ results: MusicAlbumSearchItem[] }>('/api/music/popular', 'Failed to load popular music.')
+export async function discoverMusicAlbums(input: MusicDiscoveryInput) {
+  return apiRequest<ResourcePage<MusicAlbumSearchItem>>(
+    `/api/music/discover${query({
+      mode: input.mode,
+      range: input.range,
+      chartType: input.chartType,
+      genre: input.genre,
+      releaseType: input.releaseType,
+      year: /^(19|20)\d{2}$/.test(input.year ?? '') ? input.year : undefined,
+      page: input.page,
+      pageSize: input.pageSize,
+    })}`,
+    'Failed to load music.',
+  )
 }
 
 export async function getMusicAlbumDetails(mediaKey: string) {

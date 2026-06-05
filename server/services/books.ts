@@ -1,12 +1,26 @@
 import { buildMediaKey, parseMediaKey } from '@shared/media-key'
-import type { BookCover, BookDetails, BookEditionCandidate, BookSearchItem } from '@shared/types'
+import type {
+  BookCover,
+  BookDetails,
+  BookDiscoveryInput,
+  BookEditionCandidate,
+  BookSearchItem,
+  ResourcePage,
+} from '@shared/types'
 
 interface OpenLibrarySearchResponse {
   docs?: OpenLibrarySearchDoc[]
+  numFound?: number
+  start?: number
 }
 
 interface OpenLibraryTrendingResponse {
   works?: OpenLibrarySearchDoc[]
+}
+
+interface OpenLibrarySubjectResponse {
+  works?: OpenLibrarySearchDoc[]
+  work_count?: number
 }
 
 interface OpenLibrarySearchDoc {
@@ -71,7 +85,7 @@ export class OpenLibraryError extends Error {
 const OPEN_LIBRARY_BASE = 'https://openlibrary.org'
 const OPEN_LIBRARY_COVER_BASE = 'https://covers.openlibrary.org/b'
 
-export async function searchBooks(query: string): Promise<BookSearchItem[]> {
+export async function searchBooks(query: string, page = 1, pageSize = 20): Promise<ResourcePage<BookSearchItem>> {
   const url = new URL(`${OPEN_LIBRARY_BASE}/search.json`)
   url.searchParams.set('q', query)
   url.searchParams.set(
@@ -88,24 +102,41 @@ export async function searchBooks(query: string): Promise<BookSearchItem[]> {
       'alternative_title',
     ].join(','),
   )
-  url.searchParams.set('limit', '20')
+  url.searchParams.set('limit', String(pageSize))
+  url.searchParams.set('page', String(page))
 
   const payload = await fetchOpenLibraryJson<OpenLibrarySearchResponse>(url, { notFoundStatus: 502 })
   if (payload.docs !== undefined && !Array.isArray(payload.docs)) {
     throw new OpenLibraryError('Open Library search response has invalid docs.', 502)
   }
-  return (payload.docs ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
+  const results = (payload.docs ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
+  return toResourcePage(results, page, pageSize, payload.numFound)
 }
 
-export async function listTrendingBooks(limit = 20): Promise<BookSearchItem[]> {
-  const url = new URL(`${OPEN_LIBRARY_BASE}/trending/daily.json`)
-  url.searchParams.set('limit', String(limit))
+export async function discoverBooks(input: BookDiscoveryInput): Promise<ResourcePage<BookSearchItem>> {
+  if (input.mode === 'subject' && input.subject) {
+    const url = new URL(`${OPEN_LIBRARY_BASE}/subjects/${encodeURIComponent(input.subject)}.json`)
+    url.searchParams.set('limit', String(input.pageSize))
+    url.searchParams.set('offset', String((input.page - 1) * input.pageSize))
+
+    const payload = await fetchOpenLibraryJson<OpenLibrarySubjectResponse>(url, { notFoundStatus: 502 })
+    if (payload.works !== undefined && !Array.isArray(payload.works)) {
+      throw new OpenLibraryError('Open Library subject response has invalid works.', 502)
+    }
+    const results = (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
+    return toResourcePage(results, input.page, input.pageSize, payload.work_count)
+  }
+
+  const url = new URL(`${OPEN_LIBRARY_BASE}/trending/${input.period}.json`)
+  url.searchParams.set('limit', String(input.pageSize))
+  url.searchParams.set('page', String(input.page))
 
   const payload = await fetchOpenLibraryJson<OpenLibraryTrendingResponse>(url, { notFoundStatus: 502 })
   if (payload.works !== undefined && !Array.isArray(payload.works)) {
     throw new OpenLibraryError('Open Library trending response has invalid works.', 502)
   }
-  return (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
+  const results = (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
+  return toResourcePage(results, input.page, input.pageSize)
 }
 
 export async function getBookDetails(mediaKey: string): Promise<BookDetails> {
@@ -253,6 +284,20 @@ function toBookSearchItem(doc: OpenLibrarySearchDoc): BookSearchItem | null {
     aliases: uniqueStrings(doc.alternative_title ?? [])
       .filter((title) => title !== doc.title)
       .slice(0, 8),
+  }
+}
+
+function toResourcePage<T>(
+  results: T[],
+  page: number,
+  pageSize: number,
+  totalResults = results.length === pageSize ? page * pageSize + 1 : (page - 1) * pageSize + results.length,
+): ResourcePage<T> {
+  return {
+    results,
+    page,
+    totalPages: Math.max(page, Math.ceil(totalResults / pageSize)),
+    totalResults,
   }
 }
 

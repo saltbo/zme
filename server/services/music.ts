@@ -5,9 +5,11 @@ import type {
   MusicAlias,
   MusicArtistCredit,
   MusicCoverArt,
+  MusicDiscoveryInput,
   MusicMedium,
   MusicReleaseSummary,
   MusicTrack,
+  ResourcePage,
 } from '@shared/types'
 
 interface MusicBrainzSearchResponse {
@@ -94,11 +96,30 @@ interface ListenBrainzTopReleasesResponse {
   }
 }
 
+interface ListenBrainzTopRecordingsResponse {
+  payload?: {
+    recordings?: ListenBrainzTopRecording[]
+  }
+}
+
 interface ListenBrainzTopRelease {
   release_mbid?: string
   release_name?: string
   artist_name?: string
   artist_mbids?: string[]
+  caa_id?: number
+  caa_release_mbid?: string
+  listen_count?: number
+}
+
+interface ListenBrainzTopRecording {
+  recording_mbid?: string
+  recording_name?: string
+  track_name?: string
+  artist_name?: string
+  artist_mbids?: string[]
+  caa_id?: number
+  caa_release_mbid?: string
   listen_count?: number
 }
 
@@ -128,31 +149,96 @@ export async function searchMusicAlbums(input: {
   query?: string
   artist?: string
   title?: string
+  tag?: string
+  releaseType?: string
+  year?: string
   limit?: number
-}): Promise<MusicAlbumSearchItem[]> {
+  page?: number
+}): Promise<ResourcePage<MusicAlbumSearchItem>> {
+  const page = input.page ?? 1
+  const pageSize = input.limit ?? 20
   const url = new URL(`${MUSICBRAINZ_API_BASE}/release-group`)
   url.searchParams.set('fmt', 'json')
-  url.searchParams.set('limit', String(input.limit ?? 20))
+  url.searchParams.set('inc', 'artist-credits+releases')
+  url.searchParams.set('limit', String(pageSize))
+  url.searchParams.set('offset', String((page - 1) * pageSize))
   url.searchParams.set('query', buildReleaseGroupSearchQuery(input))
 
   const payload = (await fetchMusicBrainzJson(url)) as MusicBrainzSearchResponse
-  return (payload['release-groups'] ?? [])
-    .map((releaseGroup) => toMusicAlbumSearchItem(releaseGroup))
-    .filter((item): item is MusicAlbumSearchItem => item !== null)
+  const results = (await Promise.all((payload['release-groups'] ?? []).map(toMusicAlbumSearchItemWithCover))).filter(
+    (item): item is MusicAlbumSearchItem => item !== null,
+  )
+  return toResourcePage(results, page, pageSize)
 }
 
-export async function listPopularMusicAlbums(limit = 20): Promise<MusicAlbumSearchItem[]> {
-  const url = new URL(`${LISTENBRAINZ_API_BASE}/stats/sitewide/releases`)
-  url.searchParams.set('count', String(limit))
+async function toMusicAlbumSearchItemWithCover(
+  releaseGroup: MusicBrainzReleaseGroup,
+): Promise<MusicAlbumSearchItem | null> {
+  const coverArt = await getReleaseGroupSearchCoverArt(releaseGroup)
+  return toMusicAlbumSearchItem(releaseGroup, coverArt)
+}
+
+async function getReleaseGroupSearchCoverArt(releaseGroup: MusicBrainzReleaseGroup): Promise<MusicCoverArt> {
+  const preferredRelease = selectPreferredRelease(releaseGroup.releases ?? [])
+  const [releaseCoverArt, releaseGroupCoverArt] = await Promise.all([
+    getCoverArtOrEmpty('release', preferredRelease?.id ?? ''),
+    getCoverArtOrEmpty('release-group', releaseGroup.id ?? ''),
+  ])
+  return mergeCoverArt(releaseCoverArt, releaseGroupCoverArt)
+}
+
+async function getCoverArtOrEmpty(kind: 'release' | 'release-group', mbid: string): Promise<MusicCoverArt> {
+  try {
+    return await getCoverArt(kind, mbid)
+  } catch (error) {
+    if (error instanceof MusicProviderError && error.code === 'COVER_ART_ARCHIVE_REQUEST_FAILED') {
+      return emptyCoverArt()
+    }
+    throw error
+  }
+}
+
+export async function discoverMusicAlbums(input: MusicDiscoveryInput): Promise<ResourcePage<MusicAlbumSearchItem>> {
+  if (input.mode === 'genre') {
+    return searchMusicAlbums({
+      tag: input.genre,
+      releaseType: input.releaseType,
+      year: input.year,
+      page: input.page,
+      limit: input.pageSize,
+    })
+  }
+
+  const url = new URL(
+    `${LISTENBRAINZ_API_BASE}/stats/sitewide/${input.chartType === 'tracks' ? 'recordings' : 'releases'}`,
+  )
+  url.searchParams.set('count', String(input.pageSize))
+  url.searchParams.set('offset', String((input.page - 1) * input.pageSize))
+  url.searchParams.set('range', input.range)
+
+  if (input.chartType === 'tracks') {
+    const payload = (await fetchListenBrainzJson(url)) as ListenBrainzTopRecordingsResponse
+    if (payload.payload?.recordings !== undefined && !Array.isArray(payload.payload.recordings)) {
+      throw new MusicProviderError(
+        'ListenBrainz top recordings response has invalid recordings.',
+        502,
+        'LISTENBRAINZ_FAILED',
+      )
+    }
+    const results = (payload.payload?.recordings ?? [])
+      .map(toPopularMusicRecordingSearchItem)
+      .filter((item): item is MusicAlbumSearchItem => item !== null)
+    return toResourcePage(results, input.page, input.pageSize)
+  }
 
   const payload = (await fetchListenBrainzJson(url)) as ListenBrainzTopReleasesResponse
   if (payload.payload?.releases !== undefined && !Array.isArray(payload.payload.releases)) {
     throw new MusicProviderError('ListenBrainz top releases response has invalid releases.', 502, 'LISTENBRAINZ_FAILED')
   }
-
-  return (payload.payload?.releases ?? [])
+  const results = (payload.payload?.releases ?? [])
     .map(toPopularMusicAlbumSearchItem)
     .filter((item): item is MusicAlbumSearchItem => item !== null)
+  return toResourcePage(results, input.page, input.pageSize)
 }
 
 export async function getMusicAlbumDetails(mediaKey: string): Promise<MusicAlbumDetails> {
@@ -383,11 +469,21 @@ async function getCoverArt(kind: 'release' | 'release-group', mbid: string): Pro
   return toCoverArt((await response.json()) as CoverArtArchiveResponse)
 }
 
-function buildReleaseGroupSearchQuery(input: { q?: string; query?: string; artist?: string; title?: string }): string {
-  const clauses = ['primarytype:album']
+function buildReleaseGroupSearchQuery(input: {
+  q?: string
+  query?: string
+  artist?: string
+  title?: string
+  tag?: string
+  releaseType?: string
+  year?: string
+}): string {
+  const clauses = [`primarytype:${input.releaseType ?? 'album'}`]
   const query = input.query ?? input.q
   if (input.artist) clauses.push(`artist:"${escapeMusicBrainzQuery(input.artist)}"`)
   if (input.title) clauses.push(`releasegroup:"${escapeMusicBrainzQuery(input.title)}"`)
+  if (input.tag) clauses.push(`tag:${escapeMusicBrainzQuery(input.tag)}`)
+  if (input.year) clauses.push(`firstreleasedate:${escapeMusicBrainzQuery(input.year)}`)
   if (query) clauses.push(escapeMusicBrainzQuery(query))
   return clauses.join(' AND ')
 }
@@ -430,6 +526,7 @@ function toMusicAlbumSearchItem(
     secondaryTypes: releaseGroup['secondary-types'] ?? [],
     disambiguation: releaseGroup.disambiguation?.trim() || null,
     coverArt,
+    scoreLabel: null,
   }
 }
 
@@ -437,6 +534,10 @@ function toPopularMusicAlbumSearchItem(release: ListenBrainzTopRelease): MusicAl
   if (!release.release_mbid || !MBID_PATTERN.test(release.release_mbid) || !release.release_name) return null
   const artistName = release.artist_name?.trim() || null
   const artistMbid = release.artist_mbids?.find((mbid) => MBID_PATTERN.test(mbid)) ?? null
+  const scoreLabel =
+    typeof release.listen_count === 'number' && Number.isFinite(release.listen_count)
+      ? compactNumber.format(release.listen_count)
+      : null
 
   return {
     mediaKey: buildMusicBrainzMediaKey('release', release.release_mbid),
@@ -454,9 +555,75 @@ function toPopularMusicAlbumSearchItem(release: ListenBrainzTopRelease): MusicAl
     primaryType: 'Album',
     secondaryTypes: [],
     disambiguation: release.listen_count ? `${release.listen_count.toLocaleString()} listens` : null,
-    coverArt: emptyCoverArt(),
+    coverArt: getListenBrainzCoverArt(release),
+    scoreLabel,
   }
 }
+
+function toPopularMusicRecordingSearchItem(recording: ListenBrainzTopRecording): MusicAlbumSearchItem | null {
+  const title = recording.track_name ?? recording.recording_name
+  if (!recording.caa_release_mbid || !MBID_PATTERN.test(recording.caa_release_mbid) || !title) {
+    return null
+  }
+  const artistName = recording.artist_name?.trim() || null
+  const artistMbid = recording.artist_mbids?.find((mbid) => MBID_PATTERN.test(mbid)) ?? null
+  const scoreLabel =
+    typeof recording.listen_count === 'number' && Number.isFinite(recording.listen_count)
+      ? compactNumber.format(recording.listen_count)
+      : null
+
+  return {
+    mediaKey: buildMusicBrainzMediaKey('release', recording.caa_release_mbid),
+    provider: 'musicbrainz',
+    resourceType: 'release',
+    mbid: recording.caa_release_mbid,
+    releaseGroupMbid: recording.caa_release_mbid,
+    title,
+    artist: artistName,
+    artists: artistName ? [{ id: artistMbid, name: artistName, joinPhrase: '' }] : [],
+    firstReleaseDate: null,
+    releaseYear: null,
+    releaseDate: null,
+    country: null,
+    primaryType: 'Track',
+    secondaryTypes: [],
+    disambiguation: recording.listen_count ? `${recording.listen_count.toLocaleString()} listens` : null,
+    coverArt: getListenBrainzCoverArt(recording),
+    scoreLabel,
+  }
+}
+
+function getListenBrainzCoverArt(release: ListenBrainzTopRelease): MusicCoverArt {
+  if (!release.caa_id || !release.caa_release_mbid || !MBID_PATTERN.test(release.caa_release_mbid)) {
+    return emptyCoverArt()
+  }
+  const base = `${COVER_ART_ARCHIVE_BASE}/release/${release.caa_release_mbid}/${release.caa_id}`
+  return {
+    frontUrl: `${base}.jpg`,
+    frontThumbnailUrl: `${base}-250.jpg`,
+    backUrl: null,
+    backThumbnailUrl: null,
+  }
+}
+
+function toResourcePage<T>(
+  results: T[],
+  page: number,
+  pageSize: number,
+  totalResults = results.length === pageSize ? page * pageSize + 1 : (page - 1) * pageSize + results.length,
+): ResourcePage<T> {
+  return {
+    results,
+    page,
+    totalPages: Math.max(page, Math.ceil(totalResults / pageSize)),
+    totalResults,
+  }
+}
+
+const compactNumber = new Intl.NumberFormat('en', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
 
 function toArtistCredits(credits: MusicBrainzArtistCredit[]): MusicArtistCredit[] {
   return credits

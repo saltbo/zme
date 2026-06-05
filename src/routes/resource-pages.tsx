@@ -1,17 +1,36 @@
 import type {
   BookDetails,
+  BookDiscoveryInput,
+  BookDiscoveryMode,
   BookSearchItem,
+  BookTrendingPeriod,
   DownloadSearchTarget,
   IndexerSearchItem,
   LibraryKind,
   LibraryResourceInput,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
+  MusicChartType,
+  MusicDiscoveryInput,
+  MusicDiscoveryMode,
+  MusicDiscoveryRange,
+  MusicGenre,
+  MusicReleaseType,
 } from '@shared/types'
 import { useMutation } from '@tanstack/react-query'
-import { BookOpen, CalendarDays, Disc3, Heart, Languages, ListMusic, RotateCcw, Search } from 'lucide-react'
-import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import {
+  BookOpen,
+  CalendarDays,
+  Disc3,
+  Heart,
+  Languages,
+  ListMusic,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-react'
+import type { ReactNode, RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -24,6 +43,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
@@ -42,81 +63,203 @@ const resourceSkeletonKeys = [
   'resource-skeleton-6',
 ]
 
+const RESOURCE_PAGE_SIZE = 30
+
+const bookSubjectOptions = ['fiction', 'fantasy', 'romance', 'science_fiction', 'business', 'history', 'biography']
+const musicGenreOptions: MusicGenre[] = ['rock', 'jazz', 'electronic', 'hip-hop', 'classical', 'pop', 'metal']
+
 export function MusicPage() {
   const { t } = useTranslation()
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const { setTopbarOverride } = useOutletContext<AppOutletContext>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const query = searchParams.get('q')?.trim() ?? ''
-  const search = useMusicSearch(query)
+  const mode = getMusicModeParam(searchParams.get('mode'))
+  const range = getMusicRangeParam(searchParams.get('range'))
+  const chartType = getMusicChartTypeParam(searchParams.get('chart'))
+  const genre = getMusicGenreParam(searchParams.get('genre'))
+  const releaseType = getMusicReleaseTypeParam(searchParams.get('type'))
+  const year = getYearParam(searchParams.get('year'))
+  const discovery = useMemo(
+    () => ({ mode, range, chartType, genre, releaseType, year, pageSize: RESOURCE_PAGE_SIZE }),
+    [chartType, genre, mode, range, releaseType, year],
+  )
+  const openFilters = useCallback(() => setMobileFiltersOpen(true), [])
+  const search = useMusicSearch(query, discovery)
+  const items = search.data?.pages.flatMap((page) => page.results) ?? []
 
   useEffect(() => {
     if (search.error) toast.error(search.error instanceof Error ? search.error.message : t('searchFailed'))
   }, [search.error, t])
 
+  useResourceTopbar({
+    pathname: location.pathname,
+    setTopbarOverride,
+    title: t('music'),
+    subtitle: t('musicSubtitle'),
+    onOpenFilters: openFilters,
+    showFilters: !query,
+    t,
+  })
+
+  useInfiniteResourceLoader(loadMoreRef, search.hasNextPage, search.isFetchingNextPage, search.fetchNextPage)
+
+  function updateMusicDiscovery(nextInput: Partial<Omit<typeof discovery, 'pageSize'>>) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      const nextMode = nextInput.mode ?? mode
+      const nextRange = nextInput.range ?? range
+      const nextChartType = nextInput.chartType ?? chartType
+      const nextGenre = nextInput.genre ?? genre
+      const nextReleaseType = nextInput.releaseType ?? releaseType
+      const nextYear = nextInput.year ?? year
+      if (nextMode === 'popular') next.delete('mode')
+      else next.set('mode', nextMode)
+      if (nextRange === 'all_time') next.delete('range')
+      else next.set('range', nextRange)
+      if (nextChartType === 'albums') next.delete('chart')
+      else next.set('chart', nextChartType)
+      if (nextGenre) next.set('genre', nextGenre)
+      else next.delete('genre')
+      if (nextReleaseType === 'album') next.delete('type')
+      else next.set('type', nextReleaseType)
+      if (nextYear) next.set('year', nextYear)
+      else next.delete('year')
+      return next
+    })
+  }
+
   return (
     <ResourceSearchPage
-      title={t('music')}
       emptyTitle={t('searchMusic')}
       emptyDescription={t('searchMusicDescription')}
-      defaultDescription={t('popularMusicDescription')}
       query={query}
       loading={search.isLoading}
-      items={(search.data ?? []).map((item) => ({ key: item.mediaKey, node: <MusicAlbumCard item={item} /> }))}
+      loadingMore={search.isFetchingNextPage}
+      hasNextPage={search.hasNextPage}
+      loadMoreRef={loadMoreRef}
+      items={items.map((item) => ({ key: item.mediaKey, node: <MusicAlbumCard item={item} /> }))}
+      filters={
+        !query ? (
+          <MusicFilterBar
+            mode={mode}
+            range={range}
+            chartType={chartType}
+            genre={genre}
+            releaseType={releaseType}
+            year={year}
+            mobileOpen={mobileFiltersOpen}
+            onMobileOpenChange={setMobileFiltersOpen}
+            onChange={updateMusicDiscovery}
+          />
+        ) : null
+      }
     />
   )
 }
 
 export function BooksPage() {
   const { t } = useTranslation()
-  const [searchParams] = useSearchParams()
+  const location = useLocation()
+  const { setTopbarOverride } = useOutletContext<AppOutletContext>()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const query = searchParams.get('q')?.trim() ?? ''
-  const search = useBookSearch(query)
+  const mode = getBookModeParam(searchParams.get('mode'))
+  const period = getBookPeriodParam(searchParams.get('period'))
+  const subject = getBookSubjectParam(searchParams.get('subject'))
+  const discovery = useMemo(() => ({ mode, period, subject, pageSize: RESOURCE_PAGE_SIZE }), [mode, period, subject])
+  const openFilters = useCallback(() => setMobileFiltersOpen(true), [])
+  const search = useBookSearch(query, discovery)
+  const items = search.data?.pages.flatMap((page) => page.results) ?? []
 
   useEffect(() => {
     if (search.error) toast.error(search.error instanceof Error ? search.error.message : t('searchFailed'))
   }, [search.error, t])
 
+  useResourceTopbar({
+    pathname: location.pathname,
+    setTopbarOverride,
+    title: t('books'),
+    subtitle: t('booksSubtitle'),
+    onOpenFilters: openFilters,
+    showFilters: !query,
+    t,
+  })
+
+  useInfiniteResourceLoader(loadMoreRef, search.hasNextPage, search.isFetchingNextPage, search.fetchNextPage)
+
+  function updateDiscovery(nextInput: Partial<Omit<BookDiscoveryInput, 'page' | 'pageSize'>>) {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      const nextMode = nextInput.mode ?? mode
+      const nextPeriod = nextInput.period ?? period
+      const nextSubject = nextInput.subject ?? subject
+      if (nextMode === 'trending') next.delete('mode')
+      else next.set('mode', nextMode)
+      if (nextPeriod === 'daily') next.delete('period')
+      else next.set('period', nextPeriod)
+      if (nextSubject) next.set('subject', nextSubject)
+      else next.delete('subject')
+      return next
+    })
+  }
+
   return (
     <ResourceSearchPage
-      title={t('books')}
       emptyTitle={t('searchBooks')}
       emptyDescription={t('searchBooksDescription')}
-      defaultDescription={t('trendingBooksDescription')}
       query={query}
       loading={search.isLoading}
-      items={(search.data ?? []).map((item) => ({ key: item.mediaKey, node: <BookCard item={item} /> }))}
+      loadingMore={search.isFetchingNextPage}
+      hasNextPage={search.hasNextPage}
+      loadMoreRef={loadMoreRef}
+      items={items.map((item) => ({ key: item.mediaKey, node: <BookCard item={item} /> }))}
+      filters={
+        !query ? (
+          <BookFilterBar
+            mode={mode}
+            period={period}
+            subject={subject}
+            mobileOpen={mobileFiltersOpen}
+            onMobileOpenChange={setMobileFiltersOpen}
+            onChange={updateDiscovery}
+          />
+        ) : null
+      }
     />
   )
 }
 
 function ResourceSearchPage({
-  title,
   emptyTitle,
   emptyDescription,
-  defaultDescription,
   query,
   loading,
+  loadingMore,
+  hasNextPage,
+  loadMoreRef,
   items,
+  filters,
 }: {
-  title: string
   emptyTitle: string
   emptyDescription: string
-  defaultDescription: string
   query: string
   loading: boolean
+  loadingMore: boolean
+  hasNextPage: boolean
+  loadMoreRef: RefObject<HTMLDivElement | null>
   items: { key: string; node: ReactNode }[]
+  filters: ReactNode
 }) {
   const { t } = useTranslation()
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <div className="mb-5 flex items-center justify-between gap-3 border-b pb-4">
-        <div className="min-w-0">
-          <div className="font-semibold text-sm text-muted-foreground">{title}</div>
-          <div className="mt-1 truncate text-muted-foreground text-sm">
-            {query ? t('resourceSearchResultCount', { count: items.length, query }) : defaultDescription}
-          </div>
-        </div>
-      </div>
+      {filters}
 
       {!query && !loading && items.length === 0 ? (
         <Card className="flex min-h-80 items-center justify-center p-8 text-center">
@@ -143,8 +286,510 @@ function ResourceSearchPage({
           ))}
         </div>
       ) : null}
+      {!query || items.length > 0 ? (
+        <div ref={loadMoreRef} className="mt-8 flex min-h-10 items-center justify-center text-muted-foreground text-sm">
+          {loadingMore ? t('loadingMore') : hasNextPage ? t('scrollToLoadMore') : t('noMoreMedia')}
+        </div>
+      ) : null}
     </div>
   )
+}
+
+function MusicFilterBar({
+  mode,
+  range,
+  chartType,
+  genre,
+  releaseType,
+  year,
+  mobileOpen,
+  onMobileOpenChange,
+  onChange,
+}: {
+  mode: MusicDiscoveryMode
+  range: MusicDiscoveryRange
+  chartType: MusicChartType
+  genre?: MusicGenre
+  releaseType: MusicReleaseType
+  year: string
+  mobileOpen: boolean
+  onMobileOpenChange: (open: boolean) => void
+  onChange: (next: Partial<Omit<MusicDiscoveryInput, 'page' | 'pageSize'>>) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <div className="mb-5 hidden border-b pb-4 md:block">
+        <MusicFilterControls
+          mode={mode}
+          range={range}
+          chartType={chartType}
+          genre={genre}
+          releaseType={releaseType}
+          year={year}
+          onChange={onChange}
+        />
+      </div>
+      <ResourceFilterSheet title={t('filters')} open={mobileOpen} onOpenChange={onMobileOpenChange}>
+        <MusicFilterControls
+          mode={mode}
+          range={range}
+          chartType={chartType}
+          genre={genre}
+          releaseType={releaseType}
+          year={year}
+          onChange={onChange}
+        />
+      </ResourceFilterSheet>
+    </>
+  )
+}
+
+function MusicFilterControls({
+  mode,
+  range,
+  chartType,
+  genre,
+  releaseType,
+  year,
+  onChange,
+}: {
+  mode: MusicDiscoveryMode
+  range: MusicDiscoveryRange
+  chartType: MusicChartType
+  genre?: MusicGenre
+  releaseType: MusicReleaseType
+  year: string
+  onChange: (next: Partial<Omit<MusicDiscoveryInput, 'page' | 'pageSize'>>) => void
+}) {
+  const { t } = useTranslation()
+  const modeOptions: Array<{ value: MusicDiscoveryMode; label: string }> = useMemo(
+    () => [
+      { value: 'popular', label: t('popular') },
+      { value: 'genre', label: t('genreBrowse') },
+    ],
+    [t],
+  )
+  const rangeOptions: Array<{ value: MusicDiscoveryRange; label: string }> = useMemo(
+    () => [
+      { value: 'all_time', label: t('allTime') },
+      { value: 'year', label: t('thisYear') },
+      { value: 'month', label: t('thisMonth') },
+      { value: 'week', label: t('thisWeek') },
+    ],
+    [t],
+  )
+  const chartOptions: Array<{ value: MusicChartType; label: string }> = useMemo(
+    () => [
+      { value: 'albums', label: t('albums') },
+      { value: 'tracks', label: t('tracks') },
+    ],
+    [t],
+  )
+  const genreOptions = useMemo(
+    () => musicGenreOptions.map((value) => ({ value, label: t(`musicGenre.${value}`) })),
+    [t],
+  )
+  const releaseTypeOptions: Array<{ value: MusicReleaseType; label: string }> = useMemo(
+    () => [
+      { value: 'album', label: t('album') },
+      { value: 'ep', label: 'EP' },
+      { value: 'single', label: t('single') },
+    ],
+    [t],
+  )
+  return (
+    <div className="grid gap-2 md:grid-cols-4">
+      <div className="min-w-0">
+        <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('source')}</span>
+        <Select
+          items={modeOptions}
+          value={mode}
+          onValueChange={(value) => onChange({ mode: value as MusicDiscoveryMode })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              {modeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      {mode === 'popular' ? (
+        <>
+          <div className="min-w-0">
+            <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('range')}</span>
+            <Select
+              items={rangeOptions}
+              value={range}
+              onValueChange={(value) => onChange({ range: (value || 'all_time') as MusicDiscoveryRange })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {rangeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('chart')}</span>
+            <Select
+              items={chartOptions}
+              value={chartType}
+              onValueChange={(value) => onChange({ chartType: (value || 'albums') as MusicChartType })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {chartOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="min-w-0">
+            <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('genre')}</span>
+            <Select
+              items={genreOptions}
+              value={genre ?? 'rock'}
+              onValueChange={(value) => onChange({ mode: 'genre', genre: (value || 'rock') as MusicGenre })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {genreOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('releaseType')}</span>
+            <Select
+              items={releaseTypeOptions}
+              value={releaseType}
+              onValueChange={(value) => onChange({ releaseType: (value || 'album') as MusicReleaseType })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {releaseTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="min-w-0">
+            <label htmlFor="music-discovery-year" className="mb-1 block font-medium text-muted-foreground text-xs">
+              {t('year')}
+            </label>
+            <input
+              id="music-discovery-year"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              placeholder="2026"
+              value={year}
+              onChange={(event) => onChange({ year: event.target.value.replace(/\D/g, '').slice(0, 4) })}
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function BookFilterBar({
+  mode,
+  period,
+  subject,
+  mobileOpen,
+  onMobileOpenChange,
+  onChange,
+}: {
+  mode: BookDiscoveryMode
+  period: BookTrendingPeriod
+  subject?: string
+  mobileOpen: boolean
+  onMobileOpenChange: (open: boolean) => void
+  onChange: (next: Partial<Omit<BookDiscoveryInput, 'page' | 'pageSize'>>) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <div className="mb-5 hidden border-b pb-4 md:block">
+        <BookFilterControls mode={mode} period={period} subject={subject} onChange={onChange} />
+      </div>
+      <ResourceFilterSheet title={t('filters')} open={mobileOpen} onOpenChange={onMobileOpenChange}>
+        <BookFilterControls mode={mode} period={period} subject={subject} onChange={onChange} />
+      </ResourceFilterSheet>
+    </>
+  )
+}
+
+function BookFilterControls({
+  mode,
+  period,
+  subject,
+  onChange,
+}: {
+  mode: BookDiscoveryMode
+  period: BookTrendingPeriod
+  subject?: string
+  onChange: (next: Partial<Omit<BookDiscoveryInput, 'page' | 'pageSize'>>) => void
+}) {
+  const { t } = useTranslation()
+  const modeOptions: Array<{ value: BookDiscoveryMode; label: string }> = useMemo(
+    () => [
+      { value: 'trending', label: t('trending') },
+      { value: 'subject', label: t('subject') },
+    ],
+    [t],
+  )
+  const periodOptions: Array<{ value: BookTrendingPeriod; label: string }> = useMemo(
+    () => [
+      { value: 'daily', label: t('daily') },
+      { value: 'weekly', label: t('weekly') },
+      { value: 'monthly', label: t('monthly') },
+      { value: 'yearly', label: t('yearly') },
+    ],
+    [t],
+  )
+  const subjectOptions = useMemo(
+    () => bookSubjectOptions.map((value) => ({ value, label: t(`bookSubject.${value}`) })),
+    [t],
+  )
+  return (
+    <div className="grid gap-2 md:grid-cols-3">
+      <div className="min-w-0">
+        <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('source')}</span>
+        <Select
+          items={modeOptions}
+          value={mode}
+          onValueChange={(value) => onChange({ mode: value as BookDiscoveryMode })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              {modeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="min-w-0">
+        <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('period')}</span>
+        <Select
+          items={periodOptions}
+          value={period}
+          onValueChange={(value) => onChange({ period: value as BookTrendingPeriod })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              {periodOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="min-w-0">
+        <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('subject')}</span>
+        <Select
+          items={subjectOptions}
+          value={subject ?? 'fiction'}
+          onValueChange={(value) => onChange({ mode: 'subject', subject: value || 'fiction' })}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              {subjectOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+function ResourceFilterSheet({
+  title,
+  open,
+  onOpenChange,
+  children,
+}: {
+  title: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: ReactNode
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[86dvh] overflow-y-auto rounded-t-xl">
+        <SheetHeader>
+          <SheetTitle>{title}</SheetTitle>
+          <SheetDescription>{title}</SheetDescription>
+        </SheetHeader>
+        <div className="px-4 pb-4">{children}</div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function useResourceTopbar({
+  pathname,
+  setTopbarOverride,
+  title,
+  subtitle,
+  showFilters,
+  onOpenFilters,
+  t,
+}: {
+  pathname: string
+  setTopbarOverride: AppOutletContext['setTopbarOverride']
+  title: string
+  subtitle: string
+  showFilters: boolean
+  onOpenFilters: () => void
+  t: (key: string) => string
+}) {
+  useEffect(() => {
+    setTopbarOverride({
+      pathname,
+      title,
+      subtitle,
+      actions: showFilters ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-lg"
+          className="rounded-full md:hidden"
+          onClick={onOpenFilters}
+          aria-label={t('filters')}
+          title={t('filters')}
+        >
+          <SlidersHorizontal />
+        </Button>
+      ) : null,
+    })
+    return () => setTopbarOverride(null)
+  }, [onOpenFilters, pathname, setTopbarOverride, showFilters, subtitle, t, title])
+}
+
+function useInfiniteResourceLoader(
+  loadMoreRef: RefObject<HTMLDivElement | null>,
+  hasNextPage: boolean,
+  isFetchingNextPage: boolean,
+  fetchNextPage: () => Promise<unknown>,
+) {
+  useEffect(() => {
+    const target = loadMoreRef.current
+    if (!target || !hasNextPage) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting && !isFetchingNextPage) {
+          void fetchNextPage()
+        }
+      },
+      { rootMargin: '480px 0px' },
+    )
+
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage, loadMoreRef])
+}
+
+function getMusicRangeParam(value: string | null): MusicDiscoveryRange {
+  if (value === 'week' || value === 'month' || value === 'year') return value
+  return 'all_time'
+}
+
+function getMusicModeParam(value: string | null): MusicDiscoveryMode {
+  if (value === 'genre') return 'genre'
+  return 'popular'
+}
+
+function getMusicChartTypeParam(value: string | null): MusicChartType {
+  if (value === 'tracks') return 'tracks'
+  return 'albums'
+}
+
+function getMusicGenreParam(value: string | null): MusicGenre | undefined {
+  if (!value) return undefined
+  return musicGenreOptions.includes(value as MusicGenre) ? (value as MusicGenre) : undefined
+}
+
+function getMusicReleaseTypeParam(value: string | null): MusicReleaseType {
+  if (value === 'ep' || value === 'single') return value
+  return 'album'
+}
+
+function getYearParam(value: string | null): string {
+  if (!value) return ''
+  return /^\d{1,4}$/.test(value) ? value : ''
+}
+
+function getBookModeParam(value: string | null): BookDiscoveryMode {
+  if (value === 'subject') return 'subject'
+  return 'trending'
+}
+
+function getBookPeriodParam(value: string | null): BookTrendingPeriod {
+  if (value === 'weekly' || value === 'monthly' || value === 'yearly') return value
+  return 'daily'
+}
+
+function getBookSubjectParam(value: string | null): string | undefined {
+  if (!value) return undefined
+  return bookSubjectOptions.includes(value) ? value : undefined
 }
 
 export function MusicDetailPage() {
@@ -455,8 +1100,9 @@ function MusicAlbumCard({ item }: { item: MusicAlbumSearchItem }) {
       to={`/music/${encodeURIComponent(item.mediaKey)}`}
       imageUrl={item.coverArt.frontThumbnailUrl ?? item.coverArt.frontUrl}
       title={item.title}
-      subtitle={item.artist ?? ''}
-      meta={[item.releaseYear, item.primaryType].filter(isString).join(' / ')}
+      overlayMeta={item.releaseYear ?? item.artist ?? null}
+      badge={item.secondaryTypes[0] ?? item.primaryType ?? null}
+      score={item.scoreLabel ?? item.releaseYear ?? 'NR'}
     />
   )
 }
@@ -469,10 +1115,9 @@ function BookCard({ item }: { item: BookSearchItem }) {
       to={`/books/${encodeURIComponent(item.mediaKey)}`}
       imageUrl={item.coverUrl}
       title={item.title}
-      subtitle={item.authors.join(', ')}
-      meta={[item.firstPublishYear ? String(item.firstPublishYear) : null, item.languages.slice(0, 2).join(', ')]
-        .filter(isString)
-        .join(' / ')}
+      overlayMeta={item.authors[0] ?? (item.firstPublishYear ? String(item.firstPublishYear) : null)}
+      badge={null}
+      score={item.firstPublishYear ? String(item.firstPublishYear) : 'NR'}
     />
   )
 }
@@ -508,16 +1153,18 @@ function ResourceCard({
   to,
   imageUrl,
   title,
-  subtitle,
-  meta,
+  overlayMeta,
+  badge,
+  score,
 }: {
   kind: ResourceKind
   mediaKey: string
   to: string
   imageUrl: string | null | undefined
   title: string
-  subtitle: string
-  meta: string
+  overlayMeta: string | null
+  badge: string | null
+  score: string
 }) {
   const { t } = useTranslation()
   const { getResourceStatus, setResourceStatus } = useLibrary()
@@ -533,7 +1180,7 @@ function ResourceCard({
 
   return (
     <Card className="group gap-0 overflow-visible bg-transparent p-0 ring-0">
-      <CardContent className="relative aspect-[2/3] overflow-hidden rounded-xl bg-card p-0 shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-foreground/10 transition duration-300 group-hover:-translate-y-1">
+      <CardContent className="relative aspect-[2/3] overflow-hidden rounded-xl bg-card p-0 shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-foreground/10 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_28px_58px_rgba(124,58,237,0.18)]">
         {imageUrl ? (
           <img
             src={imageUrl}
@@ -566,23 +1213,28 @@ function ResourceCard({
           <Heart className={cn('size-6', status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
         </button>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 text-white">
-          <Badge variant="secondary" className="mb-2 bg-white/14 text-white backdrop-blur">
-            {kind === 'book' ? t('book') : t('music')}
-          </Badge>
+          <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
+            {badge ? (
+              <Badge variant="secondary" className="bg-white/14 text-white backdrop-blur">
+                {badge}
+              </Badge>
+            ) : null}
+            <span className="truncate">{overlayMeta ?? t('unknown')}</span>
+          </div>
           <h2 className="line-clamp-2 text-balance font-semibold text-base leading-tight drop-shadow sm:text-xl">
             {title}
           </h2>
         </div>
       </CardContent>
       <CardContent className="px-1 pt-3">
-        <div className="min-w-0 text-muted-foreground text-sm">
+        <div className="flex min-w-0 items-center justify-between gap-2 text-muted-foreground text-sm">
           <Tooltip>
             <TooltipTrigger className="min-w-0">
-              <span className="block truncate text-left">{subtitle || t('unknown')}</span>
+              <span className="block max-w-full truncate text-left">{title}</span>
             </TooltipTrigger>
-            <TooltipContent>{subtitle || t('unknown')}</TooltipContent>
+            <TooltipContent>{title}</TooltipContent>
           </Tooltip>
-          {meta ? <div className="mt-1 truncate text-xs">{meta}</div> : null}
+          <span className="shrink-0 font-medium text-foreground text-xs">{score}</span>
         </div>
       </CardContent>
     </Card>

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { type AuthSession, type AuthUser, createAuth } from './auth'
 import { createDb } from './db/client'
 import type { Env } from './env'
-import { getBookDetails, listTrendingBooks, OpenLibraryError, searchBooks } from './services/books'
+import { discoverBooks, getBookDetails, OpenLibraryError, searchBooks } from './services/books'
 import { listDownloadTasks, streamDownloadTaskEvents } from './services/download-tasks'
 import {
   checkDownloaderHealth,
@@ -51,7 +51,7 @@ import {
   listMediaSources,
   updateMediaSource,
 } from './services/media-sources'
-import { getMusicAlbumDetails, listPopularMusicAlbums, MusicProviderError, searchMusicAlbums } from './services/music'
+import { discoverMusicAlbums, getMusicAlbumDetails, MusicProviderError, searchMusicAlbums } from './services/music'
 import { createInitialAdmin, isInitialized } from './services/setup'
 import {
   discoverMedia,
@@ -80,6 +80,16 @@ const searchQuerySchema = z.object({
 
 const bookSearchQuerySchema = z.object({
   q: z.string().trim().min(1),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(60).default(20),
+})
+
+const bookDiscoverQuerySchema = z.object({
+  mode: z.enum(['trending', 'subject']).default('trending'),
+  period: z.enum(['daily', 'weekly', 'monthly', 'yearly']).default('daily'),
+  subject: z.string().trim().min(1).optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(60).default(20),
 })
 
 const bookParamsSchema = z.object({
@@ -91,6 +101,8 @@ const musicSearchQuerySchema = z
     q: z.string().trim().min(1).optional(),
     artist: z.string().trim().min(1).optional(),
     title: z.string().trim().min(1).optional(),
+    page: z.coerce.number().int().positive().default(1),
+    pageSize: z.coerce.number().int().min(1).max(60).default(20),
   })
   .refine((value) => value.q || value.artist || value.title, {
     message: 'At least one music search field is required.',
@@ -98,6 +110,21 @@ const musicSearchQuerySchema = z
 
 const musicDetailsQuerySchema = z.object({
   mediaKey: z.string().trim().min(1),
+})
+
+const musicDiscoverQuerySchema = z.object({
+  mode: z.enum(['popular', 'genre']).default('popular'),
+  range: z.enum(['week', 'month', 'year', 'all_time']).default('all_time'),
+  chartType: z.enum(['albums', 'tracks']).default('albums'),
+  genre: z.enum(['rock', 'jazz', 'electronic', 'hip-hop', 'classical', 'pop', 'metal']).optional(),
+  releaseType: z.enum(['album', 'ep', 'single']).default('album'),
+  year: z
+    .string()
+    .trim()
+    .regex(/^(19|20)\d{2}$/)
+    .optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(60).default(20),
 })
 
 const indexerSearchQuerySchema = z.object({
@@ -322,19 +349,17 @@ routes.get('/tmdb/search', zValidator('query', searchQuerySchema), async (c) => 
 
 routes.get('/books/search', zValidator('query', bookSearchQuerySchema), async (c) => {
   try {
-    const results = await searchBooks(c.req.valid('query').q)
-    return c.json({ results })
+    return c.json(await searchBooks(c.req.valid('query').q, c.req.valid('query').page, c.req.valid('query').pageSize))
   } catch (error) {
     return openLibraryErrorResponse(c, error, 'Book search failed.')
   }
 })
 
-routes.get('/books/trending', async (c) => {
+routes.get('/books/discover', zValidator('query', bookDiscoverQuerySchema), async (c) => {
   try {
-    const results = await listTrendingBooks()
-    return c.json({ results })
+    return c.json(await discoverBooks(c.req.valid('query')))
   } catch (error) {
-    return openLibraryErrorResponse(c, error, 'Book trending lookup failed.')
+    return openLibraryErrorResponse(c, error, 'Book discovery failed.')
   }
 })
 
@@ -380,17 +405,15 @@ routes.get('/tmdb/genres', zValidator('query', popularQuerySchema), async (c) =>
 
 routes.get('/music/search', zValidator('query', musicSearchQuerySchema), async (c) => {
   try {
-    const results = await searchMusicAlbums(c.req.valid('query'))
-    return c.json({ results })
+    return c.json(await searchMusicAlbums(c.req.valid('query')))
   } catch (error) {
     return musicProviderErrorResponse(c, error)
   }
 })
 
-routes.get('/music/popular', async (c) => {
+routes.get('/music/discover', zValidator('query', musicDiscoverQuerySchema), async (c) => {
   try {
-    const results = await listPopularMusicAlbums()
-    return c.json({ results })
+    return c.json(await discoverMusicAlbums(c.req.valid('query')))
   } catch (error) {
     return musicProviderErrorResponse(c, error)
   }

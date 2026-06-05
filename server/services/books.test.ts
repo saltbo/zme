@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getBookDetails, listTrendingBooks, searchBooks } from './books'
+import { discoverBooks, getBookDetails, searchBooks } from './books'
 
 describe('Open Library book provider', () => {
   afterEach(() => {
@@ -28,9 +28,9 @@ describe('Open Library book provider', () => {
       ),
     )
 
-    const results = await searchBooks('harry potter rowling')
+    const page = await searchBooks('harry potter rowling')
 
-    expect(results).toEqual([
+    expect(page.results).toEqual([
       {
         mediaKey: 'isbn:book:9780747532699',
         title: "Harry Potter and the Philosopher's Stone",
@@ -65,9 +65,9 @@ describe('Open Library book provider', () => {
       ),
     )
 
-    const results = await listTrendingBooks()
+    const page = await discoverBooks({ mode: 'trending', period: 'daily', page: 1, pageSize: 20 })
 
-    expect(results).toEqual([
+    expect(page.results).toEqual([
       expect.objectContaining({
         mediaKey: 'openlibrary:work:OL45883W',
         title: 'Matilda',

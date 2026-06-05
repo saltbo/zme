@@ -1,4 +1,10 @@
-import type { LibraryPageInput, MediaDiscoverInput, MediaKind } from '@shared/types'
+import type {
+  BookDiscoveryInput,
+  LibraryPageInput,
+  MediaDiscoverInput,
+  MediaKind,
+  MusicDiscoveryInput,
+} from '@shared/types'
 
 export const queryKeys = {
   setupStatus: ['setup-status'] as const,
@@ -15,12 +21,12 @@ export const queryKeys = {
   mediaSources: ['media-sources'] as const,
   users: ['users'] as const,
   books: {
-    trending: ['books', 'trending'] as const,
+    discover: (input: Omit<BookDiscoveryInput, 'page'>) => ['books', 'discover', input] as const,
     search: (query: string) => ['books', 'search', query] as const,
     details: (mediaKey: string) => ['books', 'details', mediaKey] as const,
   },
   music: {
-    popular: ['music', 'popular'] as const,
+    discover: (input: Omit<MusicDiscoveryInput, 'page'>) => ['music', 'discover', input] as const,
     search: (query: string) => ['music', 'search', query] as const,
     details: (mediaKey: string) => ['music', 'details', mediaKey] as const,
   },

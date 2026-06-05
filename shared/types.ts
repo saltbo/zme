@@ -41,6 +41,24 @@ export interface BookSearchItem {
   aliases: string[]
 }
 
+export type BookDiscoveryMode = 'trending' | 'subject'
+export type BookTrendingPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly'
+
+export interface BookDiscoveryInput {
+  mode: BookDiscoveryMode
+  period: BookTrendingPeriod
+  subject?: string
+  page: number
+  pageSize: number
+}
+
+export interface ResourcePage<T> {
+  results: T[]
+  page: number
+  totalPages: number
+  totalResults: number
+}
+
 export interface BookDetails extends BookSearchItem {
   description: string | null
   covers: BookCover[]
@@ -103,6 +121,24 @@ export interface MusicAlbumSearchItem {
   secondaryTypes: string[]
   disambiguation: string | null
   coverArt: MusicCoverArt
+  scoreLabel?: string | null
+}
+
+export type MusicDiscoveryMode = 'popular' | 'genre'
+export type MusicDiscoveryRange = 'week' | 'month' | 'year' | 'all_time'
+export type MusicChartType = 'albums' | 'tracks'
+export type MusicGenre = 'rock' | 'jazz' | 'electronic' | 'hip-hop' | 'classical' | 'pop' | 'metal'
+export type MusicReleaseType = 'album' | 'ep' | 'single'
+
+export interface MusicDiscoveryInput {
+  mode: MusicDiscoveryMode
+  range: MusicDiscoveryRange
+  chartType: MusicChartType
+  genre?: MusicGenre
+  releaseType: MusicReleaseType
+  year?: string
+  page: number
+  pageSize: number
 }
 
 export interface MusicAlias {

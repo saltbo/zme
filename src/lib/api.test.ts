@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  discoverBooks,
+  discoverMusicAlbums,
   getBookDetails,
   getMusicAlbumDetails,
-  getPopularMusicAlbums,
-  getTrendingBooks,
   removeLibraryResource,
   saveLibraryResource,
   searchBooks,
@@ -19,12 +19,12 @@ describe('resource api client', () => {
   it('builds book provider request paths with encoded media keys', async () => {
     const fetch = stubJsonFetch({ results: [], item: null })
 
-    await searchBooks('matilda dahl')
+    await searchBooks({ query: 'matilda dahl', page: 2 })
     await getBookDetails('openlibrary:work:OL45883W')
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/books/search?q=matilda+dahl',
+      '/api/books/search?q=matilda+dahl&page=2',
       expect.objectContaining({ credentials: 'include' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
@@ -37,22 +37,59 @@ describe('resource api client', () => {
   it('builds default resource discovery request paths', async () => {
     const fetch = stubJsonFetch({ results: [] })
 
-    await getTrendingBooks()
-    await getPopularMusicAlbums()
+    await discoverBooks({ mode: 'subject', period: 'daily', subject: 'fantasy', page: 3, pageSize: 30 })
+    await discoverMusicAlbums({
+      mode: 'genre',
+      range: 'week',
+      chartType: 'tracks',
+      genre: 'jazz',
+      releaseType: 'ep',
+      year: '2024',
+      page: 2,
+      pageSize: 30,
+    })
 
-    expect(fetch).toHaveBeenNthCalledWith(1, '/api/books/trending', expect.objectContaining({ credentials: 'include' }))
-    expect(fetch).toHaveBeenNthCalledWith(2, '/api/music/popular', expect.objectContaining({ credentials: 'include' }))
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/books/discover?mode=subject&period=daily&subject=fantasy&page=3&pageSize=30',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/music/discover?mode=genre&range=week&chartType=tracks&genre=jazz&releaseType=ep&year=2024&page=2&pageSize=30',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('omits incomplete music discovery years from API requests', async () => {
+    const fetch = stubJsonFetch({ results: [] })
+
+    await discoverMusicAlbums({
+      mode: 'genre',
+      range: 'week',
+      chartType: 'albums',
+      genre: 'jazz',
+      releaseType: 'album',
+      year: '202',
+      page: 1,
+      pageSize: 30,
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/music/discover?mode=genre&range=week&chartType=albums&genre=jazz&releaseType=album&page=1&pageSize=30',
+      expect.objectContaining({ credentials: 'include' }),
+    )
   })
 
   it('builds music provider request paths with encoded query parameters', async () => {
     const fetch = stubJsonFetch({ results: [], item: null })
 
-    await searchMusicAlbums({ query: 'radiohead ok computer' })
+    await searchMusicAlbums({ query: 'radiohead ok computer', page: 2 })
     await getMusicAlbumDetails('musicbrainz:release-group:b1392450-e666-3926-a536-22c65f834433')
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/music/search?q=radiohead+ok+computer',
+      '/api/music/search?q=radiohead+ok+computer&page=2',
       expect.objectContaining({ credentials: 'include' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
