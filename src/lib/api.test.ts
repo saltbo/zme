@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getBookDetails,
   getMusicAlbumDetails,
+  getPopularMusicAlbums,
+  getTrendingBooks,
   removeLibraryResource,
   saveLibraryResource,
   searchBooks,
@@ -30,6 +32,16 @@ describe('resource api client', () => {
       '/api/books/openlibrary%3Awork%3AOL45883W',
       expect.objectContaining({ credentials: 'include' }),
     )
+  })
+
+  it('builds default resource discovery request paths', async () => {
+    const fetch = stubJsonFetch({ results: [] })
+
+    await getTrendingBooks()
+    await getPopularMusicAlbums()
+
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/books/trending', expect.objectContaining({ credentials: 'include' }))
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/music/popular', expect.objectContaining({ credentials: 'include' }))
   })
 
   it('builds music provider request paths with encoded query parameters', async () => {

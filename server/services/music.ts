@@ -88,6 +88,20 @@ interface CoverArtArchiveImage {
   thumbnails?: Record<string, string | undefined>
 }
 
+interface ListenBrainzTopReleasesResponse {
+  payload?: {
+    releases?: ListenBrainzTopRelease[]
+  }
+}
+
+interface ListenBrainzTopRelease {
+  release_mbid?: string
+  release_name?: string
+  artist_name?: string
+  artist_mbids?: string[]
+  listen_count?: number
+}
+
 export class MusicProviderError extends Error {
   constructor(
     message: string,
@@ -100,6 +114,7 @@ export class MusicProviderError extends Error {
 }
 
 const MUSICBRAINZ_API_BASE = 'https://musicbrainz.org/ws/2'
+const LISTENBRAINZ_API_BASE = 'https://api.listenbrainz.org/1'
 const COVER_ART_ARCHIVE_BASE = 'https://coverartarchive.org'
 const MUSICBRAINZ_USER_AGENT = 'zme/0.0.1 (https://github.com/saltbo/zme)'
 const MUSICBRAINZ_REQUEST_INTERVAL_MS = 1000
@@ -123,6 +138,20 @@ export async function searchMusicAlbums(input: {
   const payload = (await fetchMusicBrainzJson(url)) as MusicBrainzSearchResponse
   return (payload['release-groups'] ?? [])
     .map((releaseGroup) => toMusicAlbumSearchItem(releaseGroup))
+    .filter((item): item is MusicAlbumSearchItem => item !== null)
+}
+
+export async function listPopularMusicAlbums(limit = 20): Promise<MusicAlbumSearchItem[]> {
+  const url = new URL(`${LISTENBRAINZ_API_BASE}/stats/sitewide/releases`)
+  url.searchParams.set('count', String(limit))
+
+  const payload = (await fetchListenBrainzJson(url)) as ListenBrainzTopReleasesResponse
+  if (payload.payload?.releases !== undefined && !Array.isArray(payload.payload.releases)) {
+    throw new MusicProviderError('ListenBrainz top releases response has invalid releases.', 502, 'LISTENBRAINZ_FAILED')
+  }
+
+  return (payload.payload?.releases ?? [])
+    .map(toPopularMusicAlbumSearchItem)
     .filter((item): item is MusicAlbumSearchItem => item !== null)
 }
 
@@ -267,6 +296,45 @@ async function fetchMusicBrainzJson(url: URL): Promise<unknown> {
   })
 }
 
+async function fetchListenBrainzJson(url: URL): Promise<unknown> {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': MUSICBRAINZ_USER_AGENT,
+      },
+    })
+  } catch (error) {
+    throw new MusicProviderError(
+      error instanceof Error ? `ListenBrainz request failed: ${error.message}` : 'ListenBrainz request failed.',
+      502,
+      'LISTENBRAINZ_REQUEST_FAILED',
+    )
+  }
+
+  if (!response.ok) {
+    const status = response.status === 429 ? 429 : 502
+    throw new MusicProviderError(
+      `ListenBrainz request failed: ${response.status}`,
+      status,
+      'LISTENBRAINZ_REQUEST_FAILED',
+    )
+  }
+
+  try {
+    return await response.json()
+  } catch (error) {
+    throw new MusicProviderError(
+      error instanceof Error
+        ? `ListenBrainz returned invalid JSON: ${error.message}`
+        : 'ListenBrainz returned invalid JSON.',
+      502,
+      'LISTENBRAINZ_REQUEST_FAILED',
+    )
+  }
+}
+
 async function enqueueMusicBrainzRequest<T>(request: () => Promise<T>): Promise<T> {
   const run = musicBrainzQueue.then(async () => {
     const now = Date.now()
@@ -362,6 +430,31 @@ function toMusicAlbumSearchItem(
     secondaryTypes: releaseGroup['secondary-types'] ?? [],
     disambiguation: releaseGroup.disambiguation?.trim() || null,
     coverArt,
+  }
+}
+
+function toPopularMusicAlbumSearchItem(release: ListenBrainzTopRelease): MusicAlbumSearchItem | null {
+  if (!release.release_mbid || !MBID_PATTERN.test(release.release_mbid) || !release.release_name) return null
+  const artistName = release.artist_name?.trim() || null
+  const artistMbid = release.artist_mbids?.find((mbid) => MBID_PATTERN.test(mbid)) ?? null
+
+  return {
+    mediaKey: buildMusicBrainzMediaKey('release', release.release_mbid),
+    provider: 'musicbrainz',
+    resourceType: 'release',
+    mbid: release.release_mbid,
+    releaseGroupMbid: release.release_mbid,
+    title: release.release_name,
+    artist: artistName,
+    artists: artistName ? [{ id: artistMbid, name: artistName, joinPhrase: '' }] : [],
+    firstReleaseDate: null,
+    releaseYear: null,
+    releaseDate: null,
+    country: null,
+    primaryType: 'Album',
+    secondaryTypes: [],
+    disambiguation: release.listen_count ? `${release.listen_count.toLocaleString()} listens` : null,
+    coverArt: emptyCoverArt(),
   }
 }
 

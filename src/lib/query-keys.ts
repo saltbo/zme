@@ -15,10 +15,12 @@ export const queryKeys = {
   mediaSources: ['media-sources'] as const,
   users: ['users'] as const,
   books: {
+    trending: ['books', 'trending'] as const,
     search: (query: string) => ['books', 'search', query] as const,
     details: (mediaKey: string) => ['books', 'details', mediaKey] as const,
   },
   music: {
+    popular: ['music', 'popular'] as const,
     search: (query: string) => ['music', 'search', query] as const,
     details: (mediaKey: string) => ['music', 'details', mediaKey] as const,
   },

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getBookDetails, searchBooks } from './books'
+import { getBookDetails, listTrendingBooks, searchBooks } from './books'
 
 describe('Open Library book provider', () => {
   afterEach(() => {
@@ -42,6 +42,38 @@ describe('Open Library book provider', () => {
         editionKeys: ['OL7353617M'],
         aliases: ['Harry Potter 1'],
       },
+    ])
+  })
+
+  it('normalizes trending works as book search items', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          works: [
+            {
+              key: '/works/OL45883W',
+              title: 'Matilda',
+              author_name: ['Roald Dahl'],
+              language: ['eng'],
+              first_publish_year: 1988,
+              cover_i: 8739161,
+              edition_key: ['OL7353617M'],
+            },
+          ],
+        }),
+      ),
+    )
+
+    const results = await listTrendingBooks()
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        mediaKey: 'openlibrary:work:OL45883W',
+        title: 'Matilda',
+        authors: ['Roald Dahl'],
+        coverUrl: 'https://covers.openlibrary.org/b/id/8739161-M.jpg',
+      }),
     ])
   })
 

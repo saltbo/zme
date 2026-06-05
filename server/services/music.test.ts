@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getMusicAlbumDetails, searchMusicAlbums } from './music'
+import { getMusicAlbumDetails, listPopularMusicAlbums, searchMusicAlbums } from './music'
 
 const releaseGroupMbid = 'f5093c06-23e3-404f-aeaa-40f72885ee3a'
 const releaseMbid = '59211ea4-fb59-49dd-a69e-83d1666a1aa5'
@@ -88,6 +88,40 @@ describe('music provider', () => {
     await searchMusicAlbums({ q: 'Blue Train Miles Davis' })
 
     expect(fetch.mock.calls[0][0].searchParams.get('query')).toBe('primarytype:album AND Blue Train Miles Davis')
+  })
+
+  it('loads popular releases from ListenBrainz as release-key music albums', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          payload: {
+            releases: [
+              {
+                release_mbid: releaseMbid,
+                release_name: 'Blue Train',
+                artist_name: 'John Coltrane',
+                artist_mbids: ['b625448e-bf4a-41c3-a421-72ad46cdb831'],
+                listen_count: 12000,
+              },
+            ],
+          },
+        }),
+      ),
+    )
+
+    const results = await listPopularMusicAlbums()
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        mediaKey: `musicbrainz:release:${releaseMbid}`,
+        resourceType: 'release',
+        mbid: releaseMbid,
+        title: 'Blue Train',
+        artist: 'John Coltrane',
+        primaryType: 'Album',
+      }),
+    ])
   })
 
   it('loads release details with cover art, aliases, media formats, tracks, recordings, and isrcs', async () => {
