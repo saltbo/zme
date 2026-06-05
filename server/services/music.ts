@@ -109,6 +109,7 @@ let nextMusicBrainzRequestAt = 0
 let musicBrainzQueue = Promise.resolve()
 
 export async function searchMusicAlbums(input: {
+  q?: string
   query?: string
   artist?: string
   title?: string
@@ -314,11 +315,12 @@ async function getCoverArt(kind: 'release' | 'release-group', mbid: string): Pro
   return toCoverArt((await response.json()) as CoverArtArchiveResponse)
 }
 
-function buildReleaseGroupSearchQuery(input: { query?: string; artist?: string; title?: string }): string {
+function buildReleaseGroupSearchQuery(input: { q?: string; query?: string; artist?: string; title?: string }): string {
   const clauses = ['primarytype:album']
+  const query = input.query ?? input.q
   if (input.artist) clauses.push(`artist:"${escapeMusicBrainzQuery(input.artist)}"`)
   if (input.title) clauses.push(`releasegroup:"${escapeMusicBrainzQuery(input.title)}"`)
-  if (input.query) clauses.push(`"${escapeMusicBrainzQuery(input.query)}"`)
+  if (query) clauses.push(`"${escapeMusicBrainzQuery(query)}"`)
   return clauses.join(' AND ')
 }
 
