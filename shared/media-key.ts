@@ -1,5 +1,7 @@
 import type { LibraryKind, MediaKind } from './types'
 
+const MUSICBRAINZ_MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 export interface MediaKeyParts {
   provider: string
   resourceType: string
@@ -18,6 +20,30 @@ export function parseMediaKey(value: string): MediaKeyParts | null {
 
 export function buildTmdbMediaKey(kind: MediaKind, tmdbId: number): string {
   return buildMediaKey({ provider: 'tmdb', resourceType: kind, id: String(tmdbId) })
+}
+
+export function buildMusicBrainzMediaKey(
+  resourceType: 'release-group' | 'release' | 'recording',
+  mbid: string,
+): string {
+  return buildMediaKey({ provider: 'musicbrainz', resourceType, id: mbid })
+}
+
+export function parseMusicBrainzMediaKey(
+  value: string,
+): { resourceType: 'release-group' | 'release' | 'recording'; mbid: string } | null {
+  const parts = parseMediaKey(value)
+  if (parts?.provider !== 'musicbrainz') return null
+  if (
+    parts.resourceType !== 'release-group' &&
+    parts.resourceType !== 'release' &&
+    parts.resourceType !== 'recording'
+  ) {
+    return null
+  }
+  if (!MUSICBRAINZ_MBID_PATTERN.test(parts.id)) return null
+
+  return { resourceType: parts.resourceType, mbid: parts.id }
 }
 
 export function parseTmdbMediaKey(value: string): { kind: MediaKind; tmdbId: number } | null {
@@ -39,10 +65,8 @@ export function getMediaKeyLibraryKind(value: string): LibraryKind | null {
     return parts.resourceType
   }
 
-  if (
-    parts.provider === 'musicbrainz' &&
-    (parts.resourceType === 'release-group' || parts.resourceType === 'release')
-  ) {
+  const musicBrainz = parseMusicBrainzMediaKey(value)
+  if (musicBrainz?.resourceType === 'release-group' || musicBrainz?.resourceType === 'release') {
     return 'music'
   }
   if (parts.provider === 'isbn' && parts.resourceType === 'book') return 'book'

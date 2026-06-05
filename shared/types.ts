@@ -73,6 +73,87 @@ export interface MediaDiscoverPage {
   totalResults: number
 }
 
+export interface MusicArtistCredit {
+  id: string | null
+  name: string
+  joinPhrase: string
+}
+
+export interface MusicCoverArt {
+  frontUrl: string | null
+  frontThumbnailUrl: string | null
+  backUrl: string | null
+  backThumbnailUrl: string | null
+}
+
+export interface MusicAlbumSearchItem {
+  mediaKey: string
+  provider: 'musicbrainz'
+  resourceType: 'release-group' | 'release'
+  mbid: string
+  releaseGroupMbid: string
+  title: string
+  artist: string | null
+  artists: MusicArtistCredit[]
+  firstReleaseDate: string | null
+  releaseYear: string | null
+  releaseDate: string | null
+  country: string | null
+  primaryType: string | null
+  secondaryTypes: string[]
+  disambiguation: string | null
+  coverArt: MusicCoverArt
+}
+
+export interface MusicAlias {
+  name: string
+  locale: string | null
+  primary: boolean
+  type: string | null
+}
+
+export interface MusicReleaseSummary {
+  mediaKey: string
+  mbid: string
+  title: string
+  date: string | null
+  country: string | null
+  status: string | null
+  barcode: string | null
+  formats: string[]
+}
+
+export interface MusicTrack {
+  position: number
+  number: string | null
+  title: string
+  lengthMs: number | null
+  recordingMbid: string | null
+  recordingMediaKey: string | null
+  isrcs: string[]
+}
+
+export interface MusicMedium {
+  position: number
+  format: string | null
+  title: string | null
+  trackCount: number
+  tracks: MusicTrack[]
+}
+
+export interface MusicAlbumDetails extends MusicAlbumSearchItem {
+  detailMediaKey: string
+  releaseMbid: string | null
+  preferredRelease: MusicReleaseSummary | null
+  releases: MusicReleaseSummary[]
+  releaseDate: string | null
+  country: string | null
+  barcode: string | null
+  aliases: MusicAlias[]
+  formats: string[]
+  media: MusicMedium[]
+}
+
 export interface MediaGenre {
   id: number
   name: string
