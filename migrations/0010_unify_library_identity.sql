@@ -22,19 +22,32 @@ INSERT INTO library_next (
   updated_at
 )
 SELECT
-  id,
+  MIN(id) AS id,
   user_id,
-  CASE
-    WHEN kind IN ('movie', 'tv') AND media_key = kind || ':' || tmdb_id THEN 'tmdb:' || kind || ':' || tmdb_id
-    ELSE media_key
-  END,
+  normalized_media_key,
   kind,
   tmdb_id,
-  saved_at,
-  watched_at,
-  created_at,
-  updated_at
-FROM library;
+  MIN(saved_at) AS saved_at,
+  MIN(watched_at) AS watched_at,
+  MIN(created_at) AS created_at,
+  MAX(updated_at) AS updated_at
+FROM (
+  SELECT
+    id,
+    user_id,
+    CASE
+      WHEN kind IN ('movie', 'tv') AND media_key = kind || ':' || tmdb_id THEN 'tmdb:' || kind || ':' || tmdb_id
+      ELSE media_key
+    END AS normalized_media_key,
+    kind,
+    tmdb_id,
+    saved_at,
+    watched_at,
+    created_at,
+    updated_at
+  FROM library
+)
+GROUP BY COALESCE(user_id, id), normalized_media_key, kind, tmdb_id;
 
 DROP INDEX IF EXISTS library_created_at_idx;
 DROP INDEX IF EXISTS library_user_media_key_idx;
