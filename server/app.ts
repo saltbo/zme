@@ -21,6 +21,7 @@ import {
   deleteIndexer,
   getIndexer,
   listIndexers,
+  searchDownloadIndexers,
   searchIndexers,
   updateIndexer,
 } from './services/indexers'
@@ -99,8 +100,12 @@ const musicDetailsQuerySchema = z.object({
 
 const indexerSearchQuerySchema = z.object({
   q: z.string().trim().min(1),
+  target: z.enum(['movie', 'tv', 'music', 'ebook', 'audiobook']).optional(),
   title: z.string().trim().min(1).optional(),
   aliases: z.string().trim().optional(),
+  creators: z.string().trim().optional(),
+  formats: z.string().trim().optional(),
+  narrator: z.string().trim().min(1).optional(),
   year: z
     .string()
     .trim()
@@ -452,18 +457,32 @@ routes.get(
 )
 
 routes.get('/indexers/search', zValidator('query', indexerSearchQuerySchema), async (c) => {
-  const { q, title, aliases, year, kind, imdbId, tmdbId, tvdbId } = c.req.valid('query')
+  const { q, target, title, aliases, creators, formats, narrator, year, kind, imdbId, tmdbId, tvdbId } =
+    c.req.valid('query')
   try {
-    const results = await searchIndexers(createDb(c.env), {
-      query: q,
-      title,
-      aliases: parseAliases(aliases),
-      year,
-      kind,
-      imdbId,
-      tmdbId,
-      tvdbId,
-    })
+    const db = createDb(c.env)
+    const results =
+      target === 'music' || target === 'ebook' || target === 'audiobook'
+        ? await searchDownloadIndexers(db, {
+            target,
+            query: q,
+            title,
+            aliases: parseDelimitedList(aliases),
+            creators: parseDelimitedList(creators),
+            year,
+            formats: parseDelimitedList(formats),
+            narrator,
+          })
+        : await searchIndexers(db, {
+            query: q,
+            title,
+            aliases: parseDelimitedList(aliases),
+            year,
+            kind: target === 'movie' || target === 'tv' ? target : kind,
+            imdbId,
+            tmdbId,
+            tvdbId,
+          })
     return c.json({ results })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Indexer search failed.'
@@ -478,7 +497,7 @@ routes.get('/indexers/search', zValidator('query', indexerSearchQuerySchema), as
   }
 })
 
-function parseAliases(value: string | undefined): string[] {
+function parseDelimitedList(value: string | undefined): string[] {
   if (!value) return []
   return value
     .split('|')

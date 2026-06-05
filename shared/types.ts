@@ -364,8 +364,11 @@ export interface MediaDetails extends MediaSearchItem {
   ids: MediaExternalIds
 }
 
+export type DownloadSearchTarget = 'music' | 'ebook' | 'audiobook'
+
 export interface IndexerSearchItem {
   id: string
+  downloadTarget: DownloadSearchTarget | null
   title: string
   fileName: string | null
   indexer: string
@@ -380,6 +383,7 @@ export interface IndexerSearchItem {
   infoUrl: string | null
   infoHash: string | null
   categories: string[]
+  categoryIds: number[]
   indexerFlags: string[]
   imdbId: number | null
   tmdbId: number | null

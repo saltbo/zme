@@ -7,6 +7,7 @@ import type {
   DownloaderHealth,
   DownloaderInput,
   DownloaderSummary,
+  DownloadSearchTarget,
   DownloadTaskPage,
   IndexerDetails,
   IndexerHealth,
@@ -201,9 +202,13 @@ export async function getMusicAlbumDetails(mediaKey: string) {
 
 export async function searchIndexers(input: {
   query: string
+  target?: MediaKind | DownloadSearchTarget
   title?: string
   aliases?: string[]
+  creators?: string[]
   year?: string | null
+  formats?: string[]
+  narrator?: string | null
   kind?: MediaKind
   imdbId?: string | null
   tmdbId?: number | null
@@ -212,9 +217,13 @@ export async function searchIndexers(input: {
   return apiRequest<{ results: IndexerSearchItem[] }>(
     `/api/indexers/search${query({
       q: input.query,
+      target: input.target,
       title: input.title,
       aliases: input.aliases?.join('|'),
+      creators: input.creators?.join('|'),
       year: input.year ?? undefined,
+      formats: input.formats?.join('|'),
+      narrator: input.narrator ?? undefined,
       kind: input.kind,
       imdbId: input.imdbId ?? undefined,
       tmdbId: input.tmdbId ?? undefined,
