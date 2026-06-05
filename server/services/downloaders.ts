@@ -1,4 +1,4 @@
-import { normalizeZmeDownloadCategory } from '@shared/download-metadata'
+import { getZmeDownloadResourceDirectory, normalizeZmeDownloadCategory } from '@shared/download-metadata'
 import type {
   CreateDownloadInput,
   CreateDownloadResult,
@@ -323,7 +323,7 @@ async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) 
   const options = readJson<ZpanOptions>(downloader.optionsJson)
   await new ZpanClient(downloader.endpoint, credentials.apiKey).createDownloadTask({
     source: { type: input.sourceType, uri: input.uri },
-    targetFolder: options.targetFolder || '',
+    targetFolder: getTypedDownloadDirectory(options.targetFolder, input.category),
     name: input.title,
     category: normalizeZmeDownloadCategory(input.category),
     tags: input.tags,
@@ -337,8 +337,8 @@ async function submitToQbittorrent(downloader: Downloader, input: CreateDownload
   const cookie = await qbittorrentLogin(baseUrl, credentials)
   const form = new FormData()
   form.set('urls', input.uri)
-  if (options.category) form.set('category', options.category)
-  if (options.savePath) form.set('savepath', options.savePath)
+  const savePath = getTypedDownloadDirectory(options.savePath || options.category, input.category)
+  if (savePath) form.set('savepath', savePath)
 
   const response = await fetch(new URL('/api/v2/torrents/add', baseUrl), {
     method: 'POST',
@@ -368,11 +368,12 @@ async function submitToTransmission(downloader: Downloader, input: CreateDownloa
   const credentials = readJson<TransmissionCredentials>(downloader.credentialsJson)
   const options = readJson<TransmissionOptions>(downloader.optionsJson)
   const endpoint = new URL('/transmission/rpc', normalizeBaseUrl(downloader.endpoint))
+  const downloadDir = getTypedDownloadDirectory(options.downloadDir, input.category)
   const body = {
     method: 'torrent-add',
     arguments: {
       filename: input.uri,
-      ...(options.downloadDir ? { 'download-dir': options.downloadDir } : {}),
+      ...(downloadDir ? { 'download-dir': downloadDir } : {}),
     },
   }
 
@@ -408,7 +409,8 @@ async function submitToAria2(downloader: Downloader, input: CreateDownloadInput)
   const options = readJson<Aria2Options>(downloader.optionsJson)
   const params: unknown[] = [[input.uri]]
   if (credentials.secret) params.unshift(`token:${credentials.secret}`)
-  if (options.dir) params.push({ dir: options.dir })
+  const dir = getTypedDownloadDirectory(options.dir, input.category)
+  if (dir) params.push({ dir })
 
   const response = await fetch(downloader.endpoint, {
     method: 'POST',
@@ -437,6 +439,13 @@ function basicAuthHeader(username?: string, password?: string) {
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+}
+
+function getTypedDownloadDirectory(rootDirectory: string | undefined, category: string | undefined) {
+  const resourceDirectory = getZmeDownloadResourceDirectory(category)
+  if (!resourceDirectory) return rootDirectory || ''
+  if (!rootDirectory) return resourceDirectory
+  return `${rootDirectory.replace(/[\\/]+$/, '')}/${resourceDirectory}`
 }
 
 async function assertOk(response: Response, target: string) {

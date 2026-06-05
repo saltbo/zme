@@ -541,7 +541,7 @@ function toDownloaderInput(form: DownloaderFormState): DownloaderInput {
   if (form.kind === 'aria2' && form.secret) credentials.secret = form.secret
 
   if (form.kind === 'zpan' && form.option) options.targetFolder = form.option
-  if (form.kind === 'qbittorrent' && form.option) options.category = form.option
+  if (form.kind === 'qbittorrent' && form.option) options.savePath = form.option
   if (form.kind === 'transmission' && form.option) options.downloadDir = form.option
   if (form.kind === 'aria2' && form.option) options.dir = form.option
 
@@ -587,7 +587,13 @@ function fromDetails(item: DownloaderDetails): DownloaderFormState {
     password: item.credentials.password || '',
     apiKey: item.credentials.apiKey || '',
     secret: item.credentials.secret || '',
-    option: item.options.targetFolder || item.options.category || item.options.downloadDir || item.options.dir || '',
+    option:
+      item.options.targetFolder ||
+      item.options.savePath ||
+      item.options.category ||
+      item.options.downloadDir ||
+      item.options.dir ||
+      '',
   }
 }
 
@@ -611,7 +617,6 @@ function getDefaultEndpoint(kind: DownloaderKind) {
 
 function getOptionLabel(kind: DownloaderKind, t: (key: string) => string) {
   if (kind === 'zpan') return t('targetFolder')
-  if (kind === 'qbittorrent') return t('category')
   return t('downloadDir')
 }
 

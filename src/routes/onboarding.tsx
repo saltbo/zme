@@ -123,7 +123,7 @@ export function OnboardingPage({ onComplete }: { onComplete: () => Promise<void>
       credentials.password = downloaderPassword
     }
     if (downloaderKind === 'zpan' && downloaderOption) options.targetFolder = downloaderOption
-    if (downloaderKind === 'qbittorrent' && downloaderOption) options.category = downloaderOption
+    if (downloaderKind === 'qbittorrent' && downloaderOption) options.savePath = downloaderOption
     if (downloaderKind === 'transmission' && downloaderOption) options.downloadDir = downloaderOption
     if (downloaderKind === 'aria2' && downloaderOption) options.dir = downloaderOption
 
@@ -414,7 +414,6 @@ function getDownloaderKindLabel(kind: DownloaderKind) {
 
 function getDownloaderOptionLabel(kind: DownloaderKind) {
   if (kind === 'zpan') return 'Target folder'
-  if (kind === 'qbittorrent') return 'Category'
   if (kind === 'transmission') return 'Download directory'
   return 'Directory'
 }

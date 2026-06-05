@@ -1527,7 +1527,7 @@ function toBookReleaseMedia(book: BookDetails, target: 'ebook' | 'audiobook'): R
     releaseYear: book.firstPublishYear ? String(book.firstPublishYear) : null,
     rating: null,
     genres: book.languages,
-    downloadCategory: `zme:book:${target}`,
+    downloadCategory: `zme:${target}`,
     downloadTags: [`mediaKey=${book.mediaKey}`, 'kind=book', `target=${target}`],
   }
 }
