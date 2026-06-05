@@ -34,7 +34,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-b bg-background/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 border-b bg-background/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {showBackButton ? (

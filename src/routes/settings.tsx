@@ -117,7 +117,7 @@ function LibraryImportSettings() {
     onSuccess: async (payload) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.librarySources }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.library }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.library.root }),
       ])
       toast.success(t('librarySourceSynced', { ...payload.result }))
     },

@@ -1,8 +1,13 @@
-import type { MediaDiscoverInput, MediaKind } from '@shared/types'
+import type { LibraryPageInput, MediaDiscoverInput, MediaKind } from '@shared/types'
 
 export const queryKeys = {
   setupStatus: ['setup-status'] as const,
-  library: ['library'] as const,
+  library: {
+    root: ['library'] as const,
+    states: ['library', 'states'] as const,
+    page: (input: LibraryPageInput) => ['library', 'page', input] as const,
+    infinite: (input: Omit<LibraryPageInput, 'page'>) => ['library', 'infinite', input] as const,
+  },
   librarySources: ['library-sources'] as const,
   downloaders: ['downloaders'] as const,
   downloadTasks: (status: string) => ['download-tasks', status] as const,

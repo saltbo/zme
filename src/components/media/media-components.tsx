@@ -7,12 +7,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -121,7 +116,6 @@ export function DiscoverFilterBar({
   kind,
   genres,
   genresLoading,
-  resultCount,
   totalResults,
   sortBy,
   genreId,
@@ -140,7 +134,6 @@ export function DiscoverFilterBar({
   kind: MediaKind
   genres: MediaGenre[]
   genresLoading: boolean
-  resultCount: number
   totalResults: number
   sortBy: MediaDiscoverSort
   genreId?: number

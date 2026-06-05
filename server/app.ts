@@ -28,6 +28,7 @@ import {
   deleteWatched,
   getLibraryItem,
   listLibrary,
+  listLibraryStates,
   saveLibraryItem,
   setWatched,
 } from './services/library'
@@ -104,6 +105,14 @@ const personParamsSchema = z.object({
 })
 
 const libraryItemParamsSchema = mediaDetailParamsSchema
+
+const libraryQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(60).default(36),
+  language: z.string().trim().min(2).optional(),
+  kind: z.enum(['all', 'movie', 'tv']).default('all'),
+  status: z.enum(['all', 'unwatched', 'watched']).default('all'),
+})
 
 const librarySourceParamsSchema = z.object({
   source: z.enum(['douban']),
@@ -398,9 +407,14 @@ function parseAliases(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-routes.get('/library', async (c) => {
+routes.get('/library', zValidator('query', libraryQuerySchema), async (c) => {
   const db = createDb(c.env)
-  const items = await listLibrary(db, c.get('user').id, await getActiveTmdbSource(db))
+  const input = c.req.valid('query')
+  return c.json(await listLibrary(db, c.get('user').id, await getActiveTmdbSource(db, input.language), input))
+})
+
+routes.get('/library/states', async (c) => {
+  const items = await listLibraryStates(createDb(c.env), c.get('user').id)
   return c.json({ items })
 })
 

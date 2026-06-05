@@ -1,5 +1,14 @@
-import type { LibraryMediaInput, LibraryMediaItem, MediaKind } from '@shared/types'
-import { and, desc, eq } from 'drizzle-orm'
+import type {
+  LibraryFilterKind,
+  LibraryFilterStatus,
+  LibraryMediaInput,
+  LibraryMediaItem,
+  LibraryMediaPage,
+  LibraryPageInput,
+  LibraryStateItem,
+  MediaKind,
+} from '@shared/types'
+import { and, count, desc, eq, isNotNull, isNull, type SQL } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { type LibraryItem, library } from '../db/schema'
 import type { ActiveTmdbSource } from './media-sources'
@@ -7,9 +16,44 @@ import { getMediaSummary } from './tmdb'
 
 type Db = ReturnType<typeof createDb>
 
-export async function listLibrary(db: Db, userId: string, tmdb: ActiveTmdbSource): Promise<LibraryMediaItem[]> {
-  const rows = await db.select().from(library).where(eq(library.userId, userId)).orderBy(desc(library.updatedAt))
-  return Promise.all(rows.map((row) => toLibraryMediaItem(row, tmdb)))
+export async function listLibrary(
+  db: Db,
+  userId: string,
+  tmdb: ActiveTmdbSource,
+  input: LibraryPageInput,
+): Promise<LibraryMediaPage> {
+  const page = Math.max(1, input.page)
+  const pageSize = Math.min(60, Math.max(1, input.pageSize))
+  const where = libraryWhere(userId, input.kind, input.status)
+  const totalRows = await db.select({ value: count() }).from(library).where(where)
+  const totalResults = totalRows[0]?.value ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalResults / pageSize))
+  const rows = await db
+    .select()
+    .from(library)
+    .where(where)
+    .orderBy(desc(library.updatedAt))
+    .limit(pageSize)
+    .offset((page - 1) * pageSize)
+  const items = await Promise.all(rows.map((row) => toLibraryMediaItem(row, tmdb)))
+  return {
+    items,
+    page,
+    pageSize,
+    totalResults,
+    totalPages,
+  }
+}
+
+export async function listLibraryStates(db: Db, userId: string): Promise<LibraryStateItem[]> {
+  const rows = await db.select().from(library).where(eq(library.userId, userId))
+  return rows.map((row) => ({
+    id: row.tmdbId,
+    kind: row.kind,
+    savedAt: row.savedAt,
+    watchedAt: row.watchedAt,
+    updatedAt: row.updatedAt,
+  }))
 }
 
 export async function getLibraryItem(
@@ -266,4 +310,20 @@ async function toLibraryMediaItem(row: LibraryItem, tmdb: ActiveTmdbSource): Pro
 
 function mediaKey(kind: MediaKind, tmdbId: number): string {
   return `${kind}:${tmdbId}`
+}
+
+function libraryWhere(userId: string, kind?: LibraryFilterKind, status?: LibraryFilterStatus): SQL {
+  const filters: SQL[] = [eq(library.userId, userId)]
+
+  if (kind === 'movie' || kind === 'tv') {
+    filters.push(eq(library.kind, kind))
+  }
+
+  if (status === 'watched') {
+    filters.push(isNotNull(library.watchedAt))
+  } else if (status === 'unwatched') {
+    filters.push(isNotNull(library.savedAt), isNull(library.watchedAt))
+  }
+
+  return and(...filters) as SQL
 }

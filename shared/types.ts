@@ -51,6 +51,33 @@ export interface LibraryMediaItem extends MediaSearchItem {
   updatedAt: string
 }
 
+export type LibraryFilterKind = MediaKind | 'all'
+export type LibraryFilterStatus = 'all' | 'unwatched' | 'watched'
+
+export interface LibraryStateItem {
+  id: number
+  kind: MediaKind
+  savedAt: string | null
+  watchedAt: string | null
+  updatedAt: string
+}
+
+export interface LibraryPageInput {
+  page: number
+  pageSize: number
+  language?: string
+  kind?: LibraryFilterKind
+  status?: LibraryFilterStatus
+}
+
+export interface LibraryMediaPage {
+  items: LibraryMediaItem[]
+  page: number
+  pageSize: number
+  totalResults: number
+  totalPages: number
+}
+
 export type LibrarySourceKind = 'douban'
 
 export interface LibrarySourceInput {

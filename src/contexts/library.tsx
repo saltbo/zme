@@ -1,16 +1,16 @@
-import type { LibraryMediaItem, MediaSearchItem } from '@shared/types'
+import type { LibraryStateItem, MediaSearchItem } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { listLibrary, markWatched, removeLibraryItem, saveLibraryItem, unmarkWatched } from '@/lib/api'
+import { listLibraryStates, markWatched, removeLibraryItem, saveLibraryItem, unmarkWatched } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export type MediaStatus = 'none' | 'saved' | 'watched'
 
 interface LibraryContextValue {
-  items: LibraryMediaItem[]
+  items: LibraryStateItem[]
   loading: boolean
   isSaved: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
   isWatched: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
@@ -26,8 +26,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const library = useQuery({
-    queryKey: queryKeys.library,
-    queryFn: async () => (await listLibrary()).items,
+    queryKey: queryKeys.library.states,
+    queryFn: async () => (await listLibraryStates()).items,
   })
   const libraryItems = library.data ?? []
   const items = useMemo(() => libraryItems.filter((item) => item.savedAt), [libraryItems])
@@ -63,10 +63,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     mutationFn: saveLibraryItem,
     onSuccess: (payload, item) => {
       const key = getMediaKey(item)
-      queryClient.setQueryData<LibraryMediaItem[]>(queryKeys.library, (current = []) => [
-        payload.item,
+      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => [
+        toLibraryState(payload.item),
         ...current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
       ])
+      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
       toast.success(t('savedAdded'))
     },
   })
@@ -75,9 +76,10 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     mutationFn: (item: MediaSearchItem) => removeLibraryItem(item.kind, item.id),
     onSuccess: (_payload, item) => {
       const key = getMediaKey(item)
-      queryClient.setQueryData<LibraryMediaItem[]>(queryKeys.library, (current = []) =>
+      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) =>
         current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
       )
+      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
       toast.success(t('savedRemoved'))
     },
   })
@@ -87,10 +89,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       watched ? markWatched(item) : unmarkWatched(item.kind, item.id),
     onSuccess: (payload, variables) => {
       const key = getMediaKey(variables.item)
-      queryClient.setQueryData<LibraryMediaItem[]>(queryKeys.library, (current = []) => {
+      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => {
         if (!payload.item) return current.filter((state) => getMediaKey(state) !== key)
-        return [payload.item, ...current.filter((state) => getMediaKey(state) !== key)]
+        return [toLibraryState(payload.item), ...current.filter((state) => getMediaKey(state) !== key)]
       })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
       toast.success(variables.watched ? t('watchedAdded') : t('watchedRemoved'))
     },
   })
@@ -174,4 +177,14 @@ export function useLibrary() {
 
 function getMediaKey(item: Pick<MediaSearchItem, 'id' | 'kind'>) {
   return `${item.kind}:${item.id}`
+}
+
+function toLibraryState(item: LibraryStateItem): LibraryStateItem {
+  return {
+    id: item.id,
+    kind: item.kind,
+    savedAt: item.savedAt,
+    watchedAt: item.watchedAt,
+    updatedAt: item.updatedAt,
+  }
 }

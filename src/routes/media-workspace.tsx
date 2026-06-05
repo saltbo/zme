@@ -50,9 +50,7 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   })
   const search = useMediaSearch(searchQuery, tmdbLanguage)
   const media = hasSearched ? (search.data ?? []) : (discover.data?.pages.flatMap((page) => page.results) ?? [])
-  const visibleMedia = hasSearched
-    ? media.filter((item) => mode === 'discover' || item.kind === mediaKind)
-    : media
+  const visibleMedia = hasSearched ? media.filter((item) => mode === 'discover' || item.kind === mediaKind) : media
   const totalResults = discover.data?.pages[0]?.totalResults ?? 0
   const error = hasSearched ? search.error : discover.error
 
@@ -124,9 +122,9 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
       const next = new URLSearchParams(current)
       next.delete('sort')
       next.delete('genre')
-          next.delete('country')
-          next.delete('year')
-          next.delete('rating')
+      next.delete('country')
+      next.delete('year')
+      next.delete('rating')
       return next
     })
   }
@@ -140,7 +138,6 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
           kind={mediaKind}
           genres={genres.data ?? []}
           genresLoading={genres.isLoading}
-          resultCount={visibleMedia.length}
           totalResults={totalResults}
           sortBy={sortBy}
           genreId={genreId}

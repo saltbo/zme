@@ -13,10 +13,13 @@ import type {
   IndexerSummary,
   LibraryMediaInput,
   LibraryMediaItem,
+  LibraryMediaPage,
+  LibraryPageInput,
   LibrarySourceInput,
   LibrarySourceKind,
   LibrarySourceSummary,
   LibrarySourceSyncResult,
+  LibraryStateItem,
   MediaDetails,
   MediaDiscoverInput,
   MediaDiscoverPage,
@@ -184,8 +187,21 @@ export async function searchIndexers(input: {
   )
 }
 
-export async function listLibrary() {
-  return apiRequest<{ items: LibraryMediaItem[] }>('/api/library', 'Failed to load library.')
+export async function listLibrary(input: LibraryPageInput) {
+  return apiRequest<LibraryMediaPage>(
+    `/api/library${query({
+      page: input.page,
+      pageSize: input.pageSize,
+      language: input.language,
+      kind: input.kind && input.kind !== 'all' ? input.kind : undefined,
+      status: input.status && input.status !== 'all' ? input.status : undefined,
+    })}`,
+    'Failed to load library.',
+  )
+}
+
+export async function listLibraryStates() {
+  return apiRequest<{ items: LibraryStateItem[] }>('/api/library/states', 'Failed to load library states.')
 }
 
 export async function saveLibraryItem(input: LibraryMediaInput) {
