@@ -116,7 +116,7 @@ const libraryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(60).default(36),
   language: z.string().trim().min(2).optional(),
-  kind: z.enum(['all', 'movie', 'tv']).default('all'),
+  kind: z.enum(['all', 'movie', 'tv', 'music', 'book']).default('all'),
   status: z.enum(['all', 'unwatched', 'watched']).default('all'),
 })
 
@@ -429,7 +429,8 @@ function parseAliases(value: string | undefined): string[] {
 routes.get('/library', zValidator('query', libraryQuerySchema), async (c) => {
   const db = createDb(c.env)
   const input = c.req.valid('query')
-  return c.json(await listLibrary(db, c.get('user').id, await getActiveTmdbSource(db, input.language), input))
+  const tmdb = input.kind === 'music' || input.kind === 'book' ? null : await getActiveTmdbSource(db, input.language)
+  return c.json(await listLibrary(db, c.get('user').id, tmdb, input))
 })
 
 routes.get('/library/states', async (c) => {

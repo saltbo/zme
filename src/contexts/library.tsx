@@ -1,3 +1,4 @@
+import { buildTmdbMediaKey } from '@shared/media-key'
 import type { LibraryStateItem, MediaSearchItem } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -175,12 +176,14 @@ export function useLibrary() {
   return context
 }
 
-function getMediaKey(item: Pick<MediaSearchItem, 'id' | 'kind'>) {
-  return `${item.kind}:${item.id}`
+function getMediaKey(item: Pick<MediaSearchItem, 'id' | 'kind'> | LibraryStateItem) {
+  if ('mediaKey' in item) return item.mediaKey
+  return buildTmdbMediaKey(item.kind, item.id)
 }
 
 function toLibraryState(item: LibraryStateItem): LibraryStateItem {
   return {
+    mediaKey: item.mediaKey,
     id: item.id,
     kind: item.kind,
     savedAt: item.savedAt,
