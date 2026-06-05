@@ -21,6 +21,8 @@ import { useMutation } from '@tanstack/react-query'
 import {
   BookOpen,
   CalendarDays,
+  Check,
+  ChevronsUpDown,
   Disc3,
   Heart,
   Languages,
@@ -30,7 +32,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import type { ReactNode, RefObject } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
@@ -64,6 +66,8 @@ const resourceSkeletonKeys = [
 ]
 
 const RESOURCE_PAGE_SIZE = 30
+const currentYear = new Date().getFullYear()
+const musicYearOptions = Array.from({ length: currentYear - 1949 }, (_, index) => String(currentYear - index))
 
 const bookSubjectOptions = ['fiction', 'fantasy', 'romance', 'science_fiction', 'business', 'history', 'biography']
 const musicGenreOptions: MusicGenre[] = ['rock', 'jazz', 'electronic', 'hip-hop', 'classical', 'pop', 'metal']
@@ -363,6 +367,7 @@ function MusicFilterControls({
   onChange: (next: Partial<Omit<MusicDiscoveryInput, 'page' | 'pageSize'>>) => void
 }) {
   const { t } = useTranslation()
+  const yearInputId = useId()
   const modeOptions: Array<{ value: MusicDiscoveryMode; label: string }> = useMemo(
     () => [
       { value: 'popular', label: t('popular') },
@@ -511,22 +516,126 @@ function MusicFilterControls({
             </Select>
           </div>
           <div className="min-w-0">
-            <label htmlFor="music-discovery-year" className="mb-1 block font-medium text-muted-foreground text-xs">
+            <label htmlFor={yearInputId} className="mb-1 block font-medium text-muted-foreground text-xs">
               {t('year')}
             </label>
-            <input
-              id="music-discovery-year"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="2026"
-              value={year}
-              onChange={(event) => onChange({ year: event.target.value.replace(/\D/g, '').slice(0, 4) })}
-              className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            />
+            <MusicYearPicker inputId={yearInputId} year={year} onChange={(nextYear) => onChange({ year: nextYear })} />
           </div>
         </>
       )}
     </div>
+  )
+}
+
+function MusicYearPicker({
+  inputId,
+  year,
+  onChange,
+}: {
+  inputId: string
+  year: string
+  onChange: (year: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [draft, setDraft] = useState(year)
+  const [filtering, setFiltering] = useState(false)
+  const filteredYears = useMemo(() => {
+    if (!filtering || !draft) return musicYearOptions
+    return musicYearOptions.filter((option) => option.startsWith(draft))
+  }, [draft, filtering])
+
+  useEffect(() => {
+    setDraft(year)
+  }, [year])
+
+  function updateYear(value: string) {
+    const nextYear = value.replace(/\D/g, '').slice(0, 4)
+    setDraft(nextYear)
+    setFiltering(true)
+    onChange(nextYear)
+  }
+
+  function openYearList() {
+    setFiltering(false)
+    setOpen(true)
+  }
+
+  const selectYear = useCallback(
+    (nextYear: string) => {
+      setDraft(nextYear)
+      setFiltering(false)
+      onChange(nextYear)
+      setOpen(false)
+    },
+    [onChange],
+  )
+
+  return (
+    <div className="relative">
+      <div
+        className={cn(
+          'relative flex h-8 w-full min-w-0 items-center rounded-lg border border-input bg-transparent text-sm transition-colors outline-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50',
+        )}
+      >
+        <input
+          id={inputId}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls={`${inputId}-listbox`}
+          aria-expanded={open}
+          inputMode="numeric"
+          pattern="[0-9]*"
+          placeholder={String(currentYear)}
+          value={draft}
+          onFocus={openYearList}
+          onClick={openYearList}
+          onChange={(event) => updateYear(event.target.value)}
+          className="h-full min-w-0 flex-1 bg-transparent px-2.5 py-1 pr-8 outline-none placeholder:text-muted-foreground"
+        />
+        <ChevronsUpDown className="-translate-y-1/2 pointer-events-none absolute top-1/2 right-2 size-4 text-muted-foreground" />
+      </div>
+      {open ? (
+        <div
+          id={`${inputId}-listbox`}
+          role="listbox"
+          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground text-sm shadow-md ring-1 ring-foreground/10"
+        >
+          {filteredYears.length > 0 ? (
+            filteredYears.map((option) => (
+              <MusicYearOption key={option} option={option} selected={option === year} onSelect={selectYear} />
+            ))
+          ) : (
+            <div className="px-2.5 py-2 text-muted-foreground">No years</div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function MusicYearOption({
+  option,
+  selected,
+  onSelect,
+}: {
+  option: string
+  selected: boolean
+  onSelect: (option: string) => void
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      onMouseDown={(event) => {
+        event.preventDefault()
+        onSelect(option)
+      }}
+      className="flex h-8 w-full cursor-default items-center justify-between rounded-md px-2.5 text-left outline-none hover:bg-muted aria-selected:bg-muted"
+    >
+      {option}
+      {selected ? <Check /> : null}
+    </button>
   )
 }
 
