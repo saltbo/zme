@@ -23,7 +23,7 @@ export function LibraryPage() {
   const status = getStatusParam(searchParams.get('status'))
   const isResourceFilter = kind === 'music' || kind === 'book'
   const resourceItems = isResourceFilter
-    ? libraryStates.filter((item) => item.savedAt && item.kind === kind && status !== 'watched')
+    ? libraryStates.filter((item) => item.kind === kind && matchesResourceLibraryStatus(item, status))
     : []
   const input = { pageSize: PAGE_SIZE, language: getTmdbLanguage(i18n.language), kind, status }
   const library = useInfiniteQuery({
@@ -160,6 +160,15 @@ function getKindParam(value: string | null): LibraryFilterKind {
 
 function getStatusParam(value: string | null): LibraryFilterStatus {
   return value === 'unwatched' || value === 'watched' ? value : 'all'
+}
+
+function matchesResourceLibraryStatus(
+  item: { savedAt: string | null; watchedAt: string | null },
+  status: LibraryFilterStatus,
+) {
+  if (status === 'watched') return Boolean(item.watchedAt)
+  if (status === 'unwatched') return Boolean(item.savedAt) && !item.watchedAt
+  return Boolean(item.savedAt)
 }
 
 function updateLibraryParams(

@@ -15,11 +15,10 @@ import type {
   IndexerInput,
   IndexerSearchItem,
   IndexerSummary,
-  LibraryMediaInput,
-  LibraryMediaItem,
   LibraryMediaPage,
   LibraryPageInput,
   LibraryResourceInput,
+  LibraryResourceStateInput,
   LibrarySourceInput,
   LibrarySourceKind,
   LibrarySourceSummary,
@@ -295,27 +294,10 @@ export async function listLibraryStates() {
   return apiRequest<{ items: LibraryStateItem[] }>('/api/library/states', 'Failed to load library states.')
 }
 
-export async function saveLibraryItem(input: LibraryMediaInput) {
-  return apiRequest<{ item: LibraryMediaItem }>(
-    `/api/library/${input.kind}/${input.id}`,
-    'Failed to save library item.',
-    {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    },
-  )
-}
-
-export async function saveLibraryResource(input: LibraryResourceInput) {
+export async function saveLibraryResource(input: LibraryResourceStateInput) {
   return apiRequest<{ item: LibraryStateItem }>('/api/library/resources', 'Failed to save library item.', {
     method: 'PUT',
     body: JSON.stringify(input),
-  })
-}
-
-export async function removeLibraryItem(kind: MediaKind, id: number) {
-  return apiRequest<{ kind: MediaKind; id: number }>(`/api/library/${kind}/${id}`, 'Failed to remove library item.', {
-    method: 'DELETE',
   })
 }
 
@@ -326,27 +308,6 @@ export async function removeLibraryResource(input: LibraryResourceInput) {
     {
       method: 'DELETE',
       body: JSON.stringify(input),
-    },
-  )
-}
-
-export async function markWatched(input: LibraryMediaInput) {
-  return apiRequest<{ item: LibraryMediaItem }>(
-    `/api/library/${input.kind}/${input.id}/watched`,
-    'Failed to update watched status.',
-    {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    },
-  )
-}
-
-export async function unmarkWatched(kind: MediaKind, id: number) {
-  return apiRequest<{ item: LibraryMediaItem | null; kind: MediaKind; id: number }>(
-    `/api/library/${kind}/${id}/watched`,
-    'Failed to update watched status.',
-    {
-      method: 'DELETE',
     },
   )
 }

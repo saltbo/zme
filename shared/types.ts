@@ -202,6 +202,9 @@ export interface LibraryResourceInput {
   kind: LibraryKind
 }
 
+export type LibraryResourceStatus = 'saved' | 'watched'
+export type LibraryResourceStateInput = LibraryResourceInput & { status?: LibraryResourceStatus }
+
 export interface LibraryMediaItem extends MediaSearchItem {
   mediaKey: string
   libraryItemId: string

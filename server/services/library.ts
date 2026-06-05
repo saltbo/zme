@@ -71,62 +71,6 @@ export async function listLibraryStates(db: Db, userId: string): Promise<Library
   }))
 }
 
-export async function getLibraryItem(
-  db: Db,
-  userId: string,
-  kind: MediaKind,
-  tmdbId: number,
-  tmdb: ActiveTmdbSource,
-): Promise<LibraryMediaItem | null> {
-  const rows = await db
-    .select()
-    .from(library)
-    .where(and(eq(library.userId, userId), eq(library.mediaKey, buildTmdbMediaKey(kind, tmdbId))))
-    .limit(1)
-  return rows[0] ? toLibraryMediaItem(rows[0], tmdb) : null
-}
-
-export async function saveLibraryItem(
-  db: Db,
-  userId: string,
-  input: LibraryMediaInput,
-  tmdb: ActiveTmdbSource,
-  savedAt?: string,
-): Promise<LibraryMediaItem> {
-  const now = new Date().toISOString()
-  const nextSavedAt = savedAt ?? now
-  const resource = toTmdbLibraryResource(input)
-  const key = resource.mediaKey
-  const existing = await getLibraryRow(db, userId, key)
-  if (existing) {
-    const rows = await db
-      .update(library)
-      .set({
-        savedAt: existing.savedAt ?? nextSavedAt,
-        updatedAt: now,
-      })
-      .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-      .returning()
-
-    return toLibraryMediaItem(rows[0] ?? existing, tmdb)
-  }
-
-  const row: LibraryItem = {
-    id: crypto.randomUUID(),
-    userId,
-    mediaKey: key,
-    kind: resource.kind,
-    tmdbId: resource.tmdbId,
-    savedAt: nextSavedAt,
-    watchedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await db.insert(library).values(row)
-  return toLibraryMediaItem(row, tmdb)
-}
-
 export async function saveLibraryState(
   db: Db,
   userId: string,
@@ -178,71 +122,6 @@ export async function deleteLibraryState(db: Db, userId: string, input: LibraryR
   return rows.length > 0
 }
 
-export async function deleteLibraryItem(db: Db, userId: string, kind: MediaKind, tmdbId: number): Promise<boolean> {
-  const key = buildTmdbMediaKey(kind, tmdbId)
-  const existing = await getLibraryRow(db, userId, key)
-  if (!existing) return false
-
-  const rows = await db
-    .delete(library)
-    .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-    .returning({
-      id: library.id,
-    })
-  return rows.length > 0
-}
-
-export async function setWatched(
-  db: Db,
-  userId: string,
-  input: LibraryMediaInput,
-  watched: boolean,
-  tmdb: ActiveTmdbSource,
-  watchedAt?: string,
-): Promise<LibraryMediaItem | null> {
-  const now = new Date().toISOString()
-  const nextWatchedAt = watchedAt ?? now
-  const resource = toTmdbLibraryResource(input)
-  const key = resource.mediaKey
-  const existing = await getLibraryRow(db, userId, key)
-
-  if (existing) {
-    if (!watched && !existing.savedAt) {
-      await db.delete(library).where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-      return null
-    }
-
-    const rows = await db
-      .update(library)
-      .set({
-        savedAt: watched ? (existing.savedAt ?? nextWatchedAt) : existing.savedAt,
-        watchedAt: watched ? (existing.watchedAt ?? nextWatchedAt) : null,
-        updatedAt: now,
-      })
-      .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-      .returning()
-
-    return rows[0] ? toLibraryMediaItem(rows[0], tmdb) : null
-  }
-
-  if (!watched) return null
-
-  const row: LibraryItem = {
-    id: crypto.randomUUID(),
-    userId,
-    mediaKey: key,
-    kind: resource.kind,
-    tmdbId: resource.tmdbId,
-    savedAt: nextWatchedAt,
-    watchedAt: nextWatchedAt,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await db.insert(library).values(row)
-  return toLibraryMediaItem(row, tmdb)
-}
-
 export async function setWatchedState(
   db: Db,
   userId: string,
@@ -291,31 +170,6 @@ export async function setWatchedState(
 
   await db.insert(library).values(row)
   return row
-}
-
-export async function deleteWatched(
-  db: Db,
-  userId: string,
-  kind: MediaKind,
-  tmdbId: number,
-  tmdb: ActiveTmdbSource,
-): Promise<LibraryMediaItem | null> {
-  const key = buildTmdbMediaKey(kind, tmdbId)
-  const existing = await getLibraryRow(db, userId, key)
-  if (!existing?.watchedAt) return null
-
-  if (!existing.savedAt) {
-    await db.delete(library).where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-    return null
-  }
-
-  const rows = await db
-    .update(library)
-    .set({ watchedAt: null, updatedAt: new Date().toISOString() })
-    .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-    .returning()
-
-  return rows[0] ? toLibraryMediaItem(rows[0], tmdb) : null
 }
 
 async function getLibraryRow(db: Db, userId: string, key: string): Promise<LibraryItem | null> {

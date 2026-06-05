@@ -131,6 +131,27 @@ describe('resource api client', () => {
     )
   })
 
+  it('uses the resource library endpoint for watched media keys', async () => {
+    const fetch = stubJsonFetch({ item: null })
+    const input = {
+      kind: 'music' as const,
+      mediaKey: 'musicbrainz:release-group:b1392450-e666-3926-a536-22c65f834433',
+      status: 'watched' as const,
+    }
+
+    await saveLibraryResource(input)
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/library/resources',
+      expect.objectContaining({
+        body: JSON.stringify(input),
+        credentials: 'include',
+        headers: expect.objectContaining({ 'content-type': 'application/json' }),
+        method: 'PUT',
+      }),
+    )
+  })
+
   it('sends target-aware resource indexer search parameters', async () => {
     const fetch = stubJsonFetch({ results: [] })
 

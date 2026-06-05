@@ -3,6 +3,7 @@ import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 import { type AuthSession, type AuthUser, createAuth } from './auth'
 import { createDb } from './db/client'
+import type { LibraryItem } from './db/schema'
 import type { Env } from './env'
 import { discoverBooks, getBookDetails, OpenLibraryError, searchBooks } from './services/books'
 import { listDownloadTasks, streamDownloadTaskEvents } from './services/download-tasks'
@@ -26,15 +27,11 @@ import {
   updateIndexer,
 } from './services/indexers'
 import {
-  deleteLibraryItem,
   deleteLibraryState,
-  deleteWatched,
-  getLibraryItem,
   listLibrary,
   listLibraryStates,
-  saveLibraryItem,
   saveLibraryState,
-  setWatched,
+  setWatchedState,
 } from './services/library'
 import {
   deleteLibrarySource,
@@ -150,11 +147,6 @@ const indexerSearchQuerySchema = z.object({
   tvdbId: z.coerce.number().int().positive().optional(),
 })
 
-const mediaDetailParamsSchema = z.object({
-  kind: z.enum(['movie', 'tv']),
-  id: z.coerce.number().int().positive(),
-})
-
 const mediaIdParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
@@ -167,8 +159,6 @@ const seasonParamsSchema = z.object({
 const personParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
-
-const libraryItemParamsSchema = mediaDetailParamsSchema
 
 const libraryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -194,14 +184,10 @@ const mediaDetailQuerySchema = languageQuerySchema.extend({
     .default('US'),
 })
 
-const libraryItemSchema = z.object({
-  id: z.number().int().positive(),
-  kind: z.enum(['movie', 'tv']),
-})
-
 const libraryResourceSchema = z.object({
   mediaKey: z.string().trim().min(1),
-  kind: z.enum(['music', 'book']),
+  kind: z.enum(['movie', 'tv', 'music', 'book']),
+  status: z.enum(['saved', 'watched']).default('saved'),
 })
 
 const librarySourceSchema = z.object({
@@ -553,6 +539,25 @@ function parseDelimitedList(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
+function decodeRouteMediaKey(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function toLibraryStateResponse(row: LibraryItem) {
+  return {
+    mediaKey: row.mediaKey,
+    id: row.tmdbId,
+    kind: row.kind,
+    savedAt: row.savedAt,
+    watchedAt: row.watchedAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
 function musicProviderErrorResponse(c: Context<AppEnv>, error: unknown) {
   if (error instanceof MusicProviderError) {
     return c.json({ code: error.code, error: error.message }, error.status as 400 | 404 | 429 | 502)
@@ -610,17 +615,15 @@ routes.post('/library/sources/:source/sync', zValidator('param', librarySourcePa
 })
 
 routes.put('/library/resources', zValidator('json', libraryResourceSchema), async (c) => {
-  const row = await saveLibraryState(createDb(c.env), c.get('user').id, c.req.valid('json'))
-  return c.json({
-    item: {
-      mediaKey: row.mediaKey,
-      id: row.tmdbId,
-      kind: row.kind,
-      savedAt: row.savedAt,
-      watchedAt: row.watchedAt,
-      updatedAt: row.updatedAt,
-    },
-  })
+  const input = c.req.valid('json')
+  const db = createDb(c.env)
+  const row =
+    input.status === 'watched'
+      ? await setWatchedState(db, c.get('user').id, input, true)
+      : ((await setWatchedState(db, c.get('user').id, input, false)) ??
+        (await saveLibraryState(db, c.get('user').id, input)))
+
+  return c.json({ item: toLibraryStateResponse(row) })
 })
 
 routes.delete(
@@ -628,7 +631,7 @@ routes.delete(
   zValidator('param', bookParamsSchema),
   zValidator('json', libraryResourceSchema),
   async (c) => {
-    const { mediaKey } = c.req.valid('param')
+    const mediaKey = decodeRouteMediaKey(c.req.valid('param').mediaKey)
     const input = c.req.valid('json')
     if (input.mediaKey !== mediaKey) return c.json({ error: 'Library route does not match request body.' }, 400)
 
@@ -637,60 +640,6 @@ routes.delete(
     return c.json({ mediaKey, kind: input.kind })
   },
 )
-
-routes.get('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
-  const { kind, id } = c.req.valid('param')
-  const db = createDb(c.env)
-  const item = await getLibraryItem(db, c.get('user').id, kind, id, await getActiveTmdbSource(db))
-  if (!item) return c.json({ error: 'Library item not found.' }, 404)
-  return c.json({ item })
-})
-
-routes.put(
-  '/library/:kind/:id',
-  zValidator('param', libraryItemParamsSchema),
-  zValidator('json', libraryItemSchema),
-  async (c) => {
-    const { kind, id } = c.req.valid('param')
-    const input = c.req.valid('json')
-    if (input.kind !== kind || input.id !== id)
-      return c.json({ error: 'Library route does not match request body.' }, 400)
-
-    const db = createDb(c.env)
-    const item = await saveLibraryItem(db, c.get('user').id, input, await getActiveTmdbSource(db))
-    return c.json({ item })
-  },
-)
-
-routes.delete('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
-  const { kind, id } = c.req.valid('param')
-  const deleted = await deleteLibraryItem(createDb(c.env), c.get('user').id, kind, id)
-  if (!deleted) return c.json({ error: 'Library item not found.' }, 404)
-  return c.json({ kind, id })
-})
-
-routes.put(
-  '/library/:kind/:id/watched',
-  zValidator('param', libraryItemParamsSchema),
-  zValidator('json', libraryItemSchema),
-  async (c) => {
-    const { kind, id } = c.req.valid('param')
-    const input = c.req.valid('json')
-    if (input.kind !== kind || input.id !== id)
-      return c.json({ error: 'Library route does not match request body.' }, 400)
-
-    const db = createDb(c.env)
-    const item = await setWatched(db, c.get('user').id, input, true, await getActiveTmdbSource(db))
-    return c.json({ item })
-  },
-)
-
-routes.delete('/library/:kind/:id/watched', zValidator('param', libraryItemParamsSchema), async (c) => {
-  const { kind, id } = c.req.valid('param')
-  const db = createDb(c.env)
-  const item = await deleteWatched(db, c.get('user').id, kind, id, await getActiveTmdbSource(db))
-  return c.json({ item, kind, id })
-})
 
 routes.get('/media-sources', async (c) => {
   const items = await listMediaSources(createDb(c.env))

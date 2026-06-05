@@ -5,15 +5,7 @@ import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import {
-  listLibraryStates,
-  markWatched,
-  removeLibraryItem,
-  removeLibraryResource,
-  saveLibraryItem,
-  saveLibraryResource,
-  unmarkWatched,
-} from '@/lib/api'
+import { listLibraryStates, removeLibraryResource, saveLibraryResource } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export type MediaStatus = 'none' | 'saved' | 'watched'
@@ -25,7 +17,7 @@ interface LibraryContextValue {
   isWatched: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
   getResourceStatus: (item: LibraryResourceInput) => MediaStatus
   getMediaStatus: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => MediaStatus
-  setResourceStatus: (item: LibraryResourceInput, status: Extract<MediaStatus, 'none' | 'saved'>) => Promise<void>
+  setResourceStatus: (item: LibraryResourceInput, status: MediaStatus) => Promise<void>
   setMediaStatus: (item: MediaSearchItem, status: MediaStatus) => Promise<void>
   toggleSaved: (item: MediaSearchItem) => Promise<void>
   toggleWatched: (item: MediaSearchItem) => Promise<void>
@@ -73,37 +65,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   const getResourceStatus = useCallback(
     (item: LibraryResourceInput): MediaStatus => {
       const state = stateByKey.get(item.mediaKey)
+      if (state?.watchedAt) return 'watched'
       return state?.savedAt ? 'saved' : 'none'
     },
     [stateByKey],
   )
 
-  const saveSavedItem = useMutation({
-    mutationFn: saveLibraryItem,
-    onSuccess: (payload, item) => {
-      const key = getMediaKey(item)
-      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => [
-        toLibraryState(payload.item),
-        ...current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
-      ])
-      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
-      toast.success(t('savedAdded'))
-    },
-  })
-
-  const removeSavedItem = useMutation({
-    mutationFn: (item: MediaSearchItem) => removeLibraryItem(item.kind, item.id),
-    onSuccess: (_payload, item) => {
-      const key = getMediaKey(item)
-      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) =>
-        current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
-      )
-      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
-      toast.success(t('savedRemoved'))
-    },
-  })
-
-  const saveSavedResource = useMutation({
+  const saveResource = useMutation({
     mutationFn: saveLibraryResource,
     onSuccess: (payload, item) => {
       queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => [
@@ -111,11 +79,11 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
         ...current.filter((libraryItem) => libraryItem.mediaKey !== item.mediaKey),
       ])
       void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
-      toast.success(t('savedAdded'))
+      toast.success(item.status === 'watched' ? t('watchedAdded') : t('savedAdded'))
     },
   })
 
-  const removeSavedResource = useMutation({
+  const removeResource = useMutation({
     mutationFn: removeLibraryResource,
     onSuccess: (_payload, item) => {
       queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) =>
@@ -126,81 +94,40 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     },
   })
 
-  const saveWatched = useMutation({
-    mutationFn: async ({ item, watched }: { item: MediaSearchItem; watched: boolean }) =>
-      watched ? markWatched(item) : unmarkWatched(item.kind, item.id),
-    onSuccess: (payload, variables) => {
-      const key = getMediaKey(variables.item)
-      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => {
-        if (!payload.item) return current.filter((state) => getMediaKey(state) !== key)
-        return [toLibraryState(payload.item), ...current.filter((state) => getMediaKey(state) !== key)]
-      })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
-      toast.success(variables.watched ? t('watchedAdded') : t('watchedRemoved'))
-    },
-  })
+  const setResourceStatus = useCallback(
+    async (item: LibraryResourceInput, status: MediaStatus) => {
+      const current = getResourceStatus(item)
+      if (current === status) return
 
-  const toggleSaved = useCallback(
-    async (item: MediaSearchItem) => {
-      if (savedKeys.has(getMediaKey(item))) {
-        await removeSavedItem.mutateAsync(item)
+      if (status === 'none') {
+        await removeResource.mutateAsync(item)
         return
       }
 
-      await saveSavedItem.mutateAsync(item)
+      await saveResource.mutateAsync({ ...item, status })
     },
-    [removeSavedItem, savedKeys, saveSavedItem],
+    [getResourceStatus, removeResource, saveResource],
+  )
+
+  const toggleSaved = useCallback(
+    async (item: MediaSearchItem) => {
+      await setResourceStatus(toLibraryResourceInput(item), savedKeys.has(getMediaKey(item)) ? 'none' : 'saved')
+    },
+    [savedKeys, setResourceStatus],
   )
 
   const toggleWatched = useCallback(
     async (item: MediaSearchItem) => {
-      await saveWatched.mutateAsync({ item, watched: !watchedKeys.has(getMediaKey(item)) })
+      await setResourceStatus(toLibraryResourceInput(item), watchedKeys.has(getMediaKey(item)) ? 'none' : 'watched')
     },
-    [saveWatched, watchedKeys],
+    [setResourceStatus, watchedKeys],
   )
 
   const setMediaStatus = useCallback(
     async (item: MediaSearchItem, status: MediaStatus) => {
-      const current = getMediaStatus(item)
-      if (current === status) return
-
-      if (status === 'saved') {
-        if (current === 'watched') {
-          await saveWatched.mutateAsync({ item, watched: false })
-          return
-        }
-        await saveSavedItem.mutateAsync(item)
-        return
-      }
-
-      if (status === 'watched') {
-        await saveWatched.mutateAsync({ item, watched: true })
-        return
-      }
-
-      if (current === 'watched') {
-        await saveWatched.mutateAsync({ item, watched: false })
-      }
-      if (current !== 'none') {
-        await removeSavedItem.mutateAsync(item)
-      }
+      await setResourceStatus(toLibraryResourceInput(item), status)
     },
-    [getMediaStatus, removeSavedItem, saveSavedItem, saveWatched],
-  )
-
-  const setResourceStatus = useCallback(
-    async (item: LibraryResourceInput, status: Extract<MediaStatus, 'none' | 'saved'>) => {
-      const current = getResourceStatus(item)
-      if (current === status) return
-
-      if (status === 'saved') {
-        await saveSavedResource.mutateAsync(item)
-        return
-      }
-
-      await removeSavedResource.mutateAsync(item)
-    },
-    [getResourceStatus, removeSavedResource, saveSavedResource],
+    [setResourceStatus],
   )
 
   const value = useMemo(
@@ -248,6 +175,13 @@ export function useLibrary() {
 function getMediaKey(item: Pick<MediaSearchItem, 'id' | 'kind'> | LibraryStateItem) {
   if ('mediaKey' in item) return item.mediaKey
   return buildTmdbMediaKey(item.kind, item.id)
+}
+
+function toLibraryResourceInput(item: Pick<MediaSearchItem, 'id' | 'kind'>): LibraryResourceInput {
+  return {
+    mediaKey: buildTmdbMediaKey(item.kind, item.id),
+    kind: item.kind,
+  }
 }
 
 function toLibraryState(item: LibraryStateItem): LibraryStateItem {

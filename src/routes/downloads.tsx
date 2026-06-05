@@ -19,6 +19,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDownloadTasks } from '@/hooks/use-download-task-queries'
 import { useMediaDetails } from '@/hooks/use-media-queries'
+import { useBookDetails, useMusicAlbumDetails } from '@/hooks/use-resource-queries'
 import { getTmdbLanguage } from '@/i18n'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -34,6 +35,7 @@ const activeStatuses = new Set<DownloadTaskStatus>([
 const statusFilters: DownloadTaskStatus[] = ['running', 'uploading', 'paused', 'completed', 'failed', 'canceled']
 const skeletonKeys = ['download-skeleton-1', 'download-skeleton-2', 'download-skeleton-3', 'download-skeleton-4']
 type StatusFilter = 'all' | DownloadTaskStatus
+type TaggedResource = { kind: 'music' | 'book'; mediaKey: string }
 
 export function DownloadsPage() {
   const { t } = useTranslation()
@@ -138,12 +140,17 @@ function SummaryTile({ icon: Icon, label, value }: { icon: typeof DownloadCloud;
 function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
   const { t, i18n } = useTranslation()
   const taggedMedia = getTaggedMedia(task)
+  const taggedResource = getTaggedResource(task)
   const language = getTmdbLanguage(i18n.language)
   const mediaDetails = useMediaDetails(taggedMedia?.kind ?? 'movie', taggedMedia?.tmdbId ?? 0, language)
+  const resourceDetails = useDownloadResourceDetails(taggedResource)
   const posterMedia = mediaDetails.data ?? null
-  const imageUrl = posterMedia?.backdropUrl ?? posterMedia?.posterUrl
-  const displayTitle = posterMedia?.title || getDisplayTitle(task.name)
-  const mediaMeta = getMediaMeta(posterMedia?.kind ?? taggedMedia?.kind ?? null, posterMedia?.releaseYear ?? null, t)
+  const imageUrl = resourceDetails.imageUrl ?? posterMedia?.backdropUrl ?? posterMedia?.posterUrl
+  const displayTitle = resourceDetails.title ?? posterMedia?.title ?? getDisplayTitle(task.name)
+  const mediaMeta =
+    resourceDetails.meta ??
+    getMediaMeta(posterMedia?.kind ?? taggedMedia?.kind ?? null, posterMedia?.releaseYear ?? null, t)
+  const overview = resourceDetails.description ?? posterMedia?.overview ?? null
   const progress = getProgress(task)
   const status = getStatusMeta(task.status, t)
   const primaryProgress = getPrimaryProgress(task.status, progress)
@@ -182,9 +189,7 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
         </div>
         <div className="absolute inset-x-0 bottom-1.5 max-w-2xl p-4 text-white sm:p-5">
           <h2 className="line-clamp-2 text-balance font-semibold text-xl leading-tight drop-shadow">{displayTitle}</h2>
-          {posterMedia?.overview ? (
-            <p className="mt-2 line-clamp-1 max-w-xl text-sm text-white/76 leading-5">{posterMedia.overview}</p>
-          ) : null}
+          {overview ? <p className="mt-2 line-clamp-1 max-w-xl text-sm text-white/76 leading-5">{overview}</p> : null}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-white/72 text-xs">
             {mediaMeta ? <span>{mediaMeta}</span> : null}
             {mediaMeta ? <span className="text-white/36">/</span> : null}
@@ -208,12 +213,59 @@ function getTaggedMedia(task: DownloadTaskSummary): { kind: MediaKind; tmdbId: n
   return kind && tmdbId ? { kind, tmdbId } : null
 }
 
+function getTaggedResource(task: DownloadTaskSummary): TaggedResource | null {
+  const kind = getTagValue(task.tags, 'kind')
+  const mediaKey = getTagValue(task.tags, 'mediaKey')
+  if ((kind === 'music' || kind === 'book') && mediaKey) return { kind, mediaKey }
+  return null
+}
+
+function useDownloadResourceDetails(resource: TaggedResource | null) {
+  const music = useMusicAlbumDetails(resource?.mediaKey ?? '', { enabled: resource?.kind === 'music' })
+  const book = useBookDetails(resource?.mediaKey ?? '', { enabled: resource?.kind === 'book' })
+
+  if (resource?.kind === 'music' && music.data) {
+    return {
+      title: music.data.title,
+      imageUrl: music.data.coverArt.frontUrl ?? music.data.coverArt.frontThumbnailUrl,
+      meta: [music.data.artist, music.data.releaseYear, music.data.primaryType].filter(Boolean).join(' / ') || null,
+      description: music.data.disambiguation,
+    }
+  }
+
+  if (resource?.kind === 'book' && book.data) {
+    return {
+      title: book.data.title,
+      imageUrl: book.data.coverUrl,
+      meta:
+        [book.data.authors.join(', '), book.data.firstPublishYear ? String(book.data.firstPublishYear) : null]
+          .filter(Boolean)
+          .join(' / ') || null,
+      description: book.data.description,
+    }
+  }
+
+  return {
+    title: null,
+    imageUrl: null,
+    meta: null,
+    description: null,
+  }
+}
+
 function getTagNumber(tags: string[], key: string): number | null {
+  const tagValue = getTagValue(tags, key)
+  if (!tagValue) return null
+  const value = Number(tagValue)
+  return Number.isInteger(value) && value > 0 ? value : null
+}
+
+function getTagValue(tags: string[], key: string): string | null {
   const prefix = `${key}=`
   const tag = tags.find((value) => value.startsWith(prefix))
   if (!tag) return null
-  const value = Number(tag.slice(prefix.length))
-  return Number.isInteger(value) && value > 0 ? value : null
+  const value = tag.slice(prefix.length).trim()
+  return value || null
 }
 
 function getStatusMeta(status: DownloadTaskStatus, t: (key: string) => string) {

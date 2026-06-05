@@ -23,6 +23,7 @@ import {
   CalendarDays,
   Check,
   ChevronsUpDown,
+  CircleCheck,
   Disc3,
   Heart,
   Languages,
@@ -31,7 +32,7 @@ import {
   Search,
   SlidersHorizontal,
 } from 'lucide-react'
-import type { ReactNode, RefObject } from 'react'
+import type { MouseEvent, ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router'
@@ -1263,7 +1264,7 @@ function ResourceDetailLayout({
   const { getResourceStatus, setResourceStatus } = useLibrary()
   const status = getResourceStatus(statusInput)
 
-  async function updateStatus(nextStatus: Extract<MediaStatus, 'none' | 'saved'>) {
+  async function updateStatus(nextStatus: MediaStatus) {
     try {
       await setResourceStatus(statusInput, nextStatus)
     } catch (error) {
@@ -1302,7 +1303,7 @@ function ResourceDetailLayout({
                     {kind === 'book' ? <BookOpen className="size-3.5" /> : <Disc3 className="size-3.5" />}
                     {kind === 'book' ? t('book') : t('music')}
                   </Badge>
-                  <ResourceStatusButton status={status} onChange={updateStatus} />
+                  <ResourceStatusButton kind={kind} status={status} onChange={updateStatus} />
                 </div>
                 <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:text-4xl sm:leading-[0.98]">
                   {title}
@@ -1319,7 +1320,7 @@ function ResourceDetailLayout({
                   {kind === 'book' ? t('book') : t('music')}
                 </Badge>
                 <div className="flex shrink-0 items-center gap-2">
-                  <ResourceStatusButton status={status} onChange={updateStatus} />
+                  <ResourceStatusButton kind={kind} status={status} onChange={updateStatus} />
                   {actions}
                 </div>
               </div>
@@ -1354,26 +1355,51 @@ function ResourceDetailLayout({
 }
 
 function ResourceStatusButton({
+  kind,
   status,
   onChange,
 }: {
-  status: Extract<MediaStatus, 'none' | 'saved'>
-  onChange: (nextStatus: Extract<MediaStatus, 'none' | 'saved'>) => Promise<void>
+  kind: ResourceKind
+  status: MediaStatus
+  onChange: (nextStatus: MediaStatus) => Promise<void>
 }) {
   const { t } = useTranslation()
 
   return (
-    <Button
-      type="button"
-      variant={status === 'saved' ? 'secondary' : 'outline'}
-      size="icon-lg"
-      className="size-11 shrink-0 rounded-xl border-white/18 bg-white/12 text-white shadow-lg backdrop-blur hover:bg-white/20 hover:text-white"
-      onClick={() => void onChange(status === 'saved' ? 'none' : 'saved')}
-      aria-label={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
-      title={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
-    >
-      {status === 'saved' ? <RotateCcw /> : <Heart />}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant={status === 'none' ? 'outline' : 'secondary'}
+            size="icon-lg"
+            className="size-11 shrink-0 rounded-xl border-white/18 bg-white/12 text-white shadow-lg backdrop-blur hover:bg-white/20 hover:text-white"
+            aria-label={t('mediaStatus')}
+            title={t('mediaStatus')}
+          />
+        }
+      >
+        {status === 'watched' ? (
+          <CircleCheck className="fill-[#77d6a8] text-[#123524]" />
+        ) : (
+          <Heart className={cn(status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onClick={() => void onChange('saved')}>
+          <Heart className={cn(status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
+          {t('saveToLibrary')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void onChange('watched')}>
+          <CircleCheck className={cn(status === 'watched' && 'fill-[#77d6a8] text-[#123524]')} />
+          {kind === 'music' ? t('markListened') : t('markRead')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void onChange('none')} disabled={status === 'none'}>
+          <RotateCcw />
+          {t('clearMediaStatus')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -1455,9 +1481,9 @@ function ResourceCard({
   const { getResourceStatus, setResourceStatus } = useLibrary()
   const status = getResourceStatus({ kind, mediaKey })
 
-  async function toggleSaved() {
+  async function handleStatusChange(nextStatus: MediaStatus) {
     try {
-      await setResourceStatus({ kind, mediaKey }, status === 'saved' ? 'none' : 'saved')
+      await setResourceStatus({ kind, mediaKey }, nextStatus)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('mediaStatusToggleFailed'))
     }
@@ -1480,23 +1506,7 @@ function ResourceCard({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
         <Link to={to} aria-label={title} className="absolute inset-0 z-10" />
-        <button
-          type="button"
-          onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void toggleSaved()
-          }}
-          aria-label={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
-          title={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
-          className={cn(
-            'absolute top-2 right-2 z-30 flex size-10 items-center justify-center text-white/88 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:group-hover:opacity-100',
-            status === 'none' && 'opacity-100 hover:text-[#f06595] md:opacity-0',
-            status === 'saved' && 'text-[#f06595] opacity-100',
-          )}
-        >
-          <Heart className={cn('size-6', status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
-        </button>
+        <ResourceCardStatusMenu kind={kind} status={status} onChange={handleStatusChange} />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 text-white">
           <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
             {badge ? (
@@ -1523,6 +1533,82 @@ function ResourceCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function ResourceCardStatusMenu({
+  kind,
+  status,
+  onChange,
+}: {
+  kind: ResourceKind
+  status: MediaStatus
+  onChange: (nextStatus: MediaStatus) => Promise<void>
+}) {
+  const { t } = useTranslation()
+
+  function handleTriggerClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+  }
+
+  return (
+    <div className="absolute top-2 right-2 z-30">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              onPointerDown={handleTriggerClick}
+              onClick={handleTriggerClick}
+              aria-label={t('mediaStatus')}
+              title={t('mediaStatus')}
+              className={cn(
+                'flex size-10 items-center justify-center text-white/88 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white md:group-hover:opacity-100',
+                status === 'none' && 'opacity-100 hover:text-[#f06595] md:opacity-0',
+                status === 'saved' && 'text-[#f06595] opacity-100',
+                status === 'watched' && 'text-[#77d6a8] opacity-100',
+              )}
+            >
+              {status === 'watched' ? (
+                <CircleCheck className="size-6 fill-[#77d6a8] text-[#123524]" />
+              ) : (
+                <Heart className={cn('size-6', status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
+              )}
+            </button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-44" onClick={(event) => event.stopPropagation()}>
+          <DropdownMenuItem
+            onClick={(event) => {
+              event.stopPropagation()
+              void onChange('saved')
+            }}
+          >
+            <Heart className={cn(status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
+            {t('saveToLibrary')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={(event) => {
+              event.stopPropagation()
+              void onChange('watched')
+            }}
+          >
+            <CircleCheck className={cn(status === 'watched' && 'fill-[#77d6a8] text-[#123524]')} />
+            {kind === 'music' ? t('markListened') : t('markRead')}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={(event) => {
+              event.stopPropagation()
+              void onChange('none')
+            }}
+            disabled={status === 'none'}
+          >
+            <RotateCcw />
+            {t('clearMediaStatus')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   )
 }
 
