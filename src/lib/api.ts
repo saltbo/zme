@@ -1,4 +1,6 @@
 import type {
+  BookDetails,
+  BookSearchItem,
   CreateDownloadInput,
   CreateDownloadResult,
   DownloaderDetails,
@@ -93,6 +95,17 @@ export async function searchMedia(queryValue: string, language: string) {
     `/api/tmdb/search${query({ q: queryValue, language })}`,
     'Failed to search media.',
   )
+}
+
+export async function searchBooks(queryValue: string) {
+  return apiRequest<{ results: BookSearchItem[] }>(
+    `/api/books/search${query({ q: queryValue })}`,
+    'Failed to search books.',
+  )
+}
+
+export async function getBookDetails(mediaKey: string) {
+  return apiRequest<{ item: BookDetails }>(`/api/books/${encodeURIComponent(mediaKey)}`, 'Failed to load book details.')
 }
 
 export async function getSetupStatus() {

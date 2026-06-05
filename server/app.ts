@@ -1,9 +1,10 @@
 import { zValidator } from '@hono/zod-validator'
-import { Hono, type MiddlewareHandler } from 'hono'
+import { type Context, Hono, type MiddlewareHandler } from 'hono'
 import { z } from 'zod'
 import { type AuthSession, type AuthUser, createAuth } from './auth'
 import { createDb } from './db/client'
 import type { Env } from './env'
+import { getBookDetails, OpenLibraryError, searchBooks } from './services/books'
 import { listDownloadTasks, streamDownloadTaskEvents } from './services/download-tasks'
 import {
   checkDownloaderHealth,
@@ -71,6 +72,14 @@ type AppEnv = {
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1),
   language: z.string().trim().min(2).optional(),
+})
+
+const bookSearchQuerySchema = z.object({
+  q: z.string().trim().min(1),
+})
+
+const bookParamsSchema = z.object({
+  mediaKey: z.string().trim().min(1),
 })
 
 const indexerSearchQuerySchema = z.object({
@@ -282,6 +291,24 @@ routes.get('/tmdb/search', zValidator('query', searchQuerySchema), async (c) => 
   const source = await getActiveTmdbSource(createDb(c.env), language)
   const results = await searchMedia(source.apiKey, q, source.language)
   return c.json({ results })
+})
+
+routes.get('/books/search', zValidator('query', bookSearchQuerySchema), async (c) => {
+  try {
+    const results = await searchBooks(c.req.valid('query').q)
+    return c.json({ results })
+  } catch (error) {
+    return openLibraryErrorResponse(c, error, 'Book search failed.')
+  }
+})
+
+routes.get('/books/:mediaKey', zValidator('param', bookParamsSchema), async (c) => {
+  try {
+    const item = await getBookDetails(decodeURIComponent(c.req.valid('param').mediaKey))
+    return c.json({ item })
+  } catch (error) {
+    return openLibraryErrorResponse(c, error, 'Book detail lookup failed.')
+  }
 })
 
 routes.get('/tmdb/trending', zValidator('query', languageQuerySchema), async (c) => {
@@ -694,4 +721,12 @@ async function requireAdminExceptIndexerSearchMiddleware(
 
 function isAdmin(user: AuthUser): boolean {
   return (user.role || '').split(',').includes('admin')
+}
+
+function openLibraryErrorResponse(c: Context<AppEnv>, error: unknown, fallback: string) {
+  if (error instanceof OpenLibraryError) {
+    const status = error.status === 400 || error.status === 404 ? error.status : 502
+    return c.json({ code: status === 404 ? 'BOOK_NOT_FOUND' : 'OPEN_LIBRARY_ERROR', error: error.message }, status)
+  }
+  return c.json({ code: 'OPEN_LIBRARY_ERROR', error: error instanceof Error ? error.message : fallback }, 502)
 }
