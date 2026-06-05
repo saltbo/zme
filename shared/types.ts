@@ -1,4 +1,5 @@
 export type MediaKind = 'movie' | 'tv'
+export type LibraryKind = MediaKind | 'music' | 'book'
 
 export interface MediaSearchItem {
   id: number
@@ -44,19 +45,26 @@ export interface MediaGenre {
 
 export type LibraryMediaInput = Pick<MediaSearchItem, 'id' | 'kind'>
 
+export interface LibraryResourceInput {
+  mediaKey: string
+  kind: LibraryKind
+}
+
 export interface LibraryMediaItem extends MediaSearchItem {
+  mediaKey: string
   libraryItemId: string
   savedAt: string | null
   watchedAt: string | null
   updatedAt: string
 }
 
-export type LibraryFilterKind = MediaKind | 'all'
+export type LibraryFilterKind = LibraryKind | 'all'
 export type LibraryFilterStatus = 'all' | 'unwatched' | 'watched'
 
 export interface LibraryStateItem {
-  id: number
-  kind: MediaKind
+  mediaKey: string
+  id: number | null
+  kind: LibraryKind
   savedAt: string | null
   watchedAt: string | null
   updatedAt: string

@@ -1,3 +1,4 @@
+import { buildTmdbMediaKey, getMediaKeyLibraryKind, parseTmdbMediaKey } from '@shared/media-key'
 import type {
   LibraryFilterKind,
   LibraryFilterStatus,
@@ -5,10 +6,11 @@ import type {
   LibraryMediaItem,
   LibraryMediaPage,
   LibraryPageInput,
+  LibraryResourceInput,
   LibraryStateItem,
   MediaKind,
 } from '@shared/types'
-import { and, count, desc, eq, isNotNull, isNull, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNotNull, isNull, type SQL } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { type LibraryItem, library } from '../db/schema'
 import type { ActiveTmdbSource } from './media-sources'
@@ -19,11 +21,23 @@ type Db = ReturnType<typeof createDb>
 export async function listLibrary(
   db: Db,
   userId: string,
-  tmdb: ActiveTmdbSource,
+  tmdb: ActiveTmdbSource | null,
   input: LibraryPageInput,
 ): Promise<LibraryMediaPage> {
+  if (input.kind === 'music' || input.kind === 'book') {
+    return {
+      items: [],
+      page: Math.max(1, input.page),
+      pageSize: Math.min(60, Math.max(1, input.pageSize)),
+      totalResults: 0,
+      totalPages: 1,
+    }
+  }
+
   const page = Math.max(1, input.page)
   const pageSize = Math.min(60, Math.max(1, input.pageSize))
+  if (!tmdb) throw new Error('TMDB source is required for movie and tv library items.')
+
   const where = libraryWhere(userId, input.kind, input.status)
   const totalRows = await db.select({ value: count() }).from(library).where(where)
   const totalResults = totalRows[0]?.value ?? 0
@@ -48,6 +62,7 @@ export async function listLibrary(
 export async function listLibraryStates(db: Db, userId: string): Promise<LibraryStateItem[]> {
   const rows = await db.select().from(library).where(eq(library.userId, userId))
   return rows.map((row) => ({
+    mediaKey: row.mediaKey,
     id: row.tmdbId,
     kind: row.kind,
     savedAt: row.savedAt,
@@ -66,7 +81,7 @@ export async function getLibraryItem(
   const rows = await db
     .select()
     .from(library)
-    .where(and(eq(library.userId, userId), eq(library.mediaKey, mediaKey(kind, tmdbId))))
+    .where(and(eq(library.userId, userId), eq(library.mediaKey, buildTmdbMediaKey(kind, tmdbId))))
     .limit(1)
   return rows[0] ? toLibraryMediaItem(rows[0], tmdb) : null
 }
@@ -80,7 +95,8 @@ export async function saveLibraryItem(
 ): Promise<LibraryMediaItem> {
   const now = new Date().toISOString()
   const nextSavedAt = savedAt ?? now
-  const key = mediaKey(input.kind, input.id)
+  const resource = toTmdbLibraryResource(input)
+  const key = resource.mediaKey
   const existing = await getLibraryRow(db, userId, key)
   if (existing) {
     const rows = await db
@@ -99,8 +115,8 @@ export async function saveLibraryItem(
     id: crypto.randomUUID(),
     userId,
     mediaKey: key,
-    kind: input.kind,
-    tmdbId: input.id,
+    kind: resource.kind,
+    tmdbId: resource.tmdbId,
     savedAt: nextSavedAt,
     watchedAt: null,
     createdAt: now,
@@ -114,12 +130,13 @@ export async function saveLibraryItem(
 export async function saveLibraryState(
   db: Db,
   userId: string,
-  input: LibraryMediaInput,
+  input: LibraryMediaInput | LibraryResourceInput,
   savedAt?: string,
 ): Promise<LibraryItem> {
   const now = new Date().toISOString()
   const nextSavedAt = savedAt ?? now
-  const key = mediaKey(input.kind, input.id)
+  const resource = toLibraryResource(input)
+  const key = resource.mediaKey
   const existing = await getLibraryRow(db, userId, key)
   if (existing) {
     const rows = await db
@@ -138,8 +155,8 @@ export async function saveLibraryState(
     id: crypto.randomUUID(),
     userId,
     mediaKey: key,
-    kind: input.kind,
-    tmdbId: input.id,
+    kind: resource.kind,
+    tmdbId: resource.tmdbId,
     savedAt: nextSavedAt,
     watchedAt: null,
     createdAt: now,
@@ -151,7 +168,7 @@ export async function saveLibraryState(
 }
 
 export async function deleteLibraryItem(db: Db, userId: string, kind: MediaKind, tmdbId: number): Promise<boolean> {
-  const key = mediaKey(kind, tmdbId)
+  const key = buildTmdbMediaKey(kind, tmdbId)
   const existing = await getLibraryRow(db, userId, key)
   if (!existing) return false
 
@@ -174,7 +191,8 @@ export async function setWatched(
 ): Promise<LibraryMediaItem | null> {
   const now = new Date().toISOString()
   const nextWatchedAt = watchedAt ?? now
-  const key = mediaKey(input.kind, input.id)
+  const resource = toTmdbLibraryResource(input)
+  const key = resource.mediaKey
   const existing = await getLibraryRow(db, userId, key)
 
   if (existing) {
@@ -202,8 +220,8 @@ export async function setWatched(
     id: crypto.randomUUID(),
     userId,
     mediaKey: key,
-    kind: input.kind,
-    tmdbId: input.id,
+    kind: resource.kind,
+    tmdbId: resource.tmdbId,
     savedAt: nextWatchedAt,
     watchedAt: nextWatchedAt,
     createdAt: now,
@@ -217,13 +235,14 @@ export async function setWatched(
 export async function setWatchedState(
   db: Db,
   userId: string,
-  input: LibraryMediaInput,
+  input: LibraryMediaInput | LibraryResourceInput,
   watched: boolean,
   watchedAt?: string,
 ): Promise<LibraryItem | null> {
   const now = new Date().toISOString()
   const nextWatchedAt = watchedAt ?? now
-  const key = mediaKey(input.kind, input.id)
+  const resource = toLibraryResource(input)
+  const key = resource.mediaKey
   const existing = await getLibraryRow(db, userId, key)
 
   if (existing) {
@@ -251,8 +270,8 @@ export async function setWatchedState(
     id: crypto.randomUUID(),
     userId,
     mediaKey: key,
-    kind: input.kind,
-    tmdbId: input.id,
+    kind: resource.kind,
+    tmdbId: resource.tmdbId,
     savedAt: nextWatchedAt,
     watchedAt: nextWatchedAt,
     createdAt: now,
@@ -270,7 +289,7 @@ export async function deleteWatched(
   tmdbId: number,
   tmdb: ActiveTmdbSource,
 ): Promise<LibraryMediaItem | null> {
-  const key = mediaKey(kind, tmdbId)
+  const key = buildTmdbMediaKey(kind, tmdbId)
   const existing = await getLibraryRow(db, userId, key)
   if (!existing?.watchedAt) return null
 
@@ -298,8 +317,12 @@ async function getLibraryRow(db: Db, userId: string, key: string): Promise<Libra
 }
 
 async function toLibraryMediaItem(row: LibraryItem, tmdb: ActiveTmdbSource): Promise<LibraryMediaItem> {
+  if (row.kind !== 'movie' && row.kind !== 'tv') throw new Error(`Unsupported TMDB library kind: ${row.kind}`)
+  if (!row.tmdbId) throw new Error(`Library item ${row.id} is missing tmdb_id.`)
+
   const item = await getMediaSummary(tmdb.apiKey, row.kind, row.tmdbId, tmdb.language)
   return {
+    mediaKey: row.mediaKey,
     libraryItemId: row.id,
     savedAt: row.savedAt,
     watchedAt: row.watchedAt,
@@ -308,8 +331,37 @@ async function toLibraryMediaItem(row: LibraryItem, tmdb: ActiveTmdbSource): Pro
   }
 }
 
-function mediaKey(kind: MediaKind, tmdbId: number): string {
-  return `${kind}:${tmdbId}`
+function toLibraryResource(input: LibraryMediaInput | LibraryResourceInput): {
+  mediaKey: string
+  kind: LibraryItem['kind']
+  tmdbId: number | null
+} {
+  if ('mediaKey' in input) {
+    const kind = getMediaKeyLibraryKind(input.mediaKey)
+    if (!kind) throw new Error(`Invalid library media key: ${input.mediaKey}`)
+    if (kind !== input.kind) throw new Error(`Library kind does not match media key: ${input.mediaKey}`)
+
+    const tmdb = parseTmdbMediaKey(input.mediaKey)
+    return {
+      mediaKey: input.mediaKey,
+      kind: input.kind,
+      tmdbId: tmdb?.kind === input.kind ? tmdb.tmdbId : null,
+    }
+  }
+
+  return toTmdbLibraryResource(input)
+}
+
+function toTmdbLibraryResource(input: LibraryMediaInput): {
+  mediaKey: string
+  kind: MediaKind
+  tmdbId: number
+} {
+  return {
+    mediaKey: buildTmdbMediaKey(input.kind, input.id),
+    kind: input.kind,
+    tmdbId: input.id,
+  }
 }
 
 function libraryWhere(userId: string, kind?: LibraryFilterKind, status?: LibraryFilterStatus): SQL {
@@ -317,6 +369,8 @@ function libraryWhere(userId: string, kind?: LibraryFilterKind, status?: Library
 
   if (kind === 'movie' || kind === 'tv') {
     filters.push(eq(library.kind, kind))
+  } else {
+    filters.push(inArray(library.kind, ['movie', 'tv']))
   }
 
   if (status === 'watched') {
