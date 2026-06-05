@@ -14,6 +14,41 @@ export interface MediaSearchItem {
   genres: string[]
 }
 
+export interface BookCover {
+  source: 'openlibrary'
+  size: 'small' | 'medium' | 'large'
+  url: string
+}
+
+export interface BookEditionCandidate {
+  mediaKey: string
+  openLibraryId: string
+  title: string | null
+  publishYear: number | null
+  languages: string[]
+  isbnCandidates: string[]
+}
+
+export interface BookSearchItem {
+  mediaKey: string
+  title: string
+  authors: string[]
+  languages: string[]
+  firstPublishYear: number | null
+  coverUrl: string | null
+  isbnCandidates: string[]
+  editionKeys: string[]
+  aliases: string[]
+}
+
+export interface BookDetails extends BookSearchItem {
+  description: string | null
+  covers: BookCover[]
+  workKey: string | null
+  editionKey: string | null
+  editionCandidates: BookEditionCandidate[]
+}
+
 export type MediaDiscoverSort =
   | 'popularity.desc'
   | 'vote_average.desc'
