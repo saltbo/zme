@@ -2,6 +2,7 @@ import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, In
 import { and, eq } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { type Indexer, indexers } from '../db/schema'
+import { type ResourceDownloadSearchInput, searchResourceDownloads } from './download-search'
 import { type ProwlarrSearchInput, searchProwlarr } from './prowlarr'
 
 type Db = ReturnType<typeof createDb>
@@ -82,6 +83,16 @@ export async function searchIndexers(db: Db, input: ProwlarrSearchInput): Promis
     throw firstError.reason
   }
   return []
+}
+
+export async function searchDownloadIndexers(db: Db, input: ResourceDownloadSearchInput): Promise<IndexerSearchItem[]> {
+  const rows = await db
+    .select()
+    .from(indexers)
+    .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
+  if (rows.length === 0) throw new Error('No enabled indexers are configured.')
+
+  return searchResourceDownloads(rows, input)
 }
 
 async function searchEnabledIndexers(rows: Indexer[], input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {

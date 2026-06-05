@@ -16,7 +16,7 @@ interface ProwlarrSearchItem {
   magnetUrl?: string
   infoUrl?: string
   infoHash?: string
-  categories?: Array<{ name?: string }>
+  categories?: Array<{ id?: number | string; name?: string }>
   indexerFlags?: string[]
   imdbId?: number | string
   tmdbId?: number | string
@@ -25,6 +25,8 @@ interface ProwlarrSearchItem {
 
 export interface ProwlarrSearchInput {
   query: string
+  searchType?: 'search' | 'audiosearch' | 'booksearch'
+  categories?: number[]
   title?: string
   year?: string
   aliases?: string[]
@@ -41,8 +43,11 @@ export async function searchProwlarr(
 ): Promise<IndexerSearchItem[]> {
   const url = new URL('/api/v1/search', normalizeBaseUrl(baseUrl))
   url.searchParams.set('query', input.query)
-  url.searchParams.set('type', 'search')
+  url.searchParams.set('type', input.searchType ?? 'search')
   url.searchParams.set('indexerIds', '-2')
+  for (const category of input.categories ?? []) {
+    url.searchParams.append('categories', String(category))
+  }
 
   const response = await fetch(url, {
     headers: {
@@ -64,6 +69,7 @@ function toIndexerSearchItem(item: ProwlarrSearchItem, baseUrl: string): Indexer
   const id = item.guid || item.infoHash || resolved.magnetUrl || resolved.downloadUrl || crypto.randomUUID()
   return {
     id,
+    downloadTarget: null,
     title: item.title || 'Untitled release',
     fileName: item.fileName || null,
     indexer: item.indexer || 'Unknown',
@@ -78,11 +84,17 @@ function toIndexerSearchItem(item: ProwlarrSearchItem, baseUrl: string): Indexer
     infoUrl: item.infoUrl || null,
     infoHash: item.infoHash || null,
     categories: item.categories?.flatMap((category) => (category.name ? [category.name] : [])) || [],
+    categoryIds: item.categories?.flatMap((category) => parseCategoryId(category.id) ?? []) || [],
     indexerFlags: item.indexerFlags || [],
     imdbId: parsePositiveNumber(item.imdbId),
     tmdbId: parsePositiveNumber(item.tmdbId),
     tvdbId: parsePositiveNumber(item.tvdbId),
   }
+}
+
+function parseCategoryId(value: number | string | undefined): number | null {
+  const parsed = typeof value === 'string' ? Number(value) : value
+  return typeof parsed === 'number' && Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
 function resolveDownloadFields(item: ProwlarrSearchItem, baseUrl: string) {
