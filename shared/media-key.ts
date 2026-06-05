@@ -39,9 +39,16 @@ export function getMediaKeyLibraryKind(value: string): LibraryKind | null {
     return parts.resourceType
   }
 
-  if (parts.provider === 'musicbrainz' && parts.resourceType === 'release-group') return 'music'
+  if (
+    parts.provider === 'musicbrainz' &&
+    (parts.resourceType === 'release-group' || parts.resourceType === 'release')
+  ) {
+    return 'music'
+  }
   if (parts.provider === 'isbn' && parts.resourceType === 'book') return 'book'
-  if (parts.provider === 'openlibrary' && parts.resourceType === 'work') return 'book'
+  if (parts.provider === 'openlibrary' && (parts.resourceType === 'work' || parts.resourceType === 'edition')) {
+    return 'book'
+  }
 
   return null
 }
