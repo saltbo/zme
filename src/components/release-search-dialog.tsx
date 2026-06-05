@@ -39,6 +39,11 @@ import { cn, formatBytes } from '@/lib/utils'
 
 const releaseSkeletonKeys = ['release-skeleton-1', 'release-skeleton-2', 'release-skeleton-3', 'release-skeleton-4']
 
+export interface ReleaseSearchMedia extends MediaSearchItem {
+  downloadCategory?: string
+  downloadTags?: string[]
+}
+
 export interface ReleaseSearchError {
   title: string
   description: string
@@ -58,7 +63,7 @@ export function ReleaseSearchDialog({
   onClose,
   onSearch,
 }: {
-  media: MediaSearchItem
+  media: ReleaseSearchMedia
   query: string
   items: IndexerSearchItem[]
   loading: boolean
@@ -108,7 +113,7 @@ function ReleaseSearchContent({
   error,
   onSearch,
 }: {
-  media: MediaSearchItem
+  media: ReleaseSearchMedia
   query: string
   items: IndexerSearchItem[]
   loading: boolean
@@ -286,7 +291,7 @@ function ReleaseSearchContent({
   )
 }
 
-function ReleaseTitle({ media, query, mobile }: { media: MediaSearchItem; query: string; mobile?: boolean }) {
+function ReleaseTitle({ media, query, mobile }: { media: ReleaseSearchMedia; query: string; mobile?: boolean }) {
   const { t } = useTranslation()
 
   return (
@@ -398,7 +403,7 @@ function ReleasePanel({
   filtered,
 }: {
   downloaders: DownloaderSummary[]
-  media: MediaSearchItem
+  media: ReleaseSearchMedia
   items: IndexerSearchItem[]
   loading: boolean
   loadingDownloaders: boolean
@@ -489,7 +494,7 @@ function ReleaseRow({
   loadingDownloaders,
 }: {
   downloaders: DownloaderSummary[]
-  media: MediaSearchItem
+  media: ReleaseSearchMedia
   item: IndexerSearchItem
   loadingDownloaders: boolean
 }) {
@@ -511,7 +516,7 @@ function ReleaseRow({
         uri: source.uri,
         sourceType: source.sourceType,
         title,
-        category: toZmeDownloadCategory(media.kind),
+        category: media.downloadCategory ?? toZmeDownloadCategory(media.kind),
         tags: getMediaTags(media, item),
       })
       toast.success(t('downloadSubmitted'))
@@ -592,7 +597,9 @@ function ReleaseRow({
   )
 }
 
-function getMediaTags(media: MediaSearchItem, item: IndexerSearchItem) {
+function getMediaTags(media: ReleaseSearchMedia, item: IndexerSearchItem) {
+  if (media.downloadTags) return media.downloadTags
+
   return [
     `tmdbId=${item.tmdbId ?? media.id}`,
     item.imdbId ? `imdbId=${item.imdbId}` : null,

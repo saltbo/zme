@@ -6,9 +6,11 @@ import { useSearchParams } from 'react-router'
 import { MediaWall } from '@/components/media/media-components'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useLibrary } from '@/contexts/library'
 import { getTmdbLanguage } from '@/i18n'
 import { listLibrary } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
+import { LibraryResourceCard } from '@/routes/resource-pages'
 
 const PAGE_SIZE = 36
 
@@ -16,18 +18,24 @@ export function LibraryPage() {
   const { i18n, t } = useTranslation()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
+  const { items: libraryStates } = useLibrary()
   const kind = getKindParam(searchParams.get('kind'))
   const status = getStatusParam(searchParams.get('status'))
+  const isResourceFilter = kind === 'music' || kind === 'book'
+  const resourceItems = isResourceFilter
+    ? libraryStates.filter((item) => item.savedAt && item.kind === kind && status !== 'watched')
+    : []
   const input = { pageSize: PAGE_SIZE, language: getTmdbLanguage(i18n.language), kind, status }
   const library = useInfiniteQuery({
     queryKey: queryKeys.library.infinite(input),
     queryFn: async ({ pageParam }) => listLibrary({ ...input, page: pageParam }),
     initialPageParam: 1,
     getNextPageParam: (lastPage) => (lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined),
+    enabled: !isResourceFilter,
   })
   const items = library.data?.pages.flatMap((page) => page.items) ?? []
-  const totalResults = library.data?.pages[0]?.totalResults ?? 0
-  const loading = library.isLoading
+  const totalResults = isResourceFilter ? resourceItems.length : (library.data?.pages[0]?.totalResults ?? 0)
+  const loading = !isResourceFilter && library.isLoading
 
   useEffect(() => {
     const target = loadMoreRef.current
@@ -120,8 +128,15 @@ export function LibraryPage() {
         </div>
       </div>
       {loading ? <MediaWall items={[]} loading /> : null}
-      {!loading && items.length > 0 ? <MediaWall items={items} loading={false} /> : null}
-      {!loading && items.length === 0 ? (
+      {!isResourceFilter && !loading && items.length > 0 ? <MediaWall items={items} loading={false} /> : null}
+      {isResourceFilter && resourceItems.length > 0 ? (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-4 sm:gap-y-7 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
+          {resourceItems.map((item) => (
+            <LibraryResourceCard key={item.mediaKey} kind={kind} mediaKey={item.mediaKey} />
+          ))}
+        </div>
+      ) : null}
+      {!loading && totalResults === 0 ? (
         <Card className="flex min-h-80 items-center justify-center p-8 text-center text-muted-foreground">
           {t('noLibrary')}
         </Card>
@@ -140,7 +155,7 @@ export function LibraryPage() {
 }
 
 function getKindParam(value: string | null): LibraryFilterKind {
-  return value === 'movie' || value === 'tv' ? value : 'all'
+  return value === 'movie' || value === 'tv' || value === 'music' || value === 'book' ? value : 'all'
 }
 
 function getStatusParam(value: string | null): LibraryFilterStatus {
@@ -162,6 +177,8 @@ function getKindOptions(t: ReturnType<typeof useTranslation>['t']) {
     { label: t('allTypes'), value: 'all' },
     { label: t('movies'), value: 'movie' },
     { label: t('series'), value: 'tv' },
+    { label: t('music'), value: 'music' },
+    { label: t('books'), value: 'book' },
   ]
 }
 

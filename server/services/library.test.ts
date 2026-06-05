@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LibraryItem } from '../db/schema'
-import { saveLibraryState, setWatchedState } from './library'
+import { deleteLibraryState, saveLibraryState, setWatchedState } from './library'
 
 describe('library resource state identity', () => {
   it('rejects malformed media keys at the state boundary', async () => {
@@ -44,6 +44,18 @@ describe('library resource state identity', () => {
       },
     ])
   })
+
+  it('deletes generic resource state by media key', async () => {
+    const db = createDeleteOnlyLibraryDb()
+
+    const deleted = await deleteLibraryState(db as never, 'user-1', {
+      kind: 'music',
+      mediaKey: 'musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377',
+    })
+
+    expect(deleted).toBe(true)
+    expect(db.deleted).toBe(true)
+  })
 })
 
 function createInsertOnlyLibraryDb() {
@@ -65,4 +77,20 @@ function createInsertOnlyLibraryDb() {
   } as never as {
     inserted: LibraryItem[]
   }
+}
+
+function createDeleteOnlyLibraryDb() {
+  const db = {
+    deleted: false,
+    delete: () => ({
+      where: () => ({
+        returning: () => {
+          db.deleted = true
+          return [{ id: 'library-1' }]
+        },
+      }),
+    }),
+  }
+
+  return db
 }

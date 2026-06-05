@@ -18,6 +18,7 @@ import type {
   LibraryMediaItem,
   LibraryMediaPage,
   LibraryPageInput,
+  LibraryResourceInput,
   LibrarySourceInput,
   LibrarySourceKind,
   LibrarySourceSummary,
@@ -261,10 +262,28 @@ export async function saveLibraryItem(input: LibraryMediaInput) {
   )
 }
 
+export async function saveLibraryResource(input: LibraryResourceInput) {
+  return apiRequest<{ item: LibraryStateItem }>('/api/library/resources', 'Failed to save library item.', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
 export async function removeLibraryItem(kind: MediaKind, id: number) {
   return apiRequest<{ kind: MediaKind; id: number }>(`/api/library/${kind}/${id}`, 'Failed to remove library item.', {
     method: 'DELETE',
   })
+}
+
+export async function removeLibraryResource(input: LibraryResourceInput) {
+  return apiRequest<{ mediaKey: string; kind: LibraryResourceInput['kind'] }>(
+    `/api/library/resources/${encodeURIComponent(input.mediaKey)}`,
+    'Failed to remove library item.',
+    {
+      method: 'DELETE',
+      body: JSON.stringify(input),
+    },
+  )
 }
 
 export async function markWatched(input: LibraryMediaInput) {

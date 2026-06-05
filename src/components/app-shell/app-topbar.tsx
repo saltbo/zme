@@ -21,7 +21,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
   const { t } = useTranslation()
   const pageCopy =
     override?.pathname === location.pathname ? override : getTopbarCopy(location.pathname, location.state, t)
-  const isDetailPage = Boolean(getRouteMedia(location.pathname))
+  const isDetailPage = Boolean(getRouteMedia(location.pathname)) || isResourceDetailPath(location.pathname)
   const showBackButton = isDetailPage || Boolean(pageCopy.backTo)
   const [searchValue, setSearchValue] = useState('')
 
@@ -30,7 +30,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
     const query = searchValue.trim()
     if (!query) return
 
-    navigate(`/?q=${encodeURIComponent(query)}`)
+    navigate(`${getSearchPath(location.pathname)}?q=${encodeURIComponent(query)}`)
   }
 
   return (
@@ -100,6 +100,18 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('animationsSubtitle'),
     }
   }
+  if (pathname === '/music') {
+    return {
+      title: t('music'),
+      subtitle: t('musicSubtitle'),
+    }
+  }
+  if (pathname === '/books') {
+    return {
+      title: t('books'),
+      subtitle: t('booksSubtitle'),
+    }
+  }
   if (pathname === '/library') {
     return {
       title: t('myLibrary'),
@@ -140,6 +152,16 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
     title: t('discover'),
     subtitle: t('discoverSubtitle'),
   }
+}
+
+function getSearchPath(pathname: string) {
+  if (pathname.startsWith('/music')) return '/music'
+  if (pathname.startsWith('/books')) return '/books'
+  return '/'
+}
+
+function isResourceDetailPath(pathname: string) {
+  return /^\/(?:music|books)\/[^/]+$/.test(pathname)
 }
 
 function getStateMedia(state: unknown, routeMedia: RouteMedia): MediaSearchItem | undefined {
