@@ -45,6 +45,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -947,9 +948,15 @@ export function MusicDetailPage() {
       badges={[album.releaseYear, album.primaryType, album.country, ...album.secondaryTypes].filter(isString)}
       statusInput={statusInput}
       actions={
-        <Button type="button" onClick={openReleaseSearch} size="lg">
-          <Search data-icon="inline-start" />
-          {t('musicDownload')}
+        <Button
+          type="button"
+          onClick={openReleaseSearch}
+          size="icon-lg"
+          className="size-11 rounded-xl shadow-lg shadow-primary/25"
+          aria-label={t('musicDownload')}
+          title={t('musicDownload')}
+        >
+          <Search />
         </Button>
       }
       meta={
@@ -1054,16 +1061,31 @@ export function BookDetailPage() {
       badges={[book.firstPublishYear ? String(book.firstPublishYear) : null, ...book.languages].filter(isString)}
       statusInput={statusInput}
       actions={
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Button type="button" onClick={() => openBookReleaseSearch('ebook')} size="lg">
-            <Search data-icon="inline-start" />
-            {t('ebook')}
-          </Button>
-          <Button type="button" onClick={() => openBookReleaseSearch('audiobook')} size="lg" variant="secondary">
-            <Search data-icon="inline-start" />
-            {t('audiobook')}
-          </Button>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-lg"
+                className="size-11 rounded-xl shadow-lg shadow-primary/25"
+                aria-label={t('searchDownloads')}
+                title={t('searchDownloads')}
+              />
+            }
+          >
+            <Search />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem onClick={() => openBookReleaseSearch('ebook')}>
+              <Search />
+              {t('ebook')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openBookReleaseSearch('audiobook')}>
+              <Search />
+              {t('audiobook')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       }
       meta={
         <>
@@ -1151,53 +1173,103 @@ function ResourceDetailLayout({
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <section className="grid gap-5 rounded-2xl border bg-card p-4 sm:p-5 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-7 lg:p-6">
-        <div className="overflow-hidden rounded-xl bg-muted">
+      <section className="overflow-hidden rounded-[28px] bg-[#130d1f] text-white shadow-[0_30px_90px_rgba(33,22,47,0.28)] sm:rounded-[34px]">
+        <div className="relative">
           {imageUrl ? (
-            <img src={imageUrl} alt={`${title} cover`} className="aspect-[2/3] w-full object-cover" />
-          ) : (
-            <div className="flex aspect-[2/3] items-center justify-center text-muted-foreground">
-              {kind === 'book' ? <BookOpen className="size-10" /> : <Disc3 className="size-10" />}
-            </div>
-          )}
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <Badge variant="secondary" className="mb-3">
-                {kind === 'book' ? t('book') : t('music')}
-              </Badge>
-              <h1 className="text-balance font-semibold text-3xl leading-tight sm:text-5xl">{title}</h1>
-              <p className="mt-3 text-muted-foreground">{subtitle}</p>
-            </div>
-            <Button
-              type="button"
-              variant={status === 'saved' ? 'secondary' : 'outline'}
-              size="icon-lg"
-              className="shrink-0 rounded-full"
-              onClick={() => void updateStatus(status === 'saved' ? 'none' : 'saved')}
-              aria-label={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
-              title={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
-            >
-              {status === 'saved' ? <RotateCcw /> : <Heart />}
-            </Button>
-          </div>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {badges.map((badge) => (
-              <Badge key={badge} variant="outline">
-                {badge}
-              </Badge>
-            ))}
-          </div>
-          {description ? (
-            <p className="mt-5 line-clamp-6 max-w-4xl text-muted-foreground leading-7">{description}</p>
+            <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-22 blur-2xl" />
           ) : null}
-          <div className="mt-6 grid gap-3 md:grid-cols-3">{meta}</div>
-          <div className="mt-6">{actions}</div>
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(19,13,31,.72)_0%,#130d1f_82%)] lg:bg-[linear-gradient(90deg,#130d1f_0%,rgba(19,13,31,.94)_34%,rgba(19,13,31,.74)_72%,#130d1f_100%)]" />
+
+          <div className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[540px] lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start lg:gap-8 lg:p-8">
+            <div className="grid grid-cols-[116px_minmax(0,1fr)] gap-4 sm:grid-cols-[156px_minmax(0,1fr)] lg:block">
+              <div className="overflow-hidden rounded-[18px] bg-white/8 shadow-[0_24px_60px_rgba(0,0,0,0.44)] ring-1 ring-white/14 sm:rounded-[24px] lg:rounded-[30px]">
+                {imageUrl ? (
+                  <img src={imageUrl} alt={`${title} cover`} className="aspect-[2/3] w-full object-cover" />
+                ) : (
+                  <div className="flex aspect-[2/3] items-center justify-center bg-white/8 text-white/66">
+                    {kind === 'book' ? <BookOpen className="size-10" /> : <Disc3 className="size-10" />}
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0 lg:hidden">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge variant="secondary" className="gap-2 bg-white/12 text-white/82 backdrop-blur">
+                    {kind === 'book' ? <BookOpen className="size-3.5" /> : <Disc3 className="size-3.5" />}
+                    {kind === 'book' ? t('book') : t('music')}
+                  </Badge>
+                  <ResourceStatusButton status={status} onChange={updateStatus} />
+                </div>
+                <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:text-4xl sm:leading-[0.98]">
+                  {title}
+                </h1>
+                <p className="mt-3 line-clamp-2 text-sm text-white/68">{subtitle}</p>
+                <div className="mt-3 flex flex-wrap gap-2">{actions}</div>
+              </div>
+            </div>
+
+            <div className="min-w-0 lg:pt-2">
+              <div className="mb-8 hidden items-center justify-between gap-6 lg:flex">
+                <Badge variant="secondary" className="gap-2 bg-white/12 text-white/82 backdrop-blur">
+                  {kind === 'book' ? <BookOpen className="size-3.5" /> : <Disc3 className="size-3.5" />}
+                  {kind === 'book' ? t('book') : t('music')}
+                </Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  <ResourceStatusButton status={status} onChange={updateStatus} />
+                  {actions}
+                </div>
+              </div>
+
+              <div className="hidden lg:block">
+                <h1 className="max-w-4xl text-balance font-semibold text-4xl leading-none sm:text-5xl lg:text-6xl">
+                  {title}
+                </h1>
+                <p className="mt-4 max-w-3xl text-lg text-white/70">{subtitle}</p>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-2 lg:mt-6">
+                {badges.map((badge) => (
+                  <Badge key={badge} variant="secondary" className="bg-white/12 text-white/76 backdrop-blur">
+                    {badge}
+                  </Badge>
+                ))}
+              </div>
+              {description ? (
+                <p className="mt-5 line-clamp-6 max-w-4xl text-white/78 leading-7 sm:text-lg sm:leading-8 lg:line-clamp-7">
+                  {description}
+                </p>
+              ) : null}
+              <div className="mt-6 grid gap-3 md:grid-cols-3">{meta}</div>
+            </div>
+          </div>
         </div>
       </section>
       <div className="mt-7">{sections}</div>
     </div>
+  )
+}
+
+function ResourceStatusButton({
+  status,
+  onChange,
+}: {
+  status: Extract<MediaStatus, 'none' | 'saved'>
+  onChange: (nextStatus: Extract<MediaStatus, 'none' | 'saved'>) => Promise<void>
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <Button
+      type="button"
+      variant={status === 'saved' ? 'secondary' : 'outline'}
+      size="icon-lg"
+      className="size-11 shrink-0 rounded-xl border-white/18 bg-white/12 text-white shadow-lg backdrop-blur hover:bg-white/20 hover:text-white"
+      onClick={() => void onChange(status === 'saved' ? 'none' : 'saved')}
+      aria-label={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
+      title={status === 'saved' ? t('removeFromLibrary') : t('saveToLibrary')}
+    >
+      {status === 'saved' ? <RotateCcw /> : <Heart />}
+    </Button>
   )
 }
 
@@ -1542,8 +1614,8 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 function ResourceFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-xl border bg-background p-4">
-      <div className="flex items-center gap-2 text-muted-foreground text-xs">
+    <div className="min-w-0 rounded-xl bg-white/10 p-4 text-white backdrop-blur ring-1 ring-white/10">
+      <div className="flex items-center gap-2 text-white/58 text-xs">
         {icon}
         <span>{label}</span>
       </div>
