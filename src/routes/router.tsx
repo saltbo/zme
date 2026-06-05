@@ -11,6 +11,7 @@ import { MediaSeasonDetailPage } from '@/routes/media-season-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
 import { PersonCreditsPage } from '@/routes/person-credits'
+import { BookDetailPage, BooksPage, MusicDetailPage, MusicPage } from '@/routes/resource-pages'
 import { SettingsPage } from '@/routes/settings'
 import { UsersPage } from '@/routes/users'
 
@@ -49,6 +50,22 @@ export const router = createBrowserRouter([
           {
             path: 'animations',
             element: <MediaWorkspace mode="animation" />,
+          },
+          {
+            path: 'music',
+            element: <MusicPage />,
+          },
+          {
+            path: 'music/:key',
+            element: <MusicDetailPage />,
+          },
+          {
+            path: 'books',
+            element: <BooksPage />,
+          },
+          {
+            path: 'books/:key',
+            element: <BookDetailPage />,
           },
           {
             path: 'series/:id',

@@ -27,11 +27,13 @@ import {
 } from './services/indexers'
 import {
   deleteLibraryItem,
+  deleteLibraryState,
   deleteWatched,
   getLibraryItem,
   listLibrary,
   listLibraryStates,
   saveLibraryItem,
+  saveLibraryState,
   setWatched,
 } from './services/library'
 import {
@@ -168,6 +170,11 @@ const mediaDetailQuerySchema = languageQuerySchema.extend({
 const libraryItemSchema = z.object({
   id: z.number().int().positive(),
   kind: z.enum(['movie', 'tv']),
+})
+
+const libraryResourceSchema = z.object({
+  mediaKey: z.string().trim().min(1),
+  kind: z.enum(['music', 'book']),
 })
 
 const librarySourceSchema = z.object({
@@ -560,6 +567,35 @@ routes.post('/library/sources/:source/sync', zValidator('param', librarySourcePa
   const result = await syncLibrarySource(db, c.get('user').id, c.req.valid('param').source, tmdb)
   return c.json({ result })
 })
+
+routes.put('/library/resources', zValidator('json', libraryResourceSchema), async (c) => {
+  const row = await saveLibraryState(createDb(c.env), c.get('user').id, c.req.valid('json'))
+  return c.json({
+    item: {
+      mediaKey: row.mediaKey,
+      id: row.tmdbId,
+      kind: row.kind,
+      savedAt: row.savedAt,
+      watchedAt: row.watchedAt,
+      updatedAt: row.updatedAt,
+    },
+  })
+})
+
+routes.delete(
+  '/library/resources/:mediaKey',
+  zValidator('param', bookParamsSchema),
+  zValidator('json', libraryResourceSchema),
+  async (c) => {
+    const { mediaKey } = c.req.valid('param')
+    const input = c.req.valid('json')
+    if (input.mediaKey !== mediaKey) return c.json({ error: 'Library route does not match request body.' }, 400)
+
+    const deleted = await deleteLibraryState(createDb(c.env), c.get('user').id, input)
+    if (!deleted) return c.json({ error: 'Library item not found.' }, 404)
+    return c.json({ mediaKey, kind: input.kind })
+  },
+)
 
 routes.get('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
   const { kind, id } = c.req.valid('param')

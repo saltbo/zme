@@ -14,6 +14,14 @@ export const queryKeys = {
   indexers: ['indexers'] as const,
   mediaSources: ['media-sources'] as const,
   users: ['users'] as const,
+  books: {
+    search: (query: string) => ['books', 'search', query] as const,
+    details: (mediaKey: string) => ['books', 'details', mediaKey] as const,
+  },
+  music: {
+    search: (query: string) => ['music', 'search', query] as const,
+    details: (mediaKey: string) => ['music', 'details', mediaKey] as const,
+  },
   media: {
     trending: (language: string) => ['media', 'trending', language] as const,
     popular: (kind: MediaKind, language: string) => ['media', 'popular', kind, language] as const,

@@ -167,6 +167,17 @@ export async function saveLibraryState(
   return row
 }
 
+export async function deleteLibraryState(db: Db, userId: string, input: LibraryResourceInput): Promise<boolean> {
+  const resource = toLibraryResource(input)
+  const rows = await db
+    .delete(library)
+    .where(and(eq(library.userId, userId), eq(library.mediaKey, resource.mediaKey)))
+    .returning({
+      id: library.id,
+    })
+  return rows.length > 0
+}
+
 export async function deleteLibraryItem(db: Db, userId: string, kind: MediaKind, tmdbId: number): Promise<boolean> {
   const key = buildTmdbMediaKey(kind, tmdbId)
   const existing = await getLibraryRow(db, userId, key)

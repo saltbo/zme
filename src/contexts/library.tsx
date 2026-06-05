@@ -1,11 +1,19 @@
 import { buildTmdbMediaKey } from '@shared/media-key'
-import type { LibraryStateItem, MediaSearchItem } from '@shared/types'
+import type { LibraryResourceInput, LibraryStateItem, MediaSearchItem } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { listLibraryStates, markWatched, removeLibraryItem, saveLibraryItem, unmarkWatched } from '@/lib/api'
+import {
+  listLibraryStates,
+  markWatched,
+  removeLibraryItem,
+  removeLibraryResource,
+  saveLibraryItem,
+  saveLibraryResource,
+  unmarkWatched,
+} from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export type MediaStatus = 'none' | 'saved' | 'watched'
@@ -15,7 +23,9 @@ interface LibraryContextValue {
   loading: boolean
   isSaved: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
   isWatched: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
+  getResourceStatus: (item: LibraryResourceInput) => MediaStatus
   getMediaStatus: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => MediaStatus
+  setResourceStatus: (item: LibraryResourceInput, status: Extract<MediaStatus, 'none' | 'saved'>) => Promise<void>
   setMediaStatus: (item: MediaSearchItem, status: MediaStatus) => Promise<void>
   toggleSaved: (item: MediaSearchItem) => Promise<void>
   toggleWatched: (item: MediaSearchItem) => Promise<void>
@@ -60,6 +70,14 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [stateByKey],
   )
 
+  const getResourceStatus = useCallback(
+    (item: LibraryResourceInput): MediaStatus => {
+      const state = stateByKey.get(item.mediaKey)
+      return state?.savedAt ? 'saved' : 'none'
+    },
+    [stateByKey],
+  )
+
   const saveSavedItem = useMutation({
     mutationFn: saveLibraryItem,
     onSuccess: (payload, item) => {
@@ -79,6 +97,29 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       const key = getMediaKey(item)
       queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) =>
         current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
+      )
+      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
+      toast.success(t('savedRemoved'))
+    },
+  })
+
+  const saveSavedResource = useMutation({
+    mutationFn: saveLibraryResource,
+    onSuccess: (payload, item) => {
+      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => [
+        toLibraryState(payload.item),
+        ...current.filter((libraryItem) => libraryItem.mediaKey !== item.mediaKey),
+      ])
+      void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
+      toast.success(t('savedAdded'))
+    },
+  })
+
+  const removeSavedResource = useMutation({
+    mutationFn: removeLibraryResource,
+    onSuccess: (_payload, item) => {
+      queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) =>
+        current.filter((libraryItem) => libraryItem.mediaKey !== item.mediaKey),
       )
       void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
       toast.success(t('savedRemoved'))
@@ -147,18 +188,46 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     [getMediaStatus, removeSavedItem, saveSavedItem, saveWatched],
   )
 
+  const setResourceStatus = useCallback(
+    async (item: LibraryResourceInput, status: Extract<MediaStatus, 'none' | 'saved'>) => {
+      const current = getResourceStatus(item)
+      if (current === status) return
+
+      if (status === 'saved') {
+        await saveSavedResource.mutateAsync(item)
+        return
+      }
+
+      await removeSavedResource.mutateAsync(item)
+    },
+    [getResourceStatus, removeSavedResource, saveSavedResource],
+  )
+
   const value = useMemo(
     () => ({
       items,
       loading: library.isLoading,
       isSaved,
       isWatched,
+      getResourceStatus,
       getMediaStatus,
+      setResourceStatus,
       setMediaStatus,
       toggleSaved,
       toggleWatched,
     }),
-    [items, library.isLoading, isSaved, isWatched, getMediaStatus, setMediaStatus, toggleSaved, toggleWatched],
+    [
+      items,
+      library.isLoading,
+      isSaved,
+      isWatched,
+      getResourceStatus,
+      getMediaStatus,
+      setResourceStatus,
+      setMediaStatus,
+      toggleSaved,
+      toggleWatched,
+    ],
   )
 
   useEffect(() => {
