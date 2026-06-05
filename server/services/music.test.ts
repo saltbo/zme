@@ -81,13 +81,13 @@ describe('music provider', () => {
     )
   })
 
-  it('includes q-only API search text in the MusicBrainz query', async () => {
+  it('keeps q-only API search text broad enough for natural search terms', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse({ 'release-groups': [] }))
     vi.stubGlobal('fetch', fetch)
 
-    await searchMusicAlbums({ q: 'Blue Train' })
+    await searchMusicAlbums({ q: 'Blue Train Miles Davis' })
 
-    expect(fetch.mock.calls[0][0].searchParams.get('query')).toBe('primarytype:album AND "Blue Train"')
+    expect(fetch.mock.calls[0][0].searchParams.get('query')).toBe('primarytype:album AND Blue Train Miles Davis')
   })
 
   it('loads release details with cover art, aliases, media formats, tracks, recordings, and isrcs', async () => {

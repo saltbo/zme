@@ -320,7 +320,7 @@ function buildReleaseGroupSearchQuery(input: { q?: string; query?: string; artis
   const query = input.query ?? input.q
   if (input.artist) clauses.push(`artist:"${escapeMusicBrainzQuery(input.artist)}"`)
   if (input.title) clauses.push(`releasegroup:"${escapeMusicBrainzQuery(input.title)}"`)
-  if (query) clauses.push(`"${escapeMusicBrainzQuery(query)}"`)
+  if (query) clauses.push(escapeMusicBrainzQuery(query))
   return clauses.join(' AND ')
 }
 
