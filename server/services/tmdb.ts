@@ -77,6 +77,11 @@ interface TmdbCredit {
 interface TmdbPersonResponse {
   id?: number
   name?: string
+  biography?: string
+  birthday?: string | null
+  deathday?: string | null
+  place_of_birth?: string | null
+  known_for_department?: string | null
   profile_path?: string | null
   combined_credits?: {
     cast?: TmdbSearchResult[]
@@ -228,6 +233,11 @@ export async function getPersonCredits(apiKey: string, id: number, language: str
     person: {
       id: payload.id,
       name: payload.name,
+      biography: payload.biography?.trim() || null,
+      birthday: payload.birthday ?? null,
+      deathday: payload.deathday ?? null,
+      placeOfBirth: payload.place_of_birth ?? null,
+      knownForDepartment: payload.known_for_department ?? null,
       portraitUrl: payload.profile_path ? `${TMDB_IMAGE_BASE}/w342${payload.profile_path}` : null,
     },
     results,
@@ -354,7 +364,6 @@ function getCreatorNames(item: TmdbDetailsResponse): string[] {
 function toMediaCredits(cast: TmdbCredit[]): MediaCredit[] {
   return cast
     .filter((credit): credit is TmdbCredit & { id: number; name: string } => Boolean(credit.id && credit.name))
-    .slice(0, 12)
     .map((credit) => ({
       id: credit.id,
       name: credit.name,

@@ -1,6 +1,6 @@
 import type { IndexerSearchItem, MediaDetails, MediaKind } from '@shared/types'
 import { useMutation } from '@tanstack/react-query'
-import { Film, Heart, Search, Star, Tv } from 'lucide-react'
+import { Film, Heart, Search, Star, Tv, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useOutletContext, useParams } from 'react-router'
@@ -311,7 +311,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                   state={{ from: location.pathname }}
                   className="group/person w-[172px] shrink-0"
                 >
-                  <Card className="gap-0 overflow-hidden p-0 shadow-[0_18px_42px_rgba(33,22,47,0.14)] transition group-hover/person:-translate-y-1 group-hover/person:shadow-[0_24px_54px_rgba(124,58,237,0.18)]">
+                  <Card className="aspect-[2/3] gap-0 overflow-hidden bg-[#130d1f] p-0 shadow-[0_18px_42px_rgba(33,22,47,0.14)] transition group-hover/person:-translate-y-1 group-hover/person:shadow-[0_24px_54px_rgba(124,58,237,0.18)]">
                     {person.portraitUrl ? (
                       <img
                         src={person.portraitUrl}
@@ -320,8 +320,11 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                         loading="lazy"
                       />
                     ) : (
-                      <div className="flex h-full items-center justify-center px-4 text-center text-white/50 text-sm">
-                        {t('noPortrait')}
+                      <div className="flex h-full flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_25%,rgba(139,92,246,.42),transparent_42%),#130d1f] px-4 text-center text-white/62 text-sm">
+                        <div className="flex size-16 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/16">
+                          <UserRound className="size-8 text-white/70" />
+                        </div>
+                        <span className="line-clamp-2">{person.name}</span>
                       </div>
                     )}
                   </Card>

@@ -9,6 +9,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getRouteMedia, type RouteMedia } from '@/lib/routes'
 
+interface TopbarCopy {
+  title: string
+  subtitle: string
+  backTo?: string
+}
+
 export function AppTopbar({ override }: { override: TopbarOverride | null }) {
   const navigate = useNavigate()
   const location = useLocation()
@@ -16,6 +22,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
   const pageCopy =
     override?.pathname === location.pathname ? override : getTopbarCopy(location.pathname, location.state, t)
   const isDetailPage = Boolean(getRouteMedia(location.pathname))
+  const showBackButton = isDetailPage || Boolean(pageCopy.backTo)
   const [searchValue, setSearchValue] = useState('')
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -30,10 +37,10 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
     <header className="sticky top-0 z-10 border-b bg-background/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
-          {isDetailPage ? (
+          {showBackButton ? (
             <Button
               type="button"
-              onClick={() => navigate(-1)}
+              onClick={() => (pageCopy.backTo ? navigate(pageCopy.backTo) : navigate(-1))}
               variant="outline"
               size="icon-lg"
               className="shrink-0 rounded-full"
@@ -64,7 +71,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
   )
 }
 
-function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => string) {
+function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => string): TopbarCopy {
   const routeMedia = getRouteMedia(pathname)
   if (routeMedia) {
     const stateMedia = getStateMedia(state, routeMedia)

@@ -4,6 +4,7 @@ export interface TopbarOverride {
   pathname: string
   title: string
   subtitle: string
+  backTo?: string
   actions?: ReactNode
 }
 

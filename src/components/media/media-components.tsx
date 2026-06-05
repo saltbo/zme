@@ -430,9 +430,9 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
         </CardContent>
       </Link>
       <CardContent className="px-1 pt-3">
-        <div className="flex items-center justify-between gap-2 text-muted-foreground text-sm">
-          <span className="line-clamp-1">{item.title}</span>
-          <span className="flex shrink-0 items-center gap-1 font-medium text-foreground">
+        <div className="flex items-start justify-between gap-2 text-muted-foreground text-sm">
+          <span className="line-clamp-2 min-h-[2.5rem] leading-tight">{item.title}</span>
+          <span className="flex shrink-0 items-center gap-1 font-medium text-foreground leading-tight">
             <Star className="size-3.5 fill-[#f6c177] text-[#f6c177]" />
             {item.rating ? item.rating.toFixed(1) : 'NR'}
           </span>

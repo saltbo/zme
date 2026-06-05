@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
-import { useState } from 'react'
-import { Outlet } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Outlet, useLocation, useNavigationType } from 'react-router'
 import { AppSidebar } from '@/components/app-shell/app-sidebar'
 import { AppTopbar } from '@/components/app-shell/app-topbar'
 import { MobileHeader } from '@/components/app-shell/mobile-header'
@@ -15,9 +15,22 @@ export function AuthenticatedShell() {
       <AppSidebar />
       <SidebarInset className="min-h-dvh min-w-0 basis-0 bg-muted/40 text-foreground">
         <MobileHeader />
+        <ScrollToTop />
         <AppTopbar override={topbarOverride} />
         <Outlet context={{ setTopbarOverride }} />
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+function ScrollToTop() {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+
+  useEffect(() => {
+    if (navigationType === 'POP') return
+    window.scrollTo({ top: 0, left: 0 })
+  }, [location.pathname, location.search, navigationType])
+
+  return null
 }

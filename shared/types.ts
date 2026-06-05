@@ -72,6 +72,11 @@ export interface MediaCredit {
 export interface MediaPerson {
   id: number
   name: string
+  biography: string | null
+  birthday: string | null
+  deathday: string | null
+  placeOfBirth: string | null
+  knownForDepartment: string | null
   portraitUrl: string | null
 }
 
