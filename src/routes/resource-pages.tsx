@@ -53,6 +53,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useBookDetails, useBookSearch, useMusicAlbumDetails, useMusicSearch } from '@/hooks/use-resource-queries'
 import { ApiError, searchIndexers } from '@/lib/api'
+import {
+  compareResourceTitle,
+  getResourceSearchSort,
+  getResourceSearchSortOptions,
+  parseResourceYear,
+  type ResourceSearchSort,
+} from '@/lib/resource-search-sort'
 import { cn } from '@/lib/utils'
 
 type ResourceKind = Extract<LibraryKind, 'music' | 'book'>
@@ -87,13 +94,15 @@ export function MusicPage() {
   const genre = getMusicGenreParam(searchParams.get('genre'))
   const releaseType = getMusicReleaseTypeParam(searchParams.get('type'))
   const year = getYearParam(searchParams.get('year'))
+  const sort = getResourceSearchSort(searchParams.get('sort'))
   const discovery = useMemo(
     () => ({ mode, range, chartType, genre, releaseType, year, pageSize: RESOURCE_PAGE_SIZE }),
     [chartType, genre, mode, range, releaseType, year],
   )
   const openFilters = useCallback(() => setMobileFiltersOpen(true), [])
   const search = useMusicSearch(query, discovery)
-  const items = search.data?.pages.flatMap((page) => page.results) ?? []
+  const rawItems = search.data?.pages.flatMap((page) => page.results) ?? []
+  const items = query ? sortMusicSearchResults(rawItems, sort) : rawItems
 
   useEffect(() => {
     if (search.error) toast.error(search.error instanceof Error ? search.error.message : t('searchFailed'))
@@ -147,7 +156,12 @@ export function MusicPage() {
       loadMoreRef={loadMoreRef}
       items={items.map((item) => ({ key: item.mediaKey, node: <MusicAlbumCard item={item} /> }))}
       filters={
-        !query ? (
+        query ? (
+          <ResourceSearchSortBar
+            value={sort}
+            onChange={(value) => updateSearchParam(setSearchParams, 'sort', value === 'best' ? undefined : value)}
+          />
+        ) : (
           <MusicFilterBar
             mode={mode}
             range={range}
@@ -159,7 +173,7 @@ export function MusicPage() {
             onMobileOpenChange={setMobileFiltersOpen}
             onChange={updateMusicDiscovery}
           />
-        ) : null
+        )
       }
     />
   )
@@ -176,10 +190,12 @@ export function BooksPage() {
   const mode = getBookModeParam(searchParams.get('mode'))
   const period = getBookPeriodParam(searchParams.get('period'))
   const subject = getBookSubjectParam(searchParams.get('subject'))
+  const sort = getResourceSearchSort(searchParams.get('sort'))
   const discovery = useMemo(() => ({ mode, period, subject, pageSize: RESOURCE_PAGE_SIZE }), [mode, period, subject])
   const openFilters = useCallback(() => setMobileFiltersOpen(true), [])
   const search = useBookSearch(query, discovery)
-  const items = search.data?.pages.flatMap((page) => page.results) ?? []
+  const rawItems = search.data?.pages.flatMap((page) => page.results) ?? []
+  const items = query ? sortBookSearchResults(rawItems, sort) : rawItems
 
   useEffect(() => {
     if (search.error) toast.error(search.error instanceof Error ? search.error.message : t('searchFailed'))
@@ -224,7 +240,12 @@ export function BooksPage() {
       loadMoreRef={loadMoreRef}
       items={items.map((item) => ({ key: item.mediaKey, node: <BookCard item={item} /> }))}
       filters={
-        !query ? (
+        query ? (
+          <ResourceSearchSortBar
+            value={sort}
+            onChange={(value) => updateSearchParam(setSearchParams, 'sort', value === 'best' ? undefined : value)}
+          />
+        ) : (
           <BookFilterBar
             mode={mode}
             period={period}
@@ -233,10 +254,89 @@ export function BooksPage() {
             onMobileOpenChange={setMobileFiltersOpen}
             onChange={updateDiscovery}
           />
-        ) : null
+        )
       }
     />
   )
+}
+
+function ResourceSearchSortBar({
+  value,
+  onChange,
+}: {
+  value: ResourceSearchSort
+  onChange: (value: ResourceSearchSort) => void
+}) {
+  const { t } = useTranslation()
+  const sortOptions = getResourceSearchSortOptions(t)
+
+  return (
+    <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-end sm:justify-between">
+      <Badge variant="secondary" className="h-8 rounded-full px-3 font-semibold">
+        {t('searchResults')}
+      </Badge>
+      <div className="min-w-0 sm:w-48">
+        <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('sort')}</span>
+        <Select
+          items={sortOptions}
+          value={value}
+          onValueChange={(nextValue) => onChange(getResourceSearchSort(nextValue))}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              {sortOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+function updateSearchParam(
+  setSearchParams: ReturnType<typeof useSearchParams>[1],
+  key: string,
+  value: string | undefined,
+) {
+  setSearchParams((current) => {
+    const next = new URLSearchParams(current)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    return next
+  })
+}
+
+function sortMusicSearchResults(items: MusicAlbumSearchItem[], sort: ResourceSearchSort) {
+  if (sort === 'best') return items
+
+  return [...items].sort((left, right) => {
+    if (sort === 'title') return compareResourceTitle(left.title, right.title)
+
+    const leftYear = parseResourceYear(left.releaseYear)
+    const rightYear = parseResourceYear(right.releaseYear)
+    const yearComparison = sort === 'newest' ? rightYear - leftYear : leftYear - rightYear
+    return yearComparison || compareResourceTitle(left.title, right.title)
+  })
+}
+
+function sortBookSearchResults(items: BookSearchItem[], sort: ResourceSearchSort) {
+  if (sort === 'best') return items
+
+  return [...items].sort((left, right) => {
+    if (sort === 'title') return compareResourceTitle(left.title, right.title)
+
+    const leftYear = left.firstPublishYear ?? 0
+    const rightYear = right.firstPublishYear ?? 0
+    const yearComparison = sort === 'newest' ? rightYear - leftYear : leftYear - rightYear
+    return yearComparison || compareResourceTitle(left.title, right.title)
+  })
 }
 
 function ResourceSearchPage({
@@ -1176,7 +1276,11 @@ function ResourceDetailLayout({
       <section className="overflow-hidden rounded-[28px] bg-[#130d1f] text-white shadow-[0_30px_90px_rgba(33,22,47,0.28)] sm:rounded-[34px]">
         <div className="relative">
           {imageUrl ? (
-            <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-22 blur-2xl" />
+            <img
+              src={imageUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-22 blur-2xl"
+            />
           ) : null}
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(19,13,31,.72)_0%,#130d1f_82%)] lg:bg-[linear-gradient(90deg,#130d1f_0%,rgba(19,13,31,.94)_34%,rgba(19,13,31,.74)_72%,#130d1f_100%)]" />
 

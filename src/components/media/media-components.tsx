@@ -82,9 +82,11 @@ export function MediaRail({
 }
 
 export function FilterBar({
+  compact = false,
   mode,
   resultCount,
 }: {
+  compact?: boolean
   mode: 'discover' | MediaKind | 'animation' | 'library'
   resultCount: number
 }) {
@@ -101,7 +103,9 @@ export function FilterBar({
             : t('seriesOnly')
 
   return (
-    <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className={compact ? '' : 'mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between'}
+    >
       <div className="flex items-center gap-3">
         <Badge variant="secondary" className="h-8 rounded-full px-3 font-semibold">
           {resultCount} {t('titles')}

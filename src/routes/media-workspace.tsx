@@ -1,4 +1,4 @@
-import type { MediaDiscoverSort, MediaKind } from '@shared/types'
+import type { MediaDiscoverSort, MediaKind, MediaSearchItem } from '@shared/types'
 import { SlidersHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -7,8 +7,16 @@ import { toast } from 'sonner'
 import type { AppOutletContext } from '@/components/app-shell/types'
 import { DiscoverFilterBar, FilterBar, MediaWall } from '@/components/media/media-components'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useDiscoverMedia, useMediaGenres, useMediaSearch } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
+import {
+  compareResourceTitle,
+  getResourceSearchSort,
+  getResourceSearchSortOptions,
+  parseResourceYear,
+  type ResourceSearchSort,
+} from '@/lib/resource-search-sort'
 import { DiscoverPage } from '@/routes/discover'
 
 type MediaWorkspaceMode = 'discover' | MediaKind | 'animation'
@@ -25,6 +33,7 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   const searchQuery = searchParams.get('q')?.trim() ?? ''
   const tmdbLanguage = getTmdbLanguage(i18n.language)
   const hasSearched = searchQuery.length > 0
+  const searchSort = getResourceSearchSort(searchParams.get('sort'))
   const sortBy = getSortBy(searchParams.get('sort'), mode)
   const mediaKind = getMediaKind(mode)
   const genreId = getNumberParam(searchParams.get('genre')) ?? (mode === 'animation' ? ANIMATION_GENRE_ID : undefined)
@@ -50,7 +59,12 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   })
   const search = useMediaSearch(searchQuery, tmdbLanguage)
   const media = hasSearched ? (search.data ?? []) : (discover.data?.pages.flatMap((page) => page.results) ?? [])
-  const visibleMedia = hasSearched ? media.filter((item) => mode === 'discover' || item.kind === mediaKind) : media
+  const visibleMedia = hasSearched
+    ? sortMediaSearchResults(
+        media.filter((item) => mode === 'discover' || item.kind === mediaKind),
+        searchSort,
+      )
+    : media
   const totalResults = discover.data?.pages[0]?.totalResults ?? 0
   const error = hasSearched ? search.error : discover.error
 
@@ -132,7 +146,13 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       {hasSearched ? (
-        <FilterBar mode={mode} resultCount={visibleMedia.length} />
+        <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <FilterBar mode={mode} resultCount={visibleMedia.length} compact />
+          <ResourceSearchSortSelect
+            value={searchSort}
+            onChange={(value) => updateFilter('sort', value === 'best' ? undefined : value)}
+          />
+        </div>
       ) : (
         <DiscoverFilterBar
           kind={mediaKind}
@@ -166,6 +186,54 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
       ) : null}
     </div>
   )
+}
+
+function ResourceSearchSortSelect({
+  value,
+  onChange,
+}: {
+  value: ResourceSearchSort
+  onChange: (value: ResourceSearchSort) => void
+}) {
+  const { t } = useTranslation()
+  const sortOptions = getResourceSearchSortOptions(t)
+
+  return (
+    <div className="min-w-0 sm:w-48">
+      <span className="mb-1 block font-medium text-muted-foreground text-xs">{t('sort')}</span>
+      <Select
+        items={sortOptions}
+        value={value}
+        onValueChange={(nextValue) => onChange(getResourceSearchSort(nextValue))}
+      >
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent align="start" alignItemWithTrigger={false}>
+          <SelectGroup>
+            {sortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function sortMediaSearchResults(items: MediaSearchItem[], sort: ResourceSearchSort) {
+  if (sort === 'best') return items
+
+  return [...items].sort((left, right) => {
+    if (sort === 'title') return compareResourceTitle(left.title, right.title)
+
+    const leftYear = parseResourceYear(left.releaseYear)
+    const rightYear = parseResourceYear(right.releaseYear)
+    const yearComparison = sort === 'newest' ? rightYear - leftYear : leftYear - rightYear
+    return yearComparison || compareResourceTitle(left.title, right.title)
+  })
 }
 
 function getSortBy(value: string | null, mode: MediaWorkspaceMode): MediaDiscoverSort {
