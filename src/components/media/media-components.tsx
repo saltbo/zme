@@ -1,5 +1,5 @@
 import type { MediaDiscoverSort, MediaGenre, MediaKind, MediaSearchItem } from '@shared/types'
-import { Heart, RotateCcw, Star } from 'lucide-react'
+import { CircleCheck, Heart, RotateCcw, Star } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -7,12 +7,18 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useFavorites } from '@/contexts/favorites'
+import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { cn } from '@/lib/utils'
 
 const mediaSkeletonKeys = [
@@ -382,62 +388,105 @@ export function MediaWall({ items, loading }: { items: MediaSearchItem[]; loadin
 
 function MediaCard({ item }: { item: MediaSearchItem }) {
   const { t } = useTranslation()
-  const { isFavorite, toggleFavorite } = useFavorites()
-  const favorited = isFavorite(item)
+  const { getMediaStatus, setMediaStatus } = useLibrary()
+  const status = getMediaStatus(item)
   const detailPath = item.kind === 'movie' ? `/movies/${item.id}` : `/series/${item.id}`
   const primaryGenre = item.genres[0]
 
-  async function handleFavoriteClick(event: MouseEvent<HTMLButtonElement>) {
-    event.preventDefault()
-    event.stopPropagation()
+  async function handleStatusChange(nextStatus: MediaStatus) {
     try {
-      await toggleFavorite(item)
+      await setMediaStatus(item, nextStatus)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('favoriteToggleFailed'))
+      toast.error(error instanceof Error ? error.message : t('mediaStatusToggleFailed'))
     }
+  }
+
+  function handleStatusTriggerClick(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
   }
 
   return (
     <Card className="group gap-0 overflow-visible bg-transparent p-0 ring-0">
-      <Link to={detailPath} state={{ media: item }} className="block">
-        <CardContent className="relative aspect-[2/3] overflow-hidden rounded-xl bg-card p-0 shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-foreground/10 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_28px_58px_rgba(124,58,237,0.18)]">
-          {item.posterUrl ? (
-            <img
-              src={item.posterUrl}
-              alt={`${item.title} poster`}
-              className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
-              loading="lazy"
+      <CardContent className="relative aspect-[2/3] overflow-hidden rounded-xl bg-card p-0 shadow-[0_18px_38px_rgba(33,22,47,0.18)] ring-1 ring-foreground/10 transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_28px_58px_rgba(124,58,237,0.18)]">
+        {item.posterUrl ? (
+          <img
+            src={item.posterUrl}
+            alt={`${item.title} poster`}
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]"
+            loading="lazy"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-muted-foreground">{t('noPoster')}</div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
+        <Link to={detailPath} state={{ media: item }} aria-label={item.title} className="absolute inset-0 z-10" />
+        <div className="absolute top-2 right-2 z-30">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  onPointerDown={handleStatusTriggerClick}
+                  onClick={handleStatusTriggerClick}
+                  aria-label={t('mediaStatus')}
+                  title={t('mediaStatus')}
+                  className={cn(
+                    'flex size-10 items-center justify-center text-white/88 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-transparent md:group-hover:opacity-100',
+                    status === 'none' && 'opacity-100 hover:text-[#f06595] md:opacity-0',
+                    status === 'saved' && 'text-[#f06595] opacity-100',
+                    status === 'watched' && 'text-[#77d6a8] opacity-100',
+                  )}
+                >
+                  <MediaStatusIcon status={status} />
+                </button>
+              }
             />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">{t('noPoster')}</div>
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
-          <button
-            type="button"
-            onClick={(event) => void handleFavoriteClick(event)}
-            aria-label={favorited ? t('removeFavorite') : t('addFavorite')}
-            className={cn(
-              'absolute top-2 right-2 flex size-10 items-center justify-center text-white/86 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 hover:text-[#f06595] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06595] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent md:group-hover:opacity-100',
-              favorited ? 'opacity-100' : 'opacity-100 md:opacity-0',
-            )}
-          >
-            <Heart className={cn('size-6', favorited && 'fill-[#f06595] text-[#f06595]')} />
-          </button>
-          <div className="absolute inset-x-0 bottom-0 p-4 text-white">
-            <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
-              {primaryGenre ? (
-                <Badge variant="secondary" className="bg-white/14 text-white backdrop-blur">
-                  {primaryGenre}
-                </Badge>
-              ) : null}
-              <span>{item.releaseYear ?? t('unknown')}</span>
-            </div>
-            <h2 className="line-clamp-2 text-balance font-semibold text-base leading-tight drop-shadow sm:text-xl">
-              {item.originalTitle}
-            </h2>
+            <DropdownMenuContent align="end" className="w-40" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void handleStatusChange('saved')
+                }}
+              >
+                <Heart className={cn(status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
+                {t('saveToLibrary')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void handleStatusChange('watched')
+                }}
+              >
+                <CircleCheck className={cn(status === 'watched' && 'fill-[#77d6a8] text-[#123524]')} />
+                {t('markWatched')}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation()
+                  void handleStatusChange('none')
+                }}
+                disabled={status === 'none'}
+              >
+                <RotateCcw />
+                {t('clearMediaStatus')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 text-white">
+          <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
+            {primaryGenre ? (
+              <Badge variant="secondary" className="bg-white/14 text-white backdrop-blur">
+                {primaryGenre}
+              </Badge>
+            ) : null}
+            <span>{item.releaseYear ?? t('unknown')}</span>
           </div>
-        </CardContent>
-      </Link>
+          <h2 className="line-clamp-2 text-balance font-semibold text-base leading-tight drop-shadow sm:text-xl">
+            {item.originalTitle}
+          </h2>
+        </div>
+      </CardContent>
       <CardContent className="px-1 pt-3">
         <div className="flex items-center justify-between gap-2 text-muted-foreground text-sm">
           <Tooltip>
@@ -454,4 +503,9 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
       </CardContent>
     </Card>
   )
+}
+
+function MediaStatusIcon({ status }: { status: MediaStatus }) {
+  if (status === 'watched') return <CircleCheck className="size-6 fill-[#77d6a8] text-[#123524]" />
+  return <Heart className={cn('size-6', status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
 }

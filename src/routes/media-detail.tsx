@@ -7,7 +7,20 @@ import type {
   MediaWatchProviderGroupType,
 } from '@shared/types'
 import { useMutation } from '@tanstack/react-query'
-import { ExternalLink, Film, Heart, ImageIcon, Loader2, PlayCircle, Search, Star, Tv, UserRound } from 'lucide-react'
+import {
+  CircleCheck,
+  ExternalLink,
+  Film,
+  Heart,
+  ImageIcon,
+  Loader2,
+  PlayCircle,
+  RotateCcw,
+  Search,
+  Star,
+  Tv,
+  UserRound,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -24,9 +37,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useFavorites } from '@/contexts/favorites'
+import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useMediaDetails, useMediaWatchClickouts } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
 import { ApiError, searchIndexers } from '@/lib/api'
@@ -74,7 +88,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   const { id } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { i18n, t } = useTranslation()
-  const { isFavorite, toggleFavorite } = useFavorites()
+  const { getMediaStatus, setMediaStatus } = useLibrary()
   const routeId = Number(id)
   const tmdbLanguage = getTmdbLanguage(i18n.language)
   const [watchRegion, setWatchRegion] = useState('US')
@@ -121,13 +135,13 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
     releaseSearch.mutate(searchInput)
   }
 
-  async function handleToggleFavorite() {
+  async function handleMediaStatusChange(status: MediaStatus) {
     if (!media) return
 
     try {
-      await toggleFavorite(media)
+      await setMediaStatus(media, status)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('favoriteToggleFailed'))
+      toast.error(error instanceof Error ? error.message : t('mediaStatusToggleFailed'))
     }
   }
 
@@ -156,6 +170,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   }
 
   const primaryTrailer = getPrimaryTrailer(media)
+  const mediaStatus = getMediaStatus(media)
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
@@ -194,6 +209,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                     {media.kind === 'movie' ? t('movie') : t('tv')}
                   </Badge>
                   <div className="flex shrink-0 items-center gap-2">
+                    <MediaStatusMenu status={mediaStatus} onChange={(status) => void handleMediaStatusChange(status)} />
                     <Button
                       type="button"
                       onClick={() => void handleFindReleases()}
@@ -204,15 +220,6 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                     >
                       <Search />
                     </Button>
-                    <button
-                      type="button"
-                      onClick={() => void handleToggleFavorite()}
-                      className="flex size-11 items-center justify-center text-white/86 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 hover:text-[#f06595] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06595] focus-visible:ring-offset-2 focus-visible:ring-offset-[#130d1f]"
-                      aria-label={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
-                      title={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
-                    >
-                      <Heart className={isFavorite(media) ? 'size-7 fill-[#f06595] text-[#f06595]' : 'size-7'} />
-                    </button>
                   </div>
                 </div>
                 <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:mt-5 sm:text-4xl sm:leading-[0.98]">
@@ -282,6 +289,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                   {media.kind === 'movie' ? t('movie') : t('tv')}
                 </Badge>
                 <div className="flex items-center gap-2">
+                  <MediaStatusMenu status={mediaStatus} onChange={(status) => void handleMediaStatusChange(status)} />
                   <Button
                     type="button"
                     onClick={() => void handleFindReleases()}
@@ -292,15 +300,6 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                   >
                     <Search />
                   </Button>
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleFavorite()}
-                    className="flex size-11 items-center justify-center text-white/86 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 hover:text-[#f06595] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06595] focus-visible:ring-offset-2 focus-visible:ring-offset-[#130d1f]"
-                    aria-label={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
-                    title={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
-                  >
-                    <Heart className={isFavorite(media) ? 'size-7 fill-[#f06595] text-[#f06595]' : 'size-7'} />
-                  </button>
                 </div>
               </div>
               <h1 className="max-w-4xl text-balance font-semibold text-4xl leading-none sm:text-5xl lg:text-6xl">
@@ -498,6 +497,51 @@ function getPrimaryTrailer(media: MediaDetails) {
     media.videos.find((video) => video.type === 'Trailer') ??
     media.videos[0]
   )
+}
+
+function MediaStatusMenu({ status, onChange }: { status: MediaStatus; onChange: (status: MediaStatus) => void }) {
+  const { t } = useTranslation()
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className={cn(
+              'flex size-11 items-center justify-center text-white/86 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#130d1f]',
+              status === 'none' && 'hover:text-[#f06595]',
+              status === 'saved' && 'text-[#f06595]',
+              status === 'watched' && 'text-[#77d6a8]',
+            )}
+            aria-label={t('mediaStatus')}
+            title={t('mediaStatus')}
+          >
+            <MediaStatusIcon status={status} />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onClick={() => onChange('saved')}>
+          <Heart className={cn(status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
+          {t('saveToLibrary')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onChange('watched')}>
+          <CircleCheck className={cn(status === 'watched' && 'fill-[#77d6a8] text-[#123524]')} />
+          {t('markWatched')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onChange('none')} disabled={status === 'none'}>
+          <RotateCcw />
+          {t('clearMediaStatus')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function MediaStatusIcon({ status }: { status: MediaStatus }) {
+  if (status === 'watched') return <CircleCheck className="size-7 fill-[#77d6a8] text-[#123524]" />
+  return <Heart className={cn('size-7', status === 'saved' && 'fill-[#f06595] text-[#f06595]')} />
 }
 
 function MediaDetailSkeleton() {

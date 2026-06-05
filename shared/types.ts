@@ -42,11 +42,12 @@ export interface MediaGenre {
   name: string
 }
 
-export type FavoriteMediaInput = MediaSearchItem
+export type LibraryMediaInput = MediaSearchItem
 
-export interface FavoriteMediaItem extends MediaSearchItem {
-  favoriteId: string
-  favoritedAt: string
+export interface LibraryMediaItem extends MediaSearchItem {
+  libraryItemId: string
+  savedAt: string | null
+  watchedAt: string | null
   updatedAt: string
 }
 

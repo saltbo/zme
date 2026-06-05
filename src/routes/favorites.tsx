@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { FilterBar, MediaWall } from '@/components/media/media-components'
 import { Card } from '@/components/ui/card'
-import { useFavorites } from '@/contexts/favorites'
+import { useLibrary } from '@/contexts/library'
 
 export function FavoritesPage() {
-  const { items, loading } = useFavorites()
+  const { items, loading } = useLibrary()
   const { t } = useTranslation()
 
   return (

@@ -106,8 +106,8 @@ export const mediaSources = sqliteTable('media_sources', {
   updatedAt: text('updated_at').notNull(),
 })
 
-export const favorites = sqliteTable(
-  'favorites',
+export const library = sqliteTable(
+  'library',
   {
     id: text('id').primaryKey(),
     userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
@@ -121,10 +121,12 @@ export const favorites = sqliteTable(
     backdropUrl: text('backdrop_url'),
     releaseYear: text('release_year'),
     rating: real('rating'),
+    savedAt: text('saved_at'),
+    watchedAt: text('watched_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [uniqueIndex('favorites_user_media_key_idx').on(table.userId, table.mediaKey)],
+  (table) => [uniqueIndex('library_user_media_key_idx').on(table.userId, table.mediaKey)],
 )
 
 export type User = typeof user.$inferSelect
@@ -134,5 +136,5 @@ export type Indexer = typeof indexers.$inferSelect
 export type NewIndexer = typeof indexers.$inferInsert
 export type MediaSource = typeof mediaSources.$inferSelect
 export type NewMediaSource = typeof mediaSources.$inferInsert
-export type Favorite = typeof favorites.$inferSelect
-export type NewFavorite = typeof favorites.$inferInsert
+export type LibraryItem = typeof library.$inferSelect
+export type NewLibraryItem = typeof library.$inferInsert

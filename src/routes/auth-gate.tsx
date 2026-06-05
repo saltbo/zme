@@ -4,7 +4,7 @@ import { Navigate, Outlet, useLocation } from 'react-router'
 import { toast } from 'sonner'
 import { FullPageLoading } from '@/components/app-shell/full-page-loading'
 import { AuthContext, isAdminUser } from '@/contexts/auth'
-import { FavoritesProvider } from '@/contexts/favorites'
+import { LibraryProvider } from '@/contexts/library'
 import { getSetupStatus } from '@/lib/api'
 import { authClient } from '@/lib/auth-client'
 import { queryKeys } from '@/lib/query-keys'
@@ -64,9 +64,9 @@ export function AuthGate() {
 
   return (
     <AuthContext.Provider value={authValue}>
-      <FavoritesProvider>
+      <LibraryProvider>
         <Outlet />
-      </FavoritesProvider>
+      </LibraryProvider>
     </AuthContext.Provider>
   )
 }

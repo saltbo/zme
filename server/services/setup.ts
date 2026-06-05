@@ -1,7 +1,7 @@
 import { eq, isNull } from 'drizzle-orm'
 import type { Auth } from '../auth'
 import type { createDb } from '../db/client'
-import { favorites, user } from '../db/schema'
+import { library, user } from '../db/schema'
 
 type Db = ReturnType<typeof createDb>
 
@@ -30,7 +30,7 @@ export async function createInitialAdmin(db: Db, auth: Auth, input: SetupAdminIn
     },
   })
 
-  await db.update(favorites).set({ userId: created.user.id }).where(isNull(favorites.userId))
+  await db.update(library).set({ userId: created.user.id }).where(isNull(library.userId))
 
   return created.user
 }
