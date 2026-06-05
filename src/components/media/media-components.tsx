@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useFavorites } from '@/contexts/favorites'
 import { cn } from '@/lib/utils'
 
@@ -79,7 +80,13 @@ export function MediaRail({
   )
 }
 
-export function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind | 'favorites'; resultCount: number }) {
+export function FilterBar({
+  mode,
+  resultCount,
+}: {
+  mode: 'discover' | MediaKind | 'anime' | 'favorites'
+  resultCount: number
+}) {
   const { t } = useTranslation()
   const copy =
     mode === 'favorites'
@@ -88,7 +95,9 @@ export function FilterBar({ mode, resultCount }: { mode: 'discover' | MediaKind 
         ? t('mixedDiscoveryWall')
         : mode === 'movie'
           ? t('moviesOnly')
-          : t('seriesOnly')
+          : mode === 'anime'
+            ? t('animeOnly')
+            : t('seriesOnly')
 
   return (
     <div className="mb-5 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-center sm:justify-between">
@@ -430,9 +439,14 @@ function MediaCard({ item }: { item: MediaSearchItem }) {
         </CardContent>
       </Link>
       <CardContent className="px-1 pt-3">
-        <div className="flex items-start justify-between gap-2 text-muted-foreground text-sm">
-          <span className="line-clamp-2 min-h-[2.5rem] leading-tight">{item.title}</span>
-          <span className="flex shrink-0 items-center gap-1 font-medium text-foreground leading-tight">
+        <div className="flex items-center justify-between gap-2 text-muted-foreground text-sm">
+          <Tooltip>
+            <TooltipTrigger className="min-w-0">
+              <span className="block truncate text-left">{item.title}</span>
+            </TooltipTrigger>
+            <TooltipContent>{item.title}</TooltipContent>
+          </Tooltip>
+          <span className="flex shrink-0 items-center gap-1 font-medium text-foreground">
             <Star className="size-3.5 fill-[#f6c177] text-[#f6c177]" />
             {item.rating ? item.rating.toFixed(1) : 'NR'}
           </span>

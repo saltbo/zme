@@ -11,7 +11,12 @@ import { useDiscoverMedia, useMediaGenres, useMediaSearch } from '@/hooks/use-me
 import { getTmdbLanguage } from '@/i18n'
 import { DiscoverPage } from '@/routes/discover'
 
-export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
+type MediaWorkspaceMode = 'discover' | MediaKind | 'anime'
+
+const ANIME_GENRE_ID = 16
+const ANIME_ORIGIN_COUNTRY = 'JP'
+
+export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   const { i18n, t } = useTranslation()
   const location = useLocation()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
@@ -22,13 +27,15 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
   const tmdbLanguage = getTmdbLanguage(i18n.language)
   const hasSearched = searchQuery.length > 0
   const sortBy = getSortBy(searchParams.get('sort'), mode)
-  const genreId = getNumberParam(searchParams.get('genre'))
-  const originCountry = getCountryParam(searchParams.get('country'))
+  const mediaKind = getMediaKind(mode)
+  const genreId = getNumberParam(searchParams.get('genre')) ?? (mode === 'anime' ? ANIME_GENRE_ID : undefined)
+  const originCountry =
+    getCountryParam(searchParams.get('country')) ?? (mode === 'anime' ? ANIME_ORIGIN_COUNTRY : undefined)
   const year = getYearParam(searchParams.get('year'))
   const ratingGte = getNumberParam(searchParams.get('rating'))
   const discover = useDiscoverMedia(
     {
-      kind: mode === 'discover' ? 'movie' : mode,
+      kind: mediaKind,
       language: tmdbLanguage,
       sortBy,
       genreId,
@@ -40,12 +47,14 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
       enabled: mode !== 'discover' && !hasSearched,
     },
   )
-  const genres = useMediaGenres(mode === 'discover' ? 'movie' : mode, tmdbLanguage, {
+  const genres = useMediaGenres(mediaKind, tmdbLanguage, {
     enabled: mode !== 'discover' && !hasSearched,
   })
   const search = useMediaSearch(searchQuery, tmdbLanguage)
   const media = hasSearched ? (search.data ?? []) : (discover.data?.pages.flatMap((page) => page.results) ?? [])
-  const visibleMedia = hasSearched ? media.filter((item) => mode === 'discover' || item.kind === mode) : media
+  const visibleMedia = hasSearched
+    ? media.filter((item) => mode === 'discover' || item.kind === mediaKind)
+    : media
   const totalResults = discover.data?.pages[0]?.totalResults ?? 0
   const error = hasSearched ? search.error : discover.error
 
@@ -62,8 +71,8 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
 
     setTopbarOverride({
       pathname: location.pathname,
-      title: mode === 'movie' ? t('movies') : t('series'),
-      subtitle: mode === 'movie' ? t('moviesSubtitle') : t('seriesSubtitle'),
+      title: getWorkspaceTitle(mode, t),
+      subtitle: getWorkspaceSubtitle(mode, t),
       actions: (
         <Button
           type="button"
@@ -117,9 +126,9 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
       const next = new URLSearchParams(current)
       next.delete('sort')
       next.delete('genre')
-      next.delete('country')
-      next.delete('year')
-      next.delete('rating')
+          next.delete('country')
+          next.delete('year')
+          next.delete('rating')
       return next
     })
   }
@@ -130,7 +139,7 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
         <FilterBar mode={mode} resultCount={visibleMedia.length} />
       ) : (
         <DiscoverFilterBar
-          kind={mode === 'discover' ? 'movie' : mode}
+          kind={mediaKind}
           genres={genres.data ?? []}
           genresLoading={genres.isLoading}
           resultCount={visibleMedia.length}
@@ -164,11 +173,28 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
   )
 }
 
-function getSortBy(value: string | null, mode: 'discover' | MediaKind): MediaDiscoverSort {
+function getSortBy(value: string | null, mode: MediaWorkspaceMode): MediaDiscoverSort {
   if (value === 'vote_average.desc' || value === 'popularity.desc') return value
   if (mode === 'movie' && value === 'primary_release_date.desc') return value
-  if (mode === 'tv' && value === 'first_air_date.desc') return value
+  if ((mode === 'tv' || mode === 'anime') && value === 'first_air_date.desc') return value
   return 'popularity.desc'
+}
+
+function getMediaKind(mode: MediaWorkspaceMode): MediaKind {
+  if (mode === 'movie') return 'movie'
+  return 'tv'
+}
+
+function getWorkspaceTitle(mode: Exclude<MediaWorkspaceMode, 'discover'>, t: (key: string) => string) {
+  if (mode === 'movie') return t('movies')
+  if (mode === 'anime') return t('anime')
+  return t('series')
+}
+
+function getWorkspaceSubtitle(mode: Exclude<MediaWorkspaceMode, 'discover'>, t: (key: string) => string) {
+  if (mode === 'movie') return t('moviesSubtitle')
+  if (mode === 'anime') return t('animeSubtitle')
+  return t('seriesSubtitle')
 }
 
 function getNumberParam(value: string | null): number | undefined {

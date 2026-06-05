@@ -1,4 +1,4 @@
-import { Bookmark, Clapperboard, Database, DownloadCloud, Film, Home, Tv, UserRound } from 'lucide-react'
+import { Bookmark, Clapperboard, Database, DownloadCloud, Film, Home, Sparkles, Tv, UserRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, useLocation } from 'react-router'
 import { UserPanel } from '@/components/app-shell/user-panel'
@@ -39,6 +39,7 @@ export function AppSidebar() {
             <SidebarLink icon={Home} label={t('discover')} to="/" />
             <SidebarLink icon={Film} label={t('movies')} to="/movies" />
             <SidebarLink icon={Tv} label={t('series')} to="/series" />
+            <SidebarLink icon={Sparkles} label={t('anime')} to="/anime" />
             <SidebarLink icon={Bookmark} label={t('favorites')} to="/favorites" />
             <SidebarLink icon={DownloadCloud} label={t('downloads')} to="/downloads" />
             {isAdmin ? (

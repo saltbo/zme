@@ -1,5 +1,5 @@
 import type { MediaDiscoverInput, MediaKind } from '@shared/types'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
   discoverMedia,
   getMediaDetails,
@@ -52,11 +52,12 @@ export function useMediaSearch(query: string, language: string, options?: { enab
   })
 }
 
-export function useMediaDetails(kind: MediaKind, id: number, language: string) {
+export function useMediaDetails(kind: MediaKind, id: number, language: string, watchRegion = 'US') {
   return useQuery({
-    queryKey: queryKeys.media.details(kind, id, language),
-    queryFn: async () => (await getMediaDetails(kind, id, language)).item,
+    queryKey: queryKeys.media.details(kind, id, language, watchRegion),
+    queryFn: async () => (await getMediaDetails(kind, id, language, watchRegion)).item,
     enabled: Number.isInteger(id) && id > 0,
+    placeholderData: keepPreviousData,
   })
 }
 

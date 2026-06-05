@@ -91,6 +91,14 @@ const languageQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
 })
 
+const mediaDetailQuerySchema = languageQuerySchema.extend({
+  watchRegion: z
+    .string()
+    .trim()
+    .regex(/^[A-Z]{2}$/)
+    .default('US'),
+})
+
 const favoriteSchema = z.object({
   id: z.number().int().positive(),
   kind: z.enum(['movie', 'tv']),
@@ -289,12 +297,12 @@ routes.get(
 routes.get(
   '/media/:kind/:id',
   zValidator('param', mediaDetailParamsSchema),
-  zValidator('query', languageQuerySchema),
+  zValidator('query', mediaDetailQuerySchema),
   async (c) => {
     const { kind, id } = c.req.valid('param')
-    const { language } = c.req.valid('query')
+    const { language, watchRegion } = c.req.valid('query')
     const source = await getActiveTmdbSource(createDb(c.env), language)
-    const item = await getMediaDetails(source.apiKey, kind, id, source.language)
+    const item = await getMediaDetails(source.apiKey, kind, id, source.language, watchRegion)
     return c.json({ item })
   },
 )

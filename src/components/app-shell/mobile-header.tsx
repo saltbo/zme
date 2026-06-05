@@ -1,4 +1,4 @@
-import { Bookmark, Clapperboard, Database, DownloadCloud, Film, Home, Menu, Tv, UserRound } from 'lucide-react'
+import { Bookmark, Clapperboard, Database, DownloadCloud, Film, Home, Menu, Sparkles, Tv, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink } from 'react-router'
@@ -52,6 +52,7 @@ export function MobileHeader() {
             <MobileMenuLink icon={Home} label={t('discover')} to="/" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Film} label={t('movies')} to="/movies" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Tv} label={t('series')} to="/series" onNavigate={() => setOpen(false)} />
+            <MobileMenuLink icon={Sparkles} label={t('anime')} to="/anime" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Bookmark} label={t('favorites')} to="/favorites" onNavigate={() => setOpen(false)} />
             <MobileMenuLink
               icon={DownloadCloud}

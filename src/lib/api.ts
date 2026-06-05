@@ -94,9 +94,9 @@ export async function createInitialAdmin(input: { name: string; email: string; p
   return apiRequest<{ user: unknown }>('/api/setup/admin', 'Failed to create administrator.', jsonBody(input))
 }
 
-export async function getMediaDetails(kind: MediaKind, id: number, language: string) {
+export async function getMediaDetails(kind: MediaKind, id: number, language: string, watchRegion = 'US') {
   return apiRequest<{ item: MediaDetails }>(
-    `/api/media/${kind}/${id}${query({ language })}`,
+    `/api/media/${kind}/${id}${query({ language, watchRegion })}`,
     'Failed to load media details.',
   )
 }

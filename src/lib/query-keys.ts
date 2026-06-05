@@ -14,7 +14,8 @@ export const queryKeys = {
     discover: (input: Omit<MediaDiscoverInput, 'page'>) => ['media', 'discover', input] as const,
     genres: (kind: MediaKind, language: string) => ['media', 'genres', kind, language] as const,
     search: (query: string, language: string) => ['media', 'search', query, language] as const,
-    details: (kind: MediaKind, id: number, language: string) => ['media', 'details', kind, id, language] as const,
+    details: (kind: MediaKind, id: number, language: string, watchRegion: string) =>
+      ['media', 'details', kind, id, language, watchRegion] as const,
     personCredits: (id: number, language: string) => ['media', 'person-credits', id, language] as const,
   },
 }

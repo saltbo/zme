@@ -91,15 +91,65 @@ export interface MediaExternalIds {
   tvdb: string | null
 }
 
+export type MediaWatchProviderGroupType = 'stream' | 'free' | 'ads' | 'rent' | 'buy'
+
+export interface MediaWatchProvider {
+  id: number
+  name: string
+  logoUrl: string | null
+  url: string | null
+}
+
+export interface MediaWatchProviderGroup {
+  type: MediaWatchProviderGroupType
+  providers: MediaWatchProvider[]
+}
+
+export interface MediaWatchInfo {
+  region: string
+  link: string
+  groups: MediaWatchProviderGroup[]
+}
+
+export interface MediaVideo {
+  name: string
+  site: string
+  type: string
+  key: string
+  official: boolean
+  url: string
+}
+
+export interface MediaImage {
+  type: 'backdrop' | 'poster' | 'logo'
+  url: string
+  width: number | null
+  height: number | null
+}
+
+export interface MediaReleaseInfo {
+  certification: string | null
+  releaseDate: string | null
+}
+
 export interface MediaDetails extends MediaSearchItem {
   aliases: string[]
   genres: string[]
+  tagline: string | null
+  status: string | null
+  homepage: string | null
   runtime: string | null
   language: string | null
   country: string | null
   director: string | null
   writers: string[]
   cast: MediaCredit[]
+  watch: MediaWatchInfo | null
+  videos: MediaVideo[]
+  images: MediaImage[]
+  recommendations: MediaSearchItem[]
+  similar: MediaSearchItem[]
+  releaseInfo: MediaReleaseInfo | null
   ids: MediaExternalIds
 }
 

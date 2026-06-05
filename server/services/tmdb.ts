@@ -4,9 +4,14 @@ import type {
   MediaDiscoverInput,
   MediaDiscoverPage,
   MediaGenre,
+  MediaImage,
   MediaKind,
   MediaPersonCredits,
+  MediaReleaseInfo,
   MediaSearchItem,
+  MediaVideo,
+  MediaWatchInfo,
+  MediaWatchProviderGroup,
 } from '@shared/types'
 
 interface TmdbSearchResponse {
@@ -35,6 +40,9 @@ interface TmdbSearchResult {
 
 interface TmdbDetailsResponse extends TmdbSearchResult {
   adult?: boolean
+  homepage?: string | null
+  status?: string | null
+  tagline?: string | null
   genres?: Array<{ name?: string }>
   runtime?: number | null
   episode_run_time?: number[]
@@ -63,6 +71,66 @@ interface TmdbDetailsResponse extends TmdbSearchResult {
     titles?: Array<{ title?: string }>
     results?: Array<{ title?: string }>
   }
+  'watch/providers'?: {
+    results?: Record<string, TmdbWatchRegion>
+  }
+  videos?: {
+    results?: TmdbVideo[]
+  }
+  images?: {
+    backdrops?: TmdbImage[]
+    posters?: TmdbImage[]
+    logos?: TmdbImage[]
+  }
+  recommendations?: TmdbSearchResponse
+  similar?: TmdbSearchResponse
+  release_dates?: {
+    results?: Array<{
+      iso_3166_1?: string
+      release_dates?: Array<{
+        certification?: string
+        release_date?: string
+        type?: number
+      }>
+    }>
+  }
+  content_ratings?: {
+    results?: Array<{
+      iso_3166_1?: string
+      rating?: string
+    }>
+  }
+}
+
+interface TmdbWatchProvider {
+  display_priority?: number
+  logo_path?: string | null
+  provider_id?: number
+  provider_name?: string
+}
+
+interface TmdbWatchRegion {
+  link?: string
+  flatrate?: TmdbWatchProvider[]
+  free?: TmdbWatchProvider[]
+  ads?: TmdbWatchProvider[]
+  rent?: TmdbWatchProvider[]
+  buy?: TmdbWatchProvider[]
+}
+
+interface TmdbVideo {
+  key?: string
+  name?: string
+  site?: string
+  type?: string
+  official?: boolean
+}
+
+interface TmdbImage {
+  file_path?: string
+  width?: number
+  height?: number
+  vote_average?: number
 }
 
 interface TmdbCredit {
@@ -94,6 +162,8 @@ interface TmdbGenreResponse {
 
 const TMDB_API_BASE = 'https://api.themoviedb.org/3'
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
+const TMDB_WEB_BASE = 'https://www.themoviedb.org'
+const DEFAULT_WATCH_REGION = 'US'
 
 export async function searchMedia(apiKey: string, query: string, language: string): Promise<MediaSearchItem[]> {
   const url = new URL(`${TMDB_API_BASE}/search/multi`)
@@ -189,15 +259,35 @@ export async function getMediaDetails(
   kind: MediaKind,
   id: number,
   language: string,
+  watchRegion = DEFAULT_WATCH_REGION,
 ): Promise<MediaDetails> {
   const endpoint = kind === 'movie' ? 'movie' : 'tv'
   const url = new URL(`${TMDB_API_BASE}/${endpoint}/${id}`)
   url.searchParams.set('language', language)
-  url.searchParams.set('append_to_response', 'credits,external_ids,translations,alternative_titles')
+  url.searchParams.set(
+    'append_to_response',
+    [
+      'credits',
+      'external_ids',
+      'translations',
+      'alternative_titles',
+      'watch/providers',
+      'videos',
+      'images',
+      'recommendations',
+      'similar',
+      kind === 'movie' ? 'release_dates' : 'content_ratings',
+    ].join(','),
+  )
+  url.searchParams.set('include_image_language', `${language.slice(0, 2)},en,null`)
 
-  const response = await fetchTmdb(apiKey, url)
+  const [response, genres, watchClickouts] = await Promise.all([
+    fetchTmdb(apiKey, url),
+    listGenreMap(apiKey, kind, language),
+    fetchWatchClickouts(kind, id, watchRegion),
+  ])
   const payload = (await response.json()) as TmdbDetailsResponse
-  return toMediaDetails(kind, payload)
+  return toMediaDetails(kind, payload, genres, watchRegion, watchClickouts)
 }
 
 export async function getPersonCredits(apiKey: string, id: number, language: string): Promise<MediaPersonCredits> {
@@ -291,11 +381,20 @@ async function listGenreMap(apiKey: string, kind: MediaKind, language: string): 
   return new Map((await listMediaGenres(apiKey, kind, language)).map((genre) => [genre.id, genre.name]))
 }
 
-function toMediaDetails(kind: MediaKind, item: TmdbDetailsResponse): MediaDetails {
-  const searchItem = toMediaSearchItem({
-    ...item,
-    media_type: kind,
-  })
+function toMediaDetails(
+  kind: MediaKind,
+  item: TmdbDetailsResponse,
+  genreMap: Map<number, string>,
+  watchRegion: string,
+  watchClickouts = new Map<string, string>(),
+): MediaDetails {
+  const searchItem = toMediaSearchItem(
+    {
+      ...item,
+      media_type: kind,
+    },
+    genreMap,
+  )
 
   if (!searchItem) {
     throw new Error('TMDB details response is missing required media fields.')
@@ -309,17 +408,186 @@ function toMediaDetails(kind: MediaKind, item: TmdbDetailsResponse): MediaDetail
     ...searchItem,
     aliases: getAliasTitles(kind, item, searchItem),
     genres: (item.genres ?? []).map((genre) => genre.name).filter((name): name is string => Boolean(name)),
+    tagline: item.tagline?.trim() || null,
+    status: item.status ?? null,
+    homepage: item.homepage?.trim() || null,
     runtime: typeof runtimeMinutes === 'number' && runtimeMinutes > 0 ? formatRuntime(runtimeMinutes) : null,
     language: item.original_language?.toUpperCase() ?? null,
     country: item.production_countries?.[0]?.name ?? item.origin_country?.[0] ?? null,
     director: directors[0] ?? null,
     writers,
     cast: toMediaCredits(item.credits?.cast ?? []),
+    watch: toWatchInfo(item['watch/providers'], watchRegion, watchClickouts),
+    videos: toMediaVideos(item.videos?.results ?? []),
+    images: toMediaImages(item.images),
+    recommendations: toMediaResults(kind, item.recommendations?.results ?? [], genreMap),
+    similar: toMediaResults(kind, item.similar?.results ?? [], genreMap),
+    releaseInfo: kind === 'movie' ? toMovieReleaseInfo(item.release_dates) : toTvReleaseInfo(item.content_ratings),
     ids: {
       tmdb: String(searchItem.id),
       imdb: item.external_ids?.imdb_id ?? null,
       tvdb: item.external_ids?.tvdb_id ? String(item.external_ids.tvdb_id) : null,
     },
+  }
+}
+
+function toMediaResults(
+  kind: MediaKind,
+  results: TmdbSearchResult[],
+  genreMap: Map<number, string>,
+): MediaSearchItem[] {
+  return results
+    .map((item) => toMediaSearchItem({ ...item, media_type: kind }, genreMap))
+    .filter((item): item is MediaSearchItem => item !== null)
+    .slice(0, 12)
+}
+
+function toWatchInfo(
+  payload: TmdbDetailsResponse['watch/providers'],
+  region: string,
+  clickouts: Map<string, string>,
+): MediaWatchInfo | null {
+  const item = payload?.results?.[region]
+  if (!item?.link) return null
+
+  const allGroups: MediaWatchProviderGroup[] = [
+    { type: 'stream', providers: toWatchProviders(item.flatrate, clickouts) },
+    { type: 'free', providers: toWatchProviders(item.free, clickouts) },
+    { type: 'ads', providers: toWatchProviders(item.ads, clickouts) },
+    { type: 'rent', providers: toWatchProviders(item.rent, clickouts) },
+    { type: 'buy', providers: toWatchProviders(item.buy, clickouts) },
+  ]
+  const groups = allGroups.filter((group) => group.providers.length > 0)
+
+  return groups.length > 0 ? { region, link: item.link, groups } : { region, link: item.link, groups: [] }
+}
+
+function toWatchProviders(providers: TmdbWatchProvider[] | undefined, clickouts: Map<string, string>) {
+  return (providers ?? [])
+    .filter((provider): provider is TmdbWatchProvider & { provider_id: number; provider_name: string } =>
+      Boolean(provider.provider_id && provider.provider_name),
+    )
+    .sort((a, b) => (a.display_priority ?? 0) - (b.display_priority ?? 0))
+    .slice(0, 8)
+    .map((provider) => ({
+      id: provider.provider_id,
+      name: provider.provider_name,
+      logoUrl: provider.logo_path ? `${TMDB_IMAGE_BASE}/w92${provider.logo_path}` : null,
+      url: clickouts.get(normalizeProviderName(provider.provider_name)) ?? null,
+    }))
+}
+
+async function fetchWatchClickouts(kind: MediaKind, id: number, region: string): Promise<Map<string, string>> {
+  const path = kind === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`${TMDB_WEB_BASE}/${path}/${id}/remote/watch`)
+  url.searchParams.set('translate', 'false')
+  url.searchParams.set('locale', region)
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'text/html',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+    if (!response.ok) return new Map()
+    return parseWatchClickouts(await response.text())
+  } catch {
+    return new Map()
+  }
+}
+
+function parseWatchClickouts(html: string): Map<string, string> {
+  const clickouts = new Map<string, string>()
+  const anchorPattern =
+    /<a\b[^>]*href="([^"]+)"[^>]*title="(?:Watch|Rent|Buy|Stream)\s+[^"]+?\s+on\s+([^"]+)"[^>]*>/gi
+  let match: RegExpExecArray | null
+
+  while ((match = anchorPattern.exec(html))) {
+    const [, rawUrl, rawProvider] = match
+    const provider = decodeHtmlEntity(rawProvider ?? '').trim()
+    const url = decodeHtmlEntity(rawUrl ?? '').trim()
+    if (!provider || !url) continue
+    const key = normalizeProviderName(provider)
+    if (!clickouts.has(key)) clickouts.set(key, url)
+  }
+
+  return clickouts
+}
+
+function normalizeProviderName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function decodeHtmlEntity(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+}
+
+function toMediaVideos(videos: TmdbVideo[]): MediaVideo[] {
+  return videos
+    .filter((video): video is TmdbVideo & { key: string; name: string; site: string; type: string } =>
+      Boolean(video.key && video.name && video.site && video.type),
+    )
+    .sort((a, b) => Number(Boolean(b.official)) - Number(Boolean(a.official)))
+    .slice(0, 8)
+    .map((video) => ({
+      key: video.key,
+      name: video.name,
+      site: video.site,
+      type: video.type,
+      official: Boolean(video.official),
+      url: getVideoUrl(video.site, video.key),
+    }))
+}
+
+function getVideoUrl(site: string, key: string): string {
+  if (site.toLowerCase() === 'youtube') return `https://www.youtube.com/watch?v=${encodeURIComponent(key)}`
+  if (site.toLowerCase() === 'vimeo') return `https://vimeo.com/${encodeURIComponent(key)}`
+  return `https://www.themoviedb.org/video/play?key=${encodeURIComponent(key)}`
+}
+
+function toMediaImages(images: TmdbDetailsResponse['images']): MediaImage[] {
+  return [
+    ...toTypedImages('backdrop', images?.backdrops ?? []),
+    ...toTypedImages('poster', images?.posters ?? []),
+    ...toTypedImages('logo', images?.logos ?? []),
+  ].slice(0, 18)
+}
+
+function toTypedImages(type: MediaImage['type'], images: TmdbImage[]): MediaImage[] {
+  return images
+    .filter((image): image is TmdbImage & { file_path: string } => Boolean(image.file_path))
+    .sort((a, b) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
+    .slice(0, type === 'backdrop' ? 8 : 5)
+    .map((image) => ({
+      type,
+      url: `${TMDB_IMAGE_BASE}/${type === 'poster' ? 'w342' : 'w780'}${image.file_path}`,
+      width: typeof image.width === 'number' ? image.width : null,
+      height: typeof image.height === 'number' ? image.height : null,
+    }))
+}
+
+function toMovieReleaseInfo(payload: TmdbDetailsResponse['release_dates']): MediaReleaseInfo | null {
+  const region = payload?.results?.find((item) => item.iso_3166_1 === DEFAULT_WATCH_REGION) ?? payload?.results?.[0]
+  const release = region?.release_dates?.find((item) => item.certification) ?? region?.release_dates?.[0]
+  if (!release) return null
+  return {
+    certification: release.certification?.trim() || null,
+    releaseDate: release.release_date ? release.release_date.slice(0, 10) : null,
+  }
+}
+
+function toTvReleaseInfo(payload: TmdbDetailsResponse['content_ratings']): MediaReleaseInfo | null {
+  const rating = payload?.results?.find((item) => item.iso_3166_1 === DEFAULT_WATCH_REGION) ?? payload?.results?.[0]
+  if (!rating?.rating) return null
+  return {
+    certification: rating.rating,
+    releaseDate: null,
   }
 }
 
