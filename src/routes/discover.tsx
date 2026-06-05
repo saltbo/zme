@@ -5,7 +5,7 @@ import { MediaRail } from '@/components/media/media-components'
 import { useDiscoverMedia, usePopularMedia, useTrendingMedia } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
 
-const ANIME_GENRE_ID = 16
+const ANIMATION_GENRE_ID = 16
 
 export function DiscoverPage() {
   const { i18n, t } = useTranslation()
@@ -13,19 +13,18 @@ export function DiscoverPage() {
   const trending = useTrendingMedia(tmdbLanguage)
   const popularMovies = usePopularMedia('movie', tmdbLanguage)
   const popularSeries = usePopularMedia('tv', tmdbLanguage)
-  const anime = useDiscoverMedia({
+  const animations = useDiscoverMedia({
     kind: 'tv',
     language: tmdbLanguage,
     sortBy: 'popularity.desc',
-    genreId: ANIME_GENRE_ID,
-    originCountry: 'JP',
+    genreId: ANIMATION_GENRE_ID,
   })
-  const loading = trending.isLoading || popularMovies.isLoading || popularSeries.isLoading || anime.isLoading
+  const loading = trending.isLoading || popularMovies.isLoading || popularSeries.isLoading || animations.isLoading
 
   useEffect(() => {
-    const error = trending.error ?? popularMovies.error ?? popularSeries.error ?? anime.error
+    const error = trending.error ?? popularMovies.error ?? popularSeries.error ?? animations.error
     if (error) toast.error(error instanceof Error ? error.message : t('discoveryLoadFailed'))
-  }, [anime.error, popularMovies.error, popularSeries.error, trending.error, t])
+  }, [animations.error, popularMovies.error, popularSeries.error, trending.error, t])
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
@@ -51,11 +50,11 @@ export function DiscoverPage() {
           moreTo="/series"
         />
         <MediaRail
-          title={t('popularAnime')}
-          subtitle={t('popularAnimeSubtitle')}
-          items={anime.data?.pages[0]?.results ?? []}
+          title={t('popularAnimations')}
+          subtitle={t('popularAnimationsSubtitle')}
+          items={animations.data?.pages[0]?.results ?? []}
           loading={loading}
-          moreTo="/anime"
+          moreTo="/animations"
         />
       </div>
     </div>

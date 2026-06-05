@@ -3,6 +3,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-qu
 import {
   discoverMedia,
   getMediaDetails,
+  getMediaWatchClickouts,
   getPersonCredits,
   getPopularMedia,
   getTrendingMedia,
@@ -58,6 +59,15 @@ export function useMediaDetails(kind: MediaKind, id: number, language: string, w
     queryFn: async () => (await getMediaDetails(kind, id, language, watchRegion)).item,
     enabled: Number.isInteger(id) && id > 0,
     placeholderData: keepPreviousData,
+  })
+}
+
+export function useMediaWatchClickouts(kind: MediaKind, id: number, watchRegion = 'US', options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.media.watchClickouts(kind, id, watchRegion),
+    queryFn: async () => (await getMediaWatchClickouts(kind, id, watchRegion)).clickouts,
+    enabled: Number.isInteger(id) && id > 0 && options?.enabled !== false,
+    staleTime: 1000 * 60 * 30,
   })
 }
 

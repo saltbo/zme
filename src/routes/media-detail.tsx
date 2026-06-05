@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useFavorites } from '@/contexts/favorites'
-import { useMediaDetails } from '@/hooks/use-media-queries'
+import { useMediaDetails, useMediaWatchClickouts } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
 import { ApiError, searchIndexers } from '@/lib/api'
 import { cn } from '@/lib/utils'
@@ -631,6 +631,11 @@ function WatchProvidersAside({
 }) {
   const { t } = useTranslation()
   const watch = media.watch
+  const clickouts = useMediaWatchClickouts(media.kind, media.id, watchRegion, {
+    enabled: Boolean(watch && watch.groups.length > 0),
+  })
+  const providerClickouts = clickouts.data ?? {}
+  const refreshing = isRefreshing || clickouts.isFetching
 
   return (
     <section>
@@ -651,7 +656,7 @@ function WatchProvidersAside({
       </div>
       {watch && watch.groups.length > 0 ? (
         <Card className="relative mt-4 gap-3 p-3">
-          <div className={cn('space-y-3 transition-opacity', isRefreshing && 'opacity-45')}>
+          <div className={cn('space-y-3 transition-opacity', refreshing && 'opacity-45')}>
             {watch.groups.map((group) => (
               <div key={group.type}>
                 <div className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-[0.08em]">
@@ -661,7 +666,7 @@ function WatchProvidersAside({
                   {group.providers.map((provider) => (
                     <a
                       key={provider.id}
-                      href={provider.url ?? watch.link}
+                      href={providerClickouts[normalizeProviderName(provider.name)] ?? provider.url ?? watch.link}
                       target="_blank"
                       rel="noreferrer"
                       className="flex size-10 items-center justify-center rounded-xl bg-muted ring-1 ring-foreground/8 transition hover:-translate-y-0.5 hover:bg-muted/70 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -681,7 +686,7 @@ function WatchProvidersAside({
               </div>
             ))}
           </div>
-          {isRefreshing ? (
+          {refreshing ? (
             <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-background/35 backdrop-blur-[1px]">
               <Loader2 className="size-5 animate-spin text-muted-foreground" />
             </div>
@@ -690,7 +695,7 @@ function WatchProvidersAside({
       ) : (
         <Card className="relative mt-4 p-4 text-muted-foreground text-sm">
           {t('noWatchProviders')}
-          {isRefreshing ? (
+          {refreshing ? (
             <Loader2 className="absolute top-4 right-4 size-4 animate-spin text-muted-foreground" />
           ) : null}
         </Card>
@@ -701,6 +706,10 @@ function WatchProvidersAside({
 
 function getWatchGroupLabel(type: MediaWatchProviderGroupType, t: (key: string) => string) {
   return t(type)
+}
+
+function normalizeProviderName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 function MediaGallery({ media, onSelectImage }: { media: MediaDetails; onSelectImage: (index: number) => void }) {

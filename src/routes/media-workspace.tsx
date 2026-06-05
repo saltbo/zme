@@ -11,10 +11,9 @@ import { useDiscoverMedia, useMediaGenres, useMediaSearch } from '@/hooks/use-me
 import { getTmdbLanguage } from '@/i18n'
 import { DiscoverPage } from '@/routes/discover'
 
-type MediaWorkspaceMode = 'discover' | MediaKind | 'anime'
+type MediaWorkspaceMode = 'discover' | MediaKind | 'animation'
 
-const ANIME_GENRE_ID = 16
-const ANIME_ORIGIN_COUNTRY = 'JP'
+const ANIMATION_GENRE_ID = 16
 
 export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   const { i18n, t } = useTranslation()
@@ -28,9 +27,8 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
   const hasSearched = searchQuery.length > 0
   const sortBy = getSortBy(searchParams.get('sort'), mode)
   const mediaKind = getMediaKind(mode)
-  const genreId = getNumberParam(searchParams.get('genre')) ?? (mode === 'anime' ? ANIME_GENRE_ID : undefined)
-  const originCountry =
-    getCountryParam(searchParams.get('country')) ?? (mode === 'anime' ? ANIME_ORIGIN_COUNTRY : undefined)
+  const genreId = getNumberParam(searchParams.get('genre')) ?? (mode === 'animation' ? ANIMATION_GENRE_ID : undefined)
+  const originCountry = getCountryParam(searchParams.get('country'))
   const year = getYearParam(searchParams.get('year'))
   const ratingGte = getNumberParam(searchParams.get('rating'))
   const discover = useDiscoverMedia(
@@ -176,7 +174,7 @@ export function MediaWorkspace({ mode }: { mode: MediaWorkspaceMode }) {
 function getSortBy(value: string | null, mode: MediaWorkspaceMode): MediaDiscoverSort {
   if (value === 'vote_average.desc' || value === 'popularity.desc') return value
   if (mode === 'movie' && value === 'primary_release_date.desc') return value
-  if ((mode === 'tv' || mode === 'anime') && value === 'first_air_date.desc') return value
+  if ((mode === 'tv' || mode === 'animation') && value === 'first_air_date.desc') return value
   return 'popularity.desc'
 }
 
@@ -187,13 +185,13 @@ function getMediaKind(mode: MediaWorkspaceMode): MediaKind {
 
 function getWorkspaceTitle(mode: Exclude<MediaWorkspaceMode, 'discover'>, t: (key: string) => string) {
   if (mode === 'movie') return t('movies')
-  if (mode === 'anime') return t('anime')
+  if (mode === 'animation') return t('animations')
   return t('series')
 }
 
 function getWorkspaceSubtitle(mode: Exclude<MediaWorkspaceMode, 'discover'>, t: (key: string) => string) {
   if (mode === 'movie') return t('moviesSubtitle')
-  if (mode === 'anime') return t('animeSubtitle')
+  if (mode === 'animation') return t('animationsSubtitle')
   return t('seriesSubtitle')
 }
 

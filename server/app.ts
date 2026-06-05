@@ -40,6 +40,7 @@ import {
   getPersonCredits,
   getPopularMedia,
   getTrendingMedia,
+  getWatchClickouts,
   listMediaGenres,
   searchMedia,
 } from './services/tmdb'
@@ -291,6 +292,18 @@ routes.get(
     const source = await getActiveTmdbSource(createDb(c.env), language)
     const credits = await getPersonCredits(source.apiKey, id, source.language)
     return c.json(credits)
+  },
+)
+
+routes.get(
+  '/media/:kind/:id/watch-clickouts',
+  zValidator('param', mediaDetailParamsSchema),
+  zValidator('query', mediaDetailQuerySchema),
+  async (c) => {
+    const { kind, id } = c.req.valid('param')
+    const { watchRegion } = c.req.valid('query')
+    const clickouts = await getWatchClickouts(kind, id, watchRegion)
+    return c.json({ clickouts })
   },
 )
 

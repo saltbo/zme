@@ -46,8 +46,8 @@ export const router = createBrowserRouter([
             element: <MediaWorkspace mode="tv" />,
           },
           {
-            path: 'anime',
-            element: <MediaWorkspace mode="anime" />,
+            path: 'animations',
+            element: <MediaWorkspace mode="animation" />,
           },
           {
             path: 'series/:id',

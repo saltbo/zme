@@ -18,6 +18,7 @@ import type {
   MediaDiscoverPage,
   MediaGenre,
   MediaKind,
+  MediaWatchClickouts,
   MediaPersonCredits,
   MediaSearchItem,
   MediaSourceDetails,
@@ -98,6 +99,13 @@ export async function getMediaDetails(kind: MediaKind, id: number, language: str
   return apiRequest<{ item: MediaDetails }>(
     `/api/media/${kind}/${id}${query({ language, watchRegion })}`,
     'Failed to load media details.',
+  )
+}
+
+export async function getMediaWatchClickouts(kind: MediaKind, id: number, watchRegion = 'US') {
+  return apiRequest<MediaWatchClickouts>(
+    `/api/media/${kind}/${id}/watch-clickouts${query({ watchRegion })}`,
+    'Failed to load watch links.',
   )
 }
 

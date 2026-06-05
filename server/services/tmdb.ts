@@ -281,13 +281,12 @@ export async function getMediaDetails(
   )
   url.searchParams.set('include_image_language', `${language.slice(0, 2)},en,null`)
 
-  const [response, genres, watchClickouts] = await Promise.all([
+  const [response, genres] = await Promise.all([
     fetchTmdb(apiKey, url),
     listGenreMap(apiKey, kind, language),
-    fetchWatchClickouts(kind, id, watchRegion),
   ])
   const payload = (await response.json()) as TmdbDetailsResponse
-  return toMediaDetails(kind, payload, genres, watchRegion, watchClickouts)
+  return toMediaDetails(kind, payload, genres, watchRegion)
 }
 
 export async function getPersonCredits(apiKey: string, id: number, language: string): Promise<MediaPersonCredits> {
@@ -331,6 +330,27 @@ export async function getPersonCredits(apiKey: string, id: number, language: str
       portraitUrl: payload.profile_path ? `${TMDB_IMAGE_BASE}/w342${payload.profile_path}` : null,
     },
     results,
+  }
+}
+
+export async function getWatchClickouts(kind: MediaKind, id: number, region: string): Promise<Record<string, string>> {
+  const path = kind === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`${TMDB_WEB_BASE}/${path}/${id}/remote/watch`)
+  url.searchParams.set('translate', 'false')
+  url.searchParams.set('locale', region)
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'text/html',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      signal: AbortSignal.timeout(3500),
+    })
+    if (!response.ok) return {}
+    return Object.fromEntries(parseWatchClickouts(await response.text()))
+  } catch {
+    return {}
   }
 }
 
@@ -477,24 +497,8 @@ function toWatchProviders(providers: TmdbWatchProvider[] | undefined, clickouts:
     }))
 }
 
-async function fetchWatchClickouts(kind: MediaKind, id: number, region: string): Promise<Map<string, string>> {
-  const path = kind === 'movie' ? 'movie' : 'tv'
-  const url = new URL(`${TMDB_WEB_BASE}/${path}/${id}/remote/watch`)
-  url.searchParams.set('translate', 'false')
-  url.searchParams.set('locale', region)
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'text/html',
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-    })
-    if (!response.ok) return new Map()
-    return parseWatchClickouts(await response.text())
-  } catch {
-    return new Map()
-  }
+function normalizeProviderName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 function parseWatchClickouts(html: string): Map<string, string> {
@@ -513,10 +517,6 @@ function parseWatchClickouts(html: string): Map<string, string> {
   }
 
   return clickouts
-}
-
-function normalizeProviderName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
 function decodeHtmlEntity(value: string): string {

@@ -84,7 +84,7 @@ export function FilterBar({
   mode,
   resultCount,
 }: {
-  mode: 'discover' | MediaKind | 'anime' | 'favorites'
+  mode: 'discover' | MediaKind | 'animation' | 'favorites'
   resultCount: number
 }) {
   const { t } = useTranslation()
@@ -95,8 +95,8 @@ export function FilterBar({
         ? t('mixedDiscoveryWall')
         : mode === 'movie'
           ? t('moviesOnly')
-          : mode === 'anime'
-            ? t('animeOnly')
+          : mode === 'animation'
+            ? t('animationsOnly')
             : t('seriesOnly')
 
   return (

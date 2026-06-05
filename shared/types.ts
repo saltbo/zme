@@ -111,6 +111,10 @@ export interface MediaWatchInfo {
   groups: MediaWatchProviderGroup[]
 }
 
+export interface MediaWatchClickouts {
+  clickouts: Record<string, string>
+}
+
 export interface MediaVideo {
   name: string
   site: string

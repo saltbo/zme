@@ -94,10 +94,10 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('seriesSubtitle'),
     }
   }
-  if (pathname === '/anime') {
+  if (pathname === '/animations') {
     return {
-      title: t('anime'),
-      subtitle: t('animeSubtitle'),
+      title: t('animations'),
+      subtitle: t('animationsSubtitle'),
     }
   }
   if (pathname === '/favorites') {
