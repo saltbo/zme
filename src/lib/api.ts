@@ -6,25 +6,29 @@ import type {
   DownloaderInput,
   DownloaderSummary,
   DownloadTaskPage,
-  LibraryMediaInput,
-  LibraryMediaItem,
   IndexerDetails,
   IndexerHealth,
   IndexerInput,
   IndexerSearchItem,
   IndexerSummary,
+  LibraryMediaInput,
+  LibraryMediaItem,
+  LibrarySourceInput,
+  LibrarySourceKind,
+  LibrarySourceSummary,
+  LibrarySourceSyncResult,
   MediaDetails,
   MediaDiscoverInput,
   MediaDiscoverPage,
   MediaGenre,
   MediaKind,
-  MediaWatchClickouts,
   MediaPersonCredits,
   MediaSearchItem,
   MediaSourceDetails,
   MediaSourceHealth,
   MediaSourceInput,
   MediaSourceSummary,
+  MediaWatchClickouts,
 } from '@shared/types'
 
 export class ApiError extends Error {
@@ -196,13 +200,9 @@ export async function saveLibraryItem(input: LibraryMediaInput) {
 }
 
 export async function removeLibraryItem(kind: MediaKind, id: number) {
-  return apiRequest<{ kind: MediaKind; id: number }>(
-    `/api/library/${kind}/${id}`,
-    'Failed to remove library item.',
-    {
-      method: 'DELETE',
-    },
-  )
+  return apiRequest<{ kind: MediaKind; id: number }>(`/api/library/${kind}/${id}`, 'Failed to remove library item.', {
+    method: 'DELETE',
+  })
 }
 
 export async function markWatched(input: LibraryMediaInput) {
@@ -223,6 +223,39 @@ export async function unmarkWatched(kind: MediaKind, id: number) {
     {
       method: 'DELETE',
     },
+  )
+}
+
+export async function listLibrarySources() {
+  return apiRequest<{ items: LibrarySourceSummary[] }>('/api/library/sources', 'Failed to load library sources.')
+}
+
+export async function saveLibrarySource(source: LibrarySourceKind, input: LibrarySourceInput) {
+  return apiRequest<{ item: LibrarySourceSummary }>(
+    `/api/library/sources/${source}`,
+    'Failed to save library source.',
+    {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    },
+  )
+}
+
+export async function deleteLibrarySource(source: LibrarySourceKind) {
+  return apiRequest<{ source: LibrarySourceKind }>(
+    `/api/library/sources/${source}`,
+    'Failed to delete library source.',
+    {
+      method: 'DELETE',
+    },
+  )
+}
+
+export async function syncLibrarySource(source: LibrarySourceKind) {
+  return apiRequest<{ result: LibrarySourceSyncResult }>(
+    `/api/library/sources/${source}/sync`,
+    'Failed to sync library source.',
+    { method: 'POST' },
   )
 }
 

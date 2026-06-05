@@ -15,14 +15,6 @@ import {
   updateDownloader,
 } from './services/downloaders'
 import {
-  deleteLibraryItem,
-  deleteWatched,
-  getLibraryItem,
-  listLibrary,
-  saveLibraryItem,
-  setWatched,
-} from './services/library'
-import {
   checkIndexerHealth,
   createIndexer,
   deleteIndexer,
@@ -31,6 +23,20 @@ import {
   searchIndexers,
   updateIndexer,
 } from './services/indexers'
+import {
+  deleteLibraryItem,
+  deleteWatched,
+  getLibraryItem,
+  listLibrary,
+  saveLibraryItem,
+  setWatched,
+} from './services/library'
+import {
+  deleteLibrarySource,
+  listLibrarySources,
+  saveLibrarySource,
+  syncLibrarySource,
+} from './services/library-sources'
 import {
   checkMediaSourceHealth,
   createMediaSource,
@@ -99,6 +105,10 @@ const personParamsSchema = z.object({
 
 const libraryItemParamsSchema = mediaDetailParamsSchema
 
+const librarySourceParamsSchema = z.object({
+  source: z.enum(['douban']),
+})
+
 const languageQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
 })
@@ -114,14 +124,11 @@ const mediaDetailQuerySchema = languageQuerySchema.extend({
 const libraryItemSchema = z.object({
   id: z.number().int().positive(),
   kind: z.enum(['movie', 'tv']),
-  title: z.string().trim().min(1),
-  originalTitle: z.string(),
-  overview: z.string(),
-  posterUrl: z.string().nullable(),
-  backdropUrl: z.string().nullable(),
-  releaseYear: z.string().nullable(),
-  rating: z.number().nullable(),
-  genres: z.array(z.string()).default([]),
+})
+
+const librarySourceSchema = z.object({
+  profileId: z.string().trim().min(1),
+  enabled: z.boolean(),
 })
 
 const popularQuerySchema = z.object({
@@ -392,25 +399,64 @@ function parseAliases(value: string | undefined): string[] {
 }
 
 routes.get('/library', async (c) => {
-  const items = await listLibrary(createDb(c.env), c.get('user').id)
+  const db = createDb(c.env)
+  const items = await listLibrary(db, c.get('user').id, await getActiveTmdbSource(db))
   return c.json({ items })
+})
+
+routes.get('/library/sources', async (c) => {
+  const items = await listLibrarySources(createDb(c.env), c.get('user').id)
+  return c.json({ items })
+})
+
+routes.put(
+  '/library/sources/:source',
+  zValidator('param', librarySourceParamsSchema),
+  zValidator('json', librarySourceSchema),
+  async (c) => {
+    const { source } = c.req.valid('param')
+    const item = await saveLibrarySource(createDb(c.env), c.get('user').id, source, c.req.valid('json'))
+    return c.json({ item })
+  },
+)
+
+routes.delete('/library/sources/:source', zValidator('param', librarySourceParamsSchema), async (c) => {
+  const { source } = c.req.valid('param')
+  const deleted = await deleteLibrarySource(createDb(c.env), c.get('user').id, source)
+  if (!deleted) return c.json({ error: 'Library source not found.' }, 404)
+  return c.json({ source })
+})
+
+routes.post('/library/sources/:source/sync', zValidator('param', librarySourceParamsSchema), async (c) => {
+  const db = createDb(c.env)
+  const tmdb = await getActiveTmdbSource(db)
+  const result = await syncLibrarySource(db, c.get('user').id, c.req.valid('param').source, tmdb)
+  return c.json({ result })
 })
 
 routes.get('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
   const { kind, id } = c.req.valid('param')
-  const item = await getLibraryItem(createDb(c.env), c.get('user').id, kind, id)
+  const db = createDb(c.env)
+  const item = await getLibraryItem(db, c.get('user').id, kind, id, await getActiveTmdbSource(db))
   if (!item) return c.json({ error: 'Library item not found.' }, 404)
   return c.json({ item })
 })
 
-routes.put('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), zValidator('json', libraryItemSchema), async (c) => {
-  const { kind, id } = c.req.valid('param')
-  const input = c.req.valid('json')
-  if (input.kind !== kind || input.id !== id) return c.json({ error: 'Library route does not match request body.' }, 400)
+routes.put(
+  '/library/:kind/:id',
+  zValidator('param', libraryItemParamsSchema),
+  zValidator('json', libraryItemSchema),
+  async (c) => {
+    const { kind, id } = c.req.valid('param')
+    const input = c.req.valid('json')
+    if (input.kind !== kind || input.id !== id)
+      return c.json({ error: 'Library route does not match request body.' }, 400)
 
-  const item = await saveLibraryItem(createDb(c.env), c.get('user').id, input)
-  return c.json({ item })
-})
+    const db = createDb(c.env)
+    const item = await saveLibraryItem(db, c.get('user').id, input, await getActiveTmdbSource(db))
+    return c.json({ item })
+  },
+)
 
 routes.delete('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
   const { kind, id } = c.req.valid('param')
@@ -419,18 +465,26 @@ routes.delete('/library/:kind/:id', zValidator('param', libraryItemParamsSchema)
   return c.json({ kind, id })
 })
 
-routes.put('/library/:kind/:id/watched', zValidator('param', libraryItemParamsSchema), zValidator('json', libraryItemSchema), async (c) => {
-  const { kind, id } = c.req.valid('param')
-  const input = c.req.valid('json')
-  if (input.kind !== kind || input.id !== id) return c.json({ error: 'Library route does not match request body.' }, 400)
+routes.put(
+  '/library/:kind/:id/watched',
+  zValidator('param', libraryItemParamsSchema),
+  zValidator('json', libraryItemSchema),
+  async (c) => {
+    const { kind, id } = c.req.valid('param')
+    const input = c.req.valid('json')
+    if (input.kind !== kind || input.id !== id)
+      return c.json({ error: 'Library route does not match request body.' }, 400)
 
-  const item = await setWatched(createDb(c.env), c.get('user').id, input, true)
-  return c.json({ item })
-})
+    const db = createDb(c.env)
+    const item = await setWatched(db, c.get('user').id, input, true, await getActiveTmdbSource(db))
+    return c.json({ item })
+  },
+)
 
 routes.delete('/library/:kind/:id/watched', zValidator('param', libraryItemParamsSchema), async (c) => {
   const { kind, id } = c.req.valid('param')
-  const item = await deleteWatched(createDb(c.env), c.get('user').id, kind, id)
+  const db = createDb(c.env)
+  const item = await deleteWatched(db, c.get('user').id, kind, id, await getActiveTmdbSource(db))
   return c.json({ item, kind, id })
 })
 

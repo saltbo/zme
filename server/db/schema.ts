@@ -1,4 +1,4 @@
-import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
@@ -114,19 +114,31 @@ export const library = sqliteTable(
     mediaKey: text('media_key').notNull(),
     kind: text('kind', { enum: ['movie', 'tv'] }).notNull(),
     tmdbId: integer('tmdb_id').notNull(),
-    title: text('title').notNull(),
-    originalTitle: text('original_title').notNull(),
-    overview: text('overview').notNull(),
-    posterUrl: text('poster_url'),
-    backdropUrl: text('backdrop_url'),
-    releaseYear: text('release_year'),
-    rating: real('rating'),
     savedAt: text('saved_at'),
     watchedAt: text('watched_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [uniqueIndex('library_user_media_key_idx').on(table.userId, table.mediaKey)],
+)
+
+export const librarySources = sqliteTable(
+  'library_sources',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    source: text('source', { enum: ['douban'] }).notNull(),
+    profileId: text('profile_id').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    lastSyncedAt: text('last_synced_at'),
+    lastError: text('last_error'),
+    lastResultJson: text('last_result_json'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [uniqueIndex('library_sources_user_source_idx').on(table.userId, table.source)],
 )
 
 export type User = typeof user.$inferSelect
@@ -138,3 +150,4 @@ export type MediaSource = typeof mediaSources.$inferSelect
 export type NewMediaSource = typeof mediaSources.$inferInsert
 export type LibraryItem = typeof library.$inferSelect
 export type NewLibraryItem = typeof library.$inferInsert
+export type LibrarySource = typeof librarySources.$inferSelect

@@ -42,12 +42,39 @@ export interface MediaGenre {
   name: string
 }
 
-export type LibraryMediaInput = MediaSearchItem
+export type LibraryMediaInput = Pick<MediaSearchItem, 'id' | 'kind'>
 
 export interface LibraryMediaItem extends MediaSearchItem {
   libraryItemId: string
   savedAt: string | null
   watchedAt: string | null
+  updatedAt: string
+}
+
+export type LibrarySourceKind = 'douban'
+
+export interface LibrarySourceInput {
+  profileId: string
+  enabled: boolean
+}
+
+export interface LibrarySourceSyncResult {
+  scanned: number
+  imported: number
+  saved: number
+  watched: number
+  unmatched: number
+}
+
+export interface LibrarySourceSummary {
+  id: string
+  source: LibrarySourceKind
+  profileId: string
+  enabled: boolean
+  lastSyncedAt: string | null
+  lastError: string | null
+  lastResult: LibrarySourceSyncResult | null
+  createdAt: string
   updatedAt: string
 }
 

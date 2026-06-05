@@ -1,13 +1,17 @@
-import { LoaderCircle } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { LoaderCircle, RefreshCw, Trash2 } from 'lucide-react'
 import type { FormEvent } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { useAuth } from '@/contexts/auth'
+import { deleteLibrarySource, listLibrarySources, saveLibrarySource, syncLibrarySource } from '@/lib/api'
 import { authClient } from '@/lib/auth-client'
+import { queryKeys } from '@/lib/query-keys'
 import { DownloadersPanel } from '@/routes/downloaders'
 
 export function SettingsPage() {
@@ -17,6 +21,7 @@ export function SettingsPage() {
         <ProfileSettings />
         <PasswordSettings />
       </section>
+      <LibraryImportSettings />
       <DownloadersPanel framed />
     </main>
   )
@@ -62,6 +67,136 @@ function ProfileSettings() {
             <Button type="submit" disabled={saving}>
               {saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
               {t('save')}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function LibraryImportSettings() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const sources = useQuery({
+    queryKey: queryKeys.librarySources,
+    queryFn: async () => (await listLibrarySources()).items,
+  })
+  const douban = sources.data?.find((item) => item.source === 'douban') ?? null
+  const [profileId, setProfileId] = useState('')
+  const [enabled, setEnabled] = useState(true)
+
+  useEffect(() => {
+    if (!douban) return
+    setProfileId(douban.profileId)
+    setEnabled(douban.enabled)
+  }, [douban])
+
+  const saveSource = useMutation({
+    mutationFn: async () => saveLibrarySource('douban', { profileId, enabled }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.librarySources })
+      toast.success(t('librarySourceSaved'))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('librarySourceSaveFailed')),
+  })
+
+  const removeSource = useMutation({
+    mutationFn: async () => deleteLibrarySource('douban'),
+    onSuccess: async () => {
+      setProfileId('')
+      setEnabled(true)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.librarySources })
+      toast.success(t('librarySourceDeleted'))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('librarySourceDeleteFailed')),
+  })
+
+  const syncSource = useMutation({
+    mutationFn: async () => syncLibrarySource('douban'),
+    onSuccess: async (payload) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.librarySources }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.library }),
+      ])
+      toast.success(t('librarySourceSynced', { ...payload.result }))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('librarySourceSyncFailed')),
+  })
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!profileId.trim()) return
+    saveSource.mutate()
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('libraryImports')}</CardTitle>
+        <CardDescription>{t('libraryImportsDescription')}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-4">
+          <label htmlFor="settings-douban-profile" className="grid gap-2 text-sm">
+            {t('doubanProfile')}
+            <Input
+              id="settings-douban-profile"
+              value={profileId}
+              onChange={(event) => setProfileId(event.target.value)}
+              placeholder={t('doubanProfilePlaceholder')}
+              disabled={saveSource.isPending || syncSource.isPending}
+            />
+          </label>
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+            <div className="min-w-0">
+              <div className="font-medium text-sm">{t('automaticSync')}</div>
+              <div className="text-muted-foreground text-xs">{t('automaticSyncDescription')}</div>
+            </div>
+            <Switch checked={enabled} onCheckedChange={setEnabled} disabled={saveSource.isPending} />
+          </div>
+          {douban ? (
+            <div className="grid gap-1 rounded-lg bg-muted/50 p-3 text-sm">
+              <div className="text-muted-foreground">
+                {t('lastSynced')}:{' '}
+                {douban.lastSyncedAt ? new Date(douban.lastSyncedAt).toLocaleString() : t('neverSynced')}
+              </div>
+              {douban.lastResult ? (
+                <div className="text-muted-foreground">{t('librarySourceLastResult', { ...douban.lastResult })}</div>
+              ) : null}
+              {douban.lastError ? <div className="text-destructive">{douban.lastError}</div> : null}
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={!profileId.trim() || saveSource.isPending || syncSource.isPending}>
+              {saveSource.isPending ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+              {t('save')}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!douban || syncSource.isPending || saveSource.isPending}
+              onClick={() => syncSource.mutate()}
+            >
+              {syncSource.isPending ? (
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <RefreshCw data-icon="inline-start" />
+              )}
+              {t('syncNow')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!douban || removeSource.isPending || syncSource.isPending}
+              onClick={() => removeSource.mutate()}
+            >
+              {removeSource.isPending ? (
+                <LoaderCircle data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <Trash2 data-icon="inline-start" />
+              )}
+              {t('delete')}
             </Button>
           </div>
         </form>

@@ -211,6 +211,23 @@ export async function getPopularMedia(apiKey: string, kind: MediaKind, language:
     .filter((item): item is MediaSearchItem => item !== null)
 }
 
+export async function getMediaSummary(
+  apiKey: string,
+  kind: MediaKind,
+  id: number,
+  language: string,
+): Promise<MediaSearchItem> {
+  const endpoint = kind === 'movie' ? 'movie' : 'tv'
+  const url = new URL(`${TMDB_API_BASE}/${endpoint}/${id}`)
+  url.searchParams.set('language', language)
+
+  const [response, genres] = await Promise.all([fetchTmdb(apiKey, url), listGenreMap(apiKey, kind, language)])
+  const payload = (await response.json()) as TmdbDetailsResponse
+  const item = toMediaSearchItem({ ...payload, media_type: kind }, genres)
+  if (!item) throw new Error('TMDB summary response is missing required media fields.')
+  return item
+}
+
 export async function discoverMedia(apiKey: string, input: MediaDiscoverInput): Promise<MediaDiscoverPage> {
   const endpoint = input.kind === 'movie' ? 'movie' : 'tv'
   const url = new URL(`${TMDB_API_BASE}/discover/${endpoint}`)
@@ -281,10 +298,7 @@ export async function getMediaDetails(
   )
   url.searchParams.set('include_image_language', `${language.slice(0, 2)},en,null`)
 
-  const [response, genres] = await Promise.all([
-    fetchTmdb(apiKey, url),
-    listGenreMap(apiKey, kind, language),
-  ])
+  const [response, genres] = await Promise.all([fetchTmdb(apiKey, url), listGenreMap(apiKey, kind, language)])
   const payload = (await response.json()) as TmdbDetailsResponse
   return toMediaDetails(kind, payload, genres, watchRegion)
 }
@@ -503,17 +517,18 @@ function normalizeProviderName(value: string): string {
 
 function parseWatchClickouts(html: string): Map<string, string> {
   const clickouts = new Map<string, string>()
-  const anchorPattern =
-    /<a\b[^>]*href="([^"]+)"[^>]*title="(?:Watch|Rent|Buy|Stream)\s+[^"]+?\s+on\s+([^"]+)"[^>]*>/gi
-  let match: RegExpExecArray | null
+  const anchorPattern = /<a\b[^>]*href="([^"]+)"[^>]*title="(?:Watch|Rent|Buy|Stream)\s+[^"]+?\s+on\s+([^"]+)"[^>]*>/gi
+  let match = anchorPattern.exec(html)
 
-  while ((match = anchorPattern.exec(html))) {
+  while (match) {
     const [, rawUrl, rawProvider] = match
     const provider = decodeHtmlEntity(rawProvider ?? '').trim()
     const url = decodeHtmlEntity(rawUrl ?? '').trim()
-    if (!provider || !url) continue
-    const key = normalizeProviderName(provider)
-    if (!clickouts.has(key)) clickouts.set(key, url)
+    if (provider && url) {
+      const key = normalizeProviderName(provider)
+      if (!clickouts.has(key)) clickouts.set(key, url)
+    }
+    match = anchorPattern.exec(html)
   }
 
   return clickouts

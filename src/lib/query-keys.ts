@@ -3,6 +3,7 @@ import type { MediaDiscoverInput, MediaKind } from '@shared/types'
 export const queryKeys = {
   setupStatus: ['setup-status'] as const,
   library: ['library'] as const,
+  librarySources: ['library-sources'] as const,
   downloaders: ['downloaders'] as const,
   downloadTasks: (status: string) => ['download-tasks', status] as const,
   indexers: ['indexers'] as const,
