@@ -1,6 +1,6 @@
 import type { IndexerSearchItem, MediaDetails, MediaKind } from '@shared/types'
 import { useMutation } from '@tanstack/react-query'
-import { Bookmark, BookmarkCheck, Film, Search, Star, Tv } from 'lucide-react'
+import { Film, Heart, Search, Star, Tv } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useOutletContext, useParams } from 'react-router'
@@ -146,8 +146,8 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
             <img src={media.backdropUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-42" />
           ) : null}
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(19,13,31,.64)_0%,#130d1f_72%)]" />
-          <div className="relative p-5">
-            <div className="grid grid-cols-[112px_minmax(0,1fr)] items-start gap-4">
+          <div className="relative p-4 sm:p-5">
+            <div className="grid grid-cols-[96px_minmax(0,1fr)] items-start gap-3 sm:grid-cols-[128px_minmax(0,1fr)] sm:gap-4">
               <div className="overflow-hidden rounded-[18px] shadow-[0_24px_60px_rgba(0,0,0,0.44)] ring-1 ring-white/14">
                 {media.posterUrl ? (
                   <img
@@ -158,7 +158,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                 ) : null}
               </div>
               <div className="min-w-0">
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
                   <Badge variant="secondary" className="min-h-11 gap-2 bg-white/12 px-3 text-white/82 backdrop-blur">
                     {media.kind === 'movie' ? <Film className="size-3.5" /> : <Tv className="size-3.5" />}
                     {media.kind === 'movie' ? t('movie') : t('tv')}
@@ -174,20 +174,20 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                     >
                       <Search />
                     </Button>
-                    <Button
+                    <button
                       type="button"
-                      variant="secondary"
-                      size="icon-lg"
                       onClick={() => void handleToggleFavorite()}
-                      className="size-11 rounded-xl bg-white/12 text-white/82 backdrop-blur"
+                      className="flex size-11 items-center justify-center text-white/86 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 hover:text-[#f06595] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06595] focus-visible:ring-offset-2 focus-visible:ring-offset-[#130d1f]"
                       aria-label={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
                       title={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
                     >
-                      {isFavorite(media) ? <BookmarkCheck /> : <Bookmark />}
-                    </Button>
+                      <Heart className={isFavorite(media) ? 'size-7 fill-[#f06595] text-[#f06595]' : 'size-7'} />
+                    </button>
                   </div>
                 </div>
-                <h1 className="mt-5 text-balance font-semibold text-4xl leading-[0.98]">{media.title}</h1>
+                <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:mt-5 sm:text-4xl sm:leading-[0.98]">
+                  {media.title}
+                </h1>
                 <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-white/72 text-sm">
                   <span>{media.releaseYear}</span>
                   <span className="text-white/28">/</span>
@@ -251,17 +251,15 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                   >
                     <Search />
                   </Button>
-                  <Button
+                  <button
                     type="button"
-                    variant="secondary"
-                    size="icon-lg"
                     onClick={() => void handleToggleFavorite()}
-                    className="size-11 rounded-xl bg-white/12 text-white/82 backdrop-blur"
+                    className="flex size-11 items-center justify-center text-white/86 drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 hover:text-[#f06595] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f06595] focus-visible:ring-offset-2 focus-visible:ring-offset-[#130d1f]"
                     aria-label={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
                     title={isFavorite(media) ? t('removeFavorite') : t('addFavorite')}
                   >
-                    {isFavorite(media) ? <BookmarkCheck /> : <Bookmark />}
-                  </Button>
+                    <Heart className={isFavorite(media) ? 'size-7 fill-[#f06595] text-[#f06595]' : 'size-7'} />
+                  </button>
                 </div>
               </div>
               <h1 className="max-w-4xl text-balance font-semibold text-4xl leading-none sm:text-5xl lg:text-6xl">

@@ -52,7 +52,7 @@ const initialForm: DownloaderFormState = {
 
 export function DownloadersPage() {
   return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       <DownloadersPanel />
     </main>
   )
@@ -235,7 +235,7 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
       {!loading && items.length === 0 ? <EmptyDownloaders /> : null}
       {!loading && items.length > 0 ? (
         <TooltipProvider>
-          <div className="flex flex-wrap gap-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {items.map((item) => (
               <DownloaderCard
                 key={item.id}
@@ -398,7 +398,7 @@ function DownloaderCard({
 
   return (
     <Card
-      className="w-full cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[420px]"
+      className="w-full cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       onClick={() => void onEdit(item)}
     >
       <CardHeader>
@@ -422,7 +422,7 @@ function DownloaderCard({
           <MapPin />
           <span className="min-w-0 truncate font-mono text-foreground">{item.endpoint}</span>
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="grid gap-2 sm:flex sm:items-center sm:justify-between sm:gap-3">
           <StatusBadge enabled={item.enabled} />
           <Tooltip>
             <TooltipTrigger

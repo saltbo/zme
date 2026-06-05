@@ -145,7 +145,7 @@ export function UsersPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-end">
         <Button type="button" onClick={() => setCreateOpen(true)}>
           <Plus data-icon="inline-start" />
@@ -204,11 +204,11 @@ export function UsersPage() {
                   <CardTitle className="truncate text-base">{user.name}</CardTitle>
                   <p className="truncate text-muted-foreground text-sm">{user.email}</p>
                 </div>
-                <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="shrink-0">
                   {user.role === 'admin' ? t('administrator') : t('standardUser')}
                 </Badge>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
+              <CardContent className="grid gap-2 sm:flex sm:flex-wrap">
                 <Button type="button" variant="outline" onClick={() => openEdit(user)}>
                   <UserRound data-icon="inline-start" />
                   {t('edit')}

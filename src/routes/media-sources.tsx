@@ -151,7 +151,7 @@ export function MediaSourcesPage() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-end">
         <Button type="button" onClick={() => setCreateOpen(true)}>
           <Plus data-icon="inline-start" />
@@ -217,7 +217,7 @@ export function MediaSourcesPage() {
       {loading ? <MediaSourcesSkeleton /> : null}
       {!loading && items.length === 0 ? <EmptyMediaSources /> : null}
       {!loading && items.length > 0 ? (
-        <div className="flex flex-wrap gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {items.map((item) => (
             <MediaSourceCard
               key={item.id}
@@ -303,7 +303,7 @@ function MediaSourceCard({
   const status = getStatusCopy(item.healthStatus, t)
 
   return (
-    <Card className="w-full max-w-sm overflow-hidden rounded-lg">
+    <Card className="w-full overflow-hidden rounded-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Database className="size-5" />
@@ -315,14 +315,14 @@ function MediaSourceCard({
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
           <Activity className={cn('size-4', status.className)} />
           <span className={status.className}>{status.label}</span>
-          <span className="ml-auto text-muted-foreground">
+          <span className="ml-auto min-w-0 text-muted-foreground">
             {item.healthCheckedAt ? dayjs(item.healthCheckedAt).fromNow() : t('neverChecked')}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:flex sm:flex-wrap">
           <Button type="button" variant="outline" onClick={() => onEdit(item)}>
             {t('edit')}
           </Button>
@@ -357,9 +357,9 @@ function EmptyMediaSources() {
 
 function MediaSourcesSkeleton() {
   return (
-    <div className="flex flex-wrap gap-4">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {['media-source-skeleton-1', 'media-source-skeleton-2'].map((key) => (
-        <Skeleton key={key} className="h-56 w-full max-w-sm rounded-lg" />
+        <Skeleton key={key} className="h-56 w-full rounded-lg" />
       ))}
     </div>
   )

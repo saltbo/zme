@@ -12,7 +12,7 @@ import { DownloadersPanel } from '@/routes/downloaders'
 
 export function SettingsPage() {
   return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       <section className="grid gap-5 xl:grid-cols-2">
         <ProfileSettings />
         <PasswordSettings />

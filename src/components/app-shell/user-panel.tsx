@@ -20,7 +20,7 @@ import { isAdminUser, useAuth } from '@/contexts/auth'
 import { getTmdbLanguage, supportedLanguages } from '@/i18n'
 import { authClient } from '@/lib/auth-client'
 
-export function UserPanel() {
+export function UserPanel({ placement = 'sidebar' }: { placement?: 'sidebar' | 'mobile-menu' }) {
   const navigate = useNavigate()
   const { i18n, t } = useTranslation()
   const { refreshSession, user } = useAuth()
@@ -49,6 +49,8 @@ export function UserPanel() {
     user.email[0]?.toUpperCase() ||
     'U'
 
+  const isMobileMenu = placement === 'mobile-menu'
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -74,10 +76,10 @@ export function UserPanel() {
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        side="right"
-        align="end"
+        side={isMobileMenu ? 'top' : 'right'}
+        align={isMobileMenu ? 'start' : 'end'}
         sideOffset={8}
-        className="dark w-56 border border-sidebar-border bg-sidebar text-sidebar-foreground"
+        className="dark w-56 max-w-[calc(100vw-2rem)] border border-sidebar-border bg-sidebar text-sidebar-foreground"
       >
         <DropdownMenuGroup>
           <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
@@ -96,7 +98,11 @@ export function UserPanel() {
               <span>{t('language')}</span>
               <span className="ml-auto text-muted-foreground text-xs">{currentLanguageLabel}</span>
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="dark border border-sidebar-border bg-sidebar text-sidebar-foreground">
+            <DropdownMenuSubContent
+              side={isMobileMenu ? 'top' : 'right'}
+              align={isMobileMenu ? 'start' : 'start'}
+              className="dark border border-sidebar-border bg-sidebar text-sidebar-foreground"
+            >
               <DropdownMenuRadioGroup
                 value={currentLanguage}
                 onValueChange={(value) => void handleLanguageChange(value)}

@@ -43,19 +43,22 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
             </Button>
           ) : null}
           <div className="min-w-0">
-            <h1 className="font-semibold text-2xl leading-none">{pageCopy.title}</h1>
+            <h1 className="truncate font-semibold text-xl leading-none sm:text-2xl">{pageCopy.title}</h1>
             <p className="mt-1 truncate text-muted-foreground text-sm">{pageCopy.subtitle}</p>
           </div>
         </div>
-        <form onSubmit={handleSearch} className="relative hidden w-[min(36vw,420px)] md:block">
-          <Search className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
-          <Input
-            value={searchValue}
-            onChange={(event) => setSearchValue(event.target.value)}
-            placeholder={t('searchPlaceholder')}
-            className="h-10 rounded-full bg-background/80 pl-9 shadow-sm"
-          />
-        </form>
+        <div className="flex shrink-0 items-center gap-2">
+          {override?.pathname === location.pathname ? override.actions : null}
+          <form onSubmit={handleSearch} className="relative hidden w-[min(36vw,420px)] md:block">
+            <Search className="-translate-y-1/2 absolute top-1/2 left-3 size-4 text-muted-foreground" />
+            <Input
+              value={searchValue}
+              onChange={(event) => setSearchValue(event.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="h-10 rounded-full bg-background/80 pl-9 shadow-sm"
+            />
+          </form>
+        </div>
       </div>
     </header>
   )

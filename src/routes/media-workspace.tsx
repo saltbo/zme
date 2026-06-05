@@ -1,16 +1,22 @@
 import type { MediaDiscoverSort, MediaKind } from '@shared/types'
-import { useEffect, useRef } from 'react'
+import { SlidersHorizontal } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearchParams } from 'react-router'
+import { useLocation, useOutletContext, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
+import type { AppOutletContext } from '@/components/app-shell/types'
 import { DiscoverFilterBar, FilterBar, MediaWall } from '@/components/media/media-components'
+import { Button } from '@/components/ui/button'
 import { useDiscoverMedia, useMediaGenres, useMediaSearch } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
 import { DiscoverPage } from '@/routes/discover'
 
 export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
   const { i18n, t } = useTranslation()
+  const location = useLocation()
+  const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const searchQuery = searchParams.get('q')?.trim() ?? ''
   const tmdbLanguage = getTmdbLanguage(i18n.language)
@@ -47,6 +53,34 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
     if (!error) return
     toast.error(error instanceof Error ? error.message : hasSearched ? t('searchFailed') : t('mediaLoadFailed'))
   }, [error, hasSearched, t])
+
+  useEffect(() => {
+    if (mode === 'discover' || hasSearched) {
+      setTopbarOverride(null)
+      return
+    }
+
+    setTopbarOverride({
+      pathname: location.pathname,
+      title: mode === 'movie' ? t('movies') : t('series'),
+      subtitle: mode === 'movie' ? t('moviesSubtitle') : t('seriesSubtitle'),
+      actions: (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-lg"
+          className="rounded-full md:hidden"
+          onClick={() => setMobileFiltersOpen(true)}
+          aria-label={t('filters')}
+          title={t('filters')}
+        >
+          <SlidersHorizontal />
+        </Button>
+      ),
+    })
+
+    return () => setTopbarOverride(null)
+  }, [hasSearched, location.pathname, mode, setTopbarOverride, t])
 
   useEffect(() => {
     const target = loadMoreRef.current
@@ -106,11 +140,13 @@ export function MediaWorkspace({ mode }: { mode: 'discover' | MediaKind }) {
           originCountry={originCountry}
           year={year}
           ratingGte={ratingGte}
+          mobileFiltersOpen={mobileFiltersOpen}
           onSortByChange={(value) => updateFilter('sort', value === 'popularity.desc' ? undefined : value)}
           onGenreIdChange={(value) => updateFilter('genre', value ? String(value) : undefined)}
           onOriginCountryChange={(value) => updateFilter('country', value)}
           onYearChange={(value) => updateFilter('year', value || undefined)}
           onRatingGteChange={(value) => updateFilter('rating', value ? String(value) : undefined)}
+          onMobileFiltersOpenChange={setMobileFiltersOpen}
           onReset={resetFilters}
         />
       )}

@@ -58,7 +58,7 @@ export function DownloadsPage() {
   }, [downloads])
 
   return (
-    <main className="mx-auto flex w-full max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
+    <main className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
       <section className="grid gap-3 sm:grid-cols-3">
         <SummaryTile label={t('activeDownloads')} value={String(active)} icon={DownloadCloud} />
         <SummaryTile label={t('downloadSpeed')} value={`${formatRate(totalSpeed)}/s`} icon={Gauge} />
@@ -108,7 +108,7 @@ function StatusFilterBar({ value, onChange }: { value: StatusFilter; onChange: (
             type="button"
             variant={active ? 'default' : 'outline'}
             size="sm"
-            className="h-8 shrink-0 rounded-full px-3"
+            className="h-10 shrink-0 rounded-full px-4 sm:h-8 sm:px-3"
             onClick={() => onChange(status)}
           >
             {status === 'all' ? t('downloadFilterAll') : getStatusLabel(status, t)}
@@ -165,17 +165,17 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-r from-black via-black/64 to-black/8" />
-        <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-3">
+        <div className="absolute inset-x-0 top-0 flex flex-wrap items-start justify-between gap-2 p-3">
           <Badge
             className={cn(
-              'h-7 gap-1 rounded-full border-white/16 bg-black/42 text-white backdrop-blur',
+              'h-7 max-w-full gap-1 rounded-full border-white/16 bg-black/42 text-white backdrop-blur',
               status.className,
             )}
           >
             <status.icon className="size-3.5" />
             {status.label}
           </Badge>
-          <Badge className="h-7 gap-1.5 rounded-full border-white/16 bg-black/42 text-white backdrop-blur">
+          <Badge className="h-7 max-w-full gap-1.5 rounded-full border-white/16 bg-black/42 text-white backdrop-blur">
             <stageMetric.icon className={cn('size-3.5', stageMetric.className)} />
             {stageMetric.label}
           </Badge>
