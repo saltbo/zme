@@ -5,6 +5,7 @@ import type {
   MediaDiscoverPage,
   MediaGenre,
   MediaKind,
+  MediaPersonCredits,
   MediaSearchItem,
 } from '@shared/types'
 
@@ -29,6 +30,7 @@ interface TmdbSearchResult {
   first_air_date?: string
   vote_average?: number
   genre_ids?: number[]
+  popularity?: number
 }
 
 interface TmdbDetailsResponse extends TmdbSearchResult {
@@ -64,11 +66,21 @@ interface TmdbDetailsResponse extends TmdbSearchResult {
 }
 
 interface TmdbCredit {
+  id?: number
   name?: string
   job?: string
   department?: string
   character?: string
   profile_path?: string | null
+}
+
+interface TmdbPersonResponse {
+  id?: number
+  name?: string
+  profile_path?: string | null
+  combined_credits?: {
+    cast?: TmdbSearchResult[]
+  }
 }
 
 interface TmdbGenreResponse {
@@ -181,6 +193,45 @@ export async function getMediaDetails(
   const response = await fetchTmdb(apiKey, url)
   const payload = (await response.json()) as TmdbDetailsResponse
   return toMediaDetails(kind, payload)
+}
+
+export async function getPersonCredits(apiKey: string, id: number, language: string): Promise<MediaPersonCredits> {
+  const url = new URL(`${TMDB_API_BASE}/person/${id}`)
+  url.searchParams.set('language', language)
+  url.searchParams.set('append_to_response', 'combined_credits')
+
+  const [response, movieGenres, tvGenres] = await Promise.all([
+    fetchTmdb(apiKey, url),
+    listGenreMap(apiKey, 'movie', language),
+    listGenreMap(apiKey, 'tv', language),
+  ])
+  const payload = (await response.json()) as TmdbPersonResponse
+
+  if (!payload.id || !payload.name) {
+    throw new Error('TMDB person response is missing required fields.')
+  }
+
+  const seen = new Set<string>()
+  const results = (payload.combined_credits?.cast ?? [])
+    .filter((item) => item.media_type === 'movie' || item.media_type === 'tv')
+    .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+    .map((item) => toMediaSearchItem(item, item.media_type === 'movie' ? movieGenres : tvGenres))
+    .filter((item): item is MediaSearchItem => item !== null)
+    .filter((item) => {
+      const key = `${item.kind}:${item.id}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+  return {
+    person: {
+      id: payload.id,
+      name: payload.name,
+      portraitUrl: payload.profile_path ? `${TMDB_IMAGE_BASE}/w342${payload.profile_path}` : null,
+    },
+    results,
+  }
 }
 
 async function fetchTmdb(apiKey: string, url: URL): Promise<Response> {
@@ -302,10 +353,11 @@ function getCreatorNames(item: TmdbDetailsResponse): string[] {
 
 function toMediaCredits(cast: TmdbCredit[]): MediaCredit[] {
   return cast
-    .filter((credit) => credit.name)
+    .filter((credit): credit is TmdbCredit & { id: number; name: string } => Boolean(credit.id && credit.name))
     .slice(0, 12)
     .map((credit) => ({
-      name: credit.name as string,
+      id: credit.id,
+      name: credit.name,
       role: credit.character || 'Cast',
       portraitUrl: credit.profile_path ? `${TMDB_IMAGE_BASE}/w342${credit.profile_path}` : null,
     }))

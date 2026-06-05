@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import {
   discoverMedia,
   getMediaDetails,
+  getPersonCredits,
   getPopularMedia,
   getTrendingMedia,
   listMediaGenres,
@@ -55,6 +56,14 @@ export function useMediaDetails(kind: MediaKind, id: number, language: string) {
   return useQuery({
     queryKey: queryKeys.media.details(kind, id, language),
     queryFn: async () => (await getMediaDetails(kind, id, language)).item,
+    enabled: Number.isInteger(id) && id > 0,
+  })
+}
+
+export function usePersonCredits(id: number, language: string) {
+  return useQuery({
+    queryKey: queryKeys.media.personCredits(id, language),
+    queryFn: async () => getPersonCredits(id, language),
     enabled: Number.isInteger(id) && id > 0,
   })
 }

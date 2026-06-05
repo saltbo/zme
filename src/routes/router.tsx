@@ -9,6 +9,7 @@ import { IndexersPage } from '@/routes/indexers'
 import { MediaDetailPage } from '@/routes/media-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
+import { PersonCreditsPage } from '@/routes/person-credits'
 import { SettingsPage } from '@/routes/settings'
 import { UsersPage } from '@/routes/users'
 
@@ -47,6 +48,10 @@ export const router = createBrowserRouter([
           {
             path: 'series/:id',
             element: <MediaDetailPage kind="tv" />,
+          },
+          {
+            path: 'people/:id',
+            element: <PersonCreditsPage />,
           },
           {
             path: 'favorites',

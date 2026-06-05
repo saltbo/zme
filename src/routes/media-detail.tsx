@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Film, Heart, Search, Star, Tv } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useLocation, useOutletContext, useParams } from 'react-router'
+import { Link, useLocation, useOutletContext, useParams } from 'react-router'
 import { toast } from 'sonner'
 import type { AppOutletContext } from '@/components/app-shell/types'
 import { ReleaseSearchDialog, type ReleaseSearchError } from '@/components/release-search-dialog'
@@ -305,8 +305,13 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
           <div className="zme-x-scroll -mx-5 mt-4 flex gap-4 overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8">
             {media.cast.length > 0 ? (
               media.cast.map((person) => (
-                <article key={`${person.name}-${person.role}`} className="w-[172px] shrink-0">
-                  <Card className="gap-0 overflow-hidden p-0 shadow-[0_18px_42px_rgba(33,22,47,0.14)]">
+                <Link
+                  key={`${person.id}-${person.role}`}
+                  to={`/people/${person.id}`}
+                  state={{ from: location.pathname }}
+                  className="group/person w-[172px] shrink-0"
+                >
+                  <Card className="gap-0 overflow-hidden p-0 shadow-[0_18px_42px_rgba(33,22,47,0.14)] transition group-hover/person:-translate-y-1 group-hover/person:shadow-[0_24px_54px_rgba(124,58,237,0.18)]">
                     {person.portraitUrl ? (
                       <img
                         src={person.portraitUrl}
@@ -321,10 +326,12 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
                     )}
                   </Card>
                   <CardContent className="mt-3 px-0">
-                    <div className="line-clamp-2 font-semibold text-sm leading-tight">{person.name}</div>
+                    <div className="line-clamp-2 font-semibold text-sm leading-tight transition group-hover/person:text-primary">
+                      {person.name}
+                    </div>
                     <div className="mt-1 line-clamp-1 text-muted-foreground text-xs">{person.role}</div>
                   </CardContent>
-                </article>
+                </Link>
               ))
             ) : (
               <Card className="flex min-h-40 min-w-full items-center justify-center text-muted-foreground text-sm">

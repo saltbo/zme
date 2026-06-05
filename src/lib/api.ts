@@ -18,6 +18,7 @@ import type {
   MediaDiscoverPage,
   MediaGenre,
   MediaKind,
+  MediaPersonCredits,
   MediaSearchItem,
   MediaSourceDetails,
   MediaSourceHealth,
@@ -97,6 +98,13 @@ export async function getMediaDetails(kind: MediaKind, id: number, language: str
   return apiRequest<{ item: MediaDetails }>(
     `/api/media/${kind}/${id}${query({ language })}`,
     'Failed to load media details.',
+  )
+}
+
+export async function getPersonCredits(id: number, language: string) {
+  return apiRequest<MediaPersonCredits>(
+    `/api/media/people/${id}/credits${query({ language })}`,
+    'Failed to load person credits.',
   )
 }
 

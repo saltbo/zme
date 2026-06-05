@@ -63,9 +63,21 @@ export interface AppUser {
 }
 
 export interface MediaCredit {
+  id: number
   name: string
   role: string
   portraitUrl: string | null
+}
+
+export interface MediaPerson {
+  id: number
+  name: string
+  portraitUrl: string | null
+}
+
+export interface MediaPersonCredits {
+  person: MediaPerson
+  results: MediaSearchItem[]
 }
 
 export interface MediaExternalIds {

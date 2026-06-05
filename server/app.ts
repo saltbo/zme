@@ -37,6 +37,7 @@ import { createInitialAdmin, isInitialized } from './services/setup'
 import {
   discoverMedia,
   getMediaDetails,
+  getPersonCredits,
   getPopularMedia,
   getTrendingMedia,
   listMediaGenres,
@@ -80,6 +81,10 @@ const mediaDetailParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
 
+const personParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+})
+
 const favoriteParamsSchema = mediaDetailParamsSchema
 
 const languageQuerySchema = z.object({
@@ -96,7 +101,7 @@ const favoriteSchema = z.object({
   backdropUrl: z.string().nullable(),
   releaseYear: z.string().nullable(),
   rating: z.number().nullable(),
-  genres: z.array(z.string()).optional(),
+  genres: z.array(z.string()).default([]),
 })
 
 const popularQuerySchema = z.object({
@@ -267,6 +272,19 @@ routes.get('/media/genres', zValidator('query', popularQuerySchema), async (c) =
   const genres = await listMediaGenres(source.apiKey, kind, source.language)
   return c.json({ genres })
 })
+
+routes.get(
+  '/media/people/:id/credits',
+  zValidator('param', personParamsSchema),
+  zValidator('query', languageQuerySchema),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const { language } = c.req.valid('query')
+    const source = await getActiveTmdbSource(createDb(c.env), language)
+    const credits = await getPersonCredits(source.apiKey, id, source.language)
+    return c.json(credits)
+  },
+)
 
 routes.get(
   '/media/:kind/:id',
