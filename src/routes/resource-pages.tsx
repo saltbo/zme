@@ -57,6 +57,7 @@ export function MusicPage() {
       title={t('music')}
       emptyTitle={t('searchMusic')}
       emptyDescription={t('searchMusicDescription')}
+      defaultDescription={t('popularMusicDescription')}
       query={query}
       loading={search.isLoading}
       items={(search.data ?? []).map((item) => ({ key: item.mediaKey, node: <MusicAlbumCard item={item} /> }))}
@@ -79,6 +80,7 @@ export function BooksPage() {
       title={t('books')}
       emptyTitle={t('searchBooks')}
       emptyDescription={t('searchBooksDescription')}
+      defaultDescription={t('trendingBooksDescription')}
       query={query}
       loading={search.isLoading}
       items={(search.data ?? []).map((item) => ({ key: item.mediaKey, node: <BookCard item={item} /> }))}
@@ -90,6 +92,7 @@ function ResourceSearchPage({
   title,
   emptyTitle,
   emptyDescription,
+  defaultDescription,
   query,
   loading,
   items,
@@ -97,6 +100,7 @@ function ResourceSearchPage({
   title: string
   emptyTitle: string
   emptyDescription: string
+  defaultDescription: string
   query: string
   loading: boolean
   items: { key: string; node: ReactNode }[]
@@ -109,12 +113,12 @@ function ResourceSearchPage({
         <div className="min-w-0">
           <div className="font-semibold text-sm text-muted-foreground">{title}</div>
           <div className="mt-1 truncate text-muted-foreground text-sm">
-            {query ? t('resourceSearchResultCount', { count: items.length, query }) : emptyDescription}
+            {query ? t('resourceSearchResultCount', { count: items.length, query }) : defaultDescription}
           </div>
         </div>
       </div>
 
-      {!query ? (
+      {!query && !loading && items.length === 0 ? (
         <Card className="flex min-h-80 items-center justify-center p-8 text-center">
           <CardContent className="max-w-md px-0">
             <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">

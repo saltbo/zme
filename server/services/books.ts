@@ -5,6 +5,10 @@ interface OpenLibrarySearchResponse {
   docs?: OpenLibrarySearchDoc[]
 }
 
+interface OpenLibraryTrendingResponse {
+  works?: OpenLibrarySearchDoc[]
+}
+
 interface OpenLibrarySearchDoc {
   key?: string
   title?: string
@@ -91,6 +95,17 @@ export async function searchBooks(query: string): Promise<BookSearchItem[]> {
     throw new OpenLibraryError('Open Library search response has invalid docs.', 502)
   }
   return (payload.docs ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
+}
+
+export async function listTrendingBooks(limit = 20): Promise<BookSearchItem[]> {
+  const url = new URL(`${OPEN_LIBRARY_BASE}/trending/daily.json`)
+  url.searchParams.set('limit', String(limit))
+
+  const payload = await fetchOpenLibraryJson<OpenLibraryTrendingResponse>(url, { notFoundStatus: 502 })
+  if (payload.works !== undefined && !Array.isArray(payload.works)) {
+    throw new OpenLibraryError('Open Library trending response has invalid works.', 502)
+  }
+  return (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
 }
 
 export async function getBookDetails(mediaKey: string): Promise<BookDetails> {

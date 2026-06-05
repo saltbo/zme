@@ -108,6 +108,10 @@ export async function searchBooks(queryValue: string) {
   )
 }
 
+export async function getTrendingBooks() {
+  return apiRequest<{ results: BookSearchItem[] }>('/api/books/trending', 'Failed to load trending books.')
+}
+
 export async function getBookDetails(mediaKey: string) {
   return apiRequest<{ item: BookDetails }>(`/api/books/${encodeURIComponent(mediaKey)}`, 'Failed to load book details.')
 }
@@ -192,6 +196,10 @@ export async function searchMusicAlbums(input: { query?: string; artist?: string
     `/api/music/search${query({ q: input.query, artist: input.artist, title: input.title })}`,
     'Failed to search music albums.',
   )
+}
+
+export async function getPopularMusicAlbums() {
+  return apiRequest<{ results: MusicAlbumSearchItem[] }>('/api/music/popular', 'Failed to load popular music.')
 }
 
 export async function getMusicAlbumDetails(mediaKey: string) {

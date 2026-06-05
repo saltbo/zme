@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { type AuthSession, type AuthUser, createAuth } from './auth'
 import { createDb } from './db/client'
 import type { Env } from './env'
-import { getBookDetails, OpenLibraryError, searchBooks } from './services/books'
+import { getBookDetails, listTrendingBooks, OpenLibraryError, searchBooks } from './services/books'
 import { listDownloadTasks, streamDownloadTaskEvents } from './services/download-tasks'
 import {
   checkDownloaderHealth,
@@ -51,7 +51,7 @@ import {
   listMediaSources,
   updateMediaSource,
 } from './services/media-sources'
-import { getMusicAlbumDetails, MusicProviderError, searchMusicAlbums } from './services/music'
+import { getMusicAlbumDetails, listPopularMusicAlbums, MusicProviderError, searchMusicAlbums } from './services/music'
 import { createInitialAdmin, isInitialized } from './services/setup'
 import {
   discoverMedia,
@@ -329,6 +329,15 @@ routes.get('/books/search', zValidator('query', bookSearchQuerySchema), async (c
   }
 })
 
+routes.get('/books/trending', async (c) => {
+  try {
+    const results = await listTrendingBooks()
+    return c.json({ results })
+  } catch (error) {
+    return openLibraryErrorResponse(c, error, 'Book trending lookup failed.')
+  }
+})
+
 routes.get('/books/:mediaKey', zValidator('param', bookParamsSchema), async (c) => {
   try {
     const item = await getBookDetails(decodeURIComponent(c.req.valid('param').mediaKey))
@@ -372,6 +381,15 @@ routes.get('/tmdb/genres', zValidator('query', popularQuerySchema), async (c) =>
 routes.get('/music/search', zValidator('query', musicSearchQuerySchema), async (c) => {
   try {
     const results = await searchMusicAlbums(c.req.valid('query'))
+    return c.json({ results })
+  } catch (error) {
+    return musicProviderErrorResponse(c, error)
+  }
+})
+
+routes.get('/music/popular', async (c) => {
+  try {
+    const results = await listPopularMusicAlbums()
     return c.json({ results })
   } catch (error) {
     return musicProviderErrorResponse(c, error)
