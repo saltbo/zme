@@ -48,6 +48,7 @@ import {
   listMediaSources,
   updateMediaSource,
 } from './services/media-sources'
+import { getMusicAlbumDetails, MusicProviderError, searchMusicAlbums } from './services/music'
 import { createInitialAdmin, isInitialized } from './services/setup'
 import {
   discoverMedia,
@@ -79,6 +80,20 @@ const bookSearchQuerySchema = z.object({
 })
 
 const bookParamsSchema = z.object({
+  mediaKey: z.string().trim().min(1),
+})
+
+const musicSearchQuerySchema = z
+  .object({
+    q: z.string().trim().min(1).optional(),
+    artist: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).optional(),
+  })
+  .refine((value) => value.q || value.artist || value.title, {
+    message: 'At least one music search field is required.',
+  })
+
+const musicDetailsQuerySchema = z.object({
   mediaKey: z.string().trim().min(1),
 })
 
@@ -342,6 +357,24 @@ routes.get('/tmdb/genres', zValidator('query', popularQuerySchema), async (c) =>
   return c.json({ genres })
 })
 
+routes.get('/music/search', zValidator('query', musicSearchQuerySchema), async (c) => {
+  try {
+    const results = await searchMusicAlbums(c.req.valid('query'))
+    return c.json({ results })
+  } catch (error) {
+    return musicProviderErrorResponse(c, error)
+  }
+})
+
+routes.get('/music/details', zValidator('query', musicDetailsQuerySchema), async (c) => {
+  try {
+    const item = await getMusicAlbumDetails(c.req.valid('query').mediaKey)
+    return c.json({ item })
+  } catch (error) {
+    return musicProviderErrorResponse(c, error)
+  }
+})
+
 routes.get(
   '/people/:id/credits',
   zValidator('param', personParamsSchema),
@@ -451,6 +484,20 @@ function parseAliases(value: string | undefined): string[] {
     .split('|')
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function musicProviderErrorResponse(c: Context<AppEnv>, error: unknown) {
+  if (error instanceof MusicProviderError) {
+    return c.json({ code: error.code, error: error.message }, error.status as 400 | 404 | 429 | 502)
+  }
+
+  return c.json(
+    {
+      code: 'MUSIC_PROVIDER_FAILED',
+      error: error instanceof Error ? error.message : 'Music provider request failed.',
+    },
+    502,
+  )
 }
 
 routes.get('/library', zValidator('query', libraryQuerySchema), async (c) => {

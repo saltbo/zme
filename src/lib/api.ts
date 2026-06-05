@@ -35,6 +35,8 @@ import type {
   MediaSourceInput,
   MediaSourceSummary,
   MediaWatchClickouts,
+  MusicAlbumDetails,
+  MusicAlbumSearchItem,
 } from '@shared/types'
 
 export class ApiError extends Error {
@@ -180,6 +182,20 @@ export async function listMediaGenres(kind: MediaKind, language: string) {
   return apiRequest<{ genres: MediaGenre[] }>(
     `/api/tmdb/genres${query({ kind, language })}`,
     'Failed to load media genres.',
+  )
+}
+
+export async function searchMusicAlbums(input: { query?: string; artist?: string; title?: string }) {
+  return apiRequest<{ results: MusicAlbumSearchItem[] }>(
+    `/api/music/search${query({ q: input.query, artist: input.artist, title: input.title })}`,
+    'Failed to search music albums.',
+  )
+}
+
+export async function getMusicAlbumDetails(mediaKey: string) {
+  return apiRequest<{ item: MusicAlbumDetails }>(
+    `/api/music/details${query({ mediaKey })}`,
+    'Failed to load music album details.',
   )
 }
 
