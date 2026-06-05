@@ -82,6 +82,10 @@ const mediaDetailParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
 
+const mediaIdParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+})
+
 const personParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
@@ -244,28 +248,28 @@ routes.use('/indexers', requireAdminMiddleware)
 routes.use('/media-sources', requireAdminMiddleware)
 routes.use('/media-sources/*', requireAdminMiddleware)
 
-routes.get('/media/search', zValidator('query', searchQuerySchema), async (c) => {
+routes.get('/tmdb/search', zValidator('query', searchQuerySchema), async (c) => {
   const { q, language } = c.req.valid('query')
   const source = await getActiveTmdbSource(createDb(c.env), language)
   const results = await searchMedia(source.apiKey, q, source.language)
   return c.json({ results })
 })
 
-routes.get('/media/trending', zValidator('query', languageQuerySchema), async (c) => {
+routes.get('/tmdb/trending', zValidator('query', languageQuerySchema), async (c) => {
   const { language } = c.req.valid('query')
   const source = await getActiveTmdbSource(createDb(c.env), language)
   const results = await getTrendingMedia(source.apiKey, source.language)
   return c.json({ results })
 })
 
-routes.get('/media/popular', zValidator('query', popularQuerySchema), async (c) => {
+routes.get('/tmdb/popular', zValidator('query', popularQuerySchema), async (c) => {
   const { kind, language } = c.req.valid('query')
   const source = await getActiveTmdbSource(createDb(c.env), language)
   const results = await getPopularMedia(source.apiKey, kind, source.language)
   return c.json({ results })
 })
 
-routes.get('/media/discover', zValidator('query', discoverQuerySchema), async (c) => {
+routes.get('/tmdb/discover', zValidator('query', discoverQuerySchema), async (c) => {
   const input = c.req.valid('query')
   const source = await getActiveTmdbSource(createDb(c.env), input.language)
   const page = await discoverMedia(source.apiKey, {
@@ -275,7 +279,7 @@ routes.get('/media/discover', zValidator('query', discoverQuerySchema), async (c
   return c.json(page)
 })
 
-routes.get('/media/genres', zValidator('query', popularQuerySchema), async (c) => {
+routes.get('/tmdb/genres', zValidator('query', popularQuerySchema), async (c) => {
   const { kind, language } = c.req.valid('query')
   const source = await getActiveTmdbSource(createDb(c.env), language)
   const genres = await listMediaGenres(source.apiKey, kind, source.language)
@@ -283,7 +287,7 @@ routes.get('/media/genres', zValidator('query', popularQuerySchema), async (c) =
 })
 
 routes.get(
-  '/media/people/:id/credits',
+  '/people/:id/credits',
   zValidator('param', personParamsSchema),
   zValidator('query', languageQuerySchema),
   async (c) => {
@@ -296,26 +300,51 @@ routes.get(
 )
 
 routes.get(
-  '/media/:kind/:id/watch-clickouts',
-  zValidator('param', mediaDetailParamsSchema),
+  '/movies/:id/watch-clickouts',
+  zValidator('param', mediaIdParamsSchema),
   zValidator('query', mediaDetailQuerySchema),
   async (c) => {
-    const { kind, id } = c.req.valid('param')
+    const { id } = c.req.valid('param')
     const { watchRegion } = c.req.valid('query')
-    const clickouts = await getWatchClickouts(kind, id, watchRegion)
+    const clickouts = await getWatchClickouts('movie', id, watchRegion)
     return c.json({ clickouts })
   },
 )
 
 routes.get(
-  '/media/:kind/:id',
-  zValidator('param', mediaDetailParamsSchema),
+  '/series/:id/watch-clickouts',
+  zValidator('param', mediaIdParamsSchema),
   zValidator('query', mediaDetailQuerySchema),
   async (c) => {
-    const { kind, id } = c.req.valid('param')
+    const { id } = c.req.valid('param')
+    const { watchRegion } = c.req.valid('query')
+    const clickouts = await getWatchClickouts('tv', id, watchRegion)
+    return c.json({ clickouts })
+  },
+)
+
+routes.get(
+  '/movies/:id',
+  zValidator('param', mediaIdParamsSchema),
+  zValidator('query', mediaDetailQuerySchema),
+  async (c) => {
+    const { id } = c.req.valid('param')
     const { language, watchRegion } = c.req.valid('query')
     const source = await getActiveTmdbSource(createDb(c.env), language)
-    const item = await getMediaDetails(source.apiKey, kind, id, source.language, watchRegion)
+    const item = await getMediaDetails(source.apiKey, 'movie', id, source.language, watchRegion)
+    return c.json({ item })
+  },
+)
+
+routes.get(
+  '/series/:id',
+  zValidator('param', mediaIdParamsSchema),
+  zValidator('query', mediaDetailQuerySchema),
+  async (c) => {
+    const { id } = c.req.valid('param')
+    const { language, watchRegion } = c.req.valid('query')
+    const source = await getActiveTmdbSource(createDb(c.env), language)
+    const item = await getMediaDetails(source.apiKey, 'tv', id, source.language, watchRegion)
     return c.json({ item })
   },
 )
