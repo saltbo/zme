@@ -1,25 +1,16 @@
 import type { LibraryMediaInput, LibraryMediaItem, MediaKind } from '@shared/types'
-import { and, desc, eq, isNotNull } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { library, type LibraryItem } from '../db/schema'
 
 type Db = ReturnType<typeof createDb>
-
-export async function listSavedItems(db: Db, userId: string): Promise<LibraryMediaItem[]> {
-  const rows = await db
-    .select()
-    .from(library)
-    .where(and(eq(library.userId, userId), isNotNull(library.savedAt)))
-    .orderBy(desc(library.savedAt))
-  return rows.map(toLibraryMediaItem)
-}
 
 export async function listLibrary(db: Db, userId: string): Promise<LibraryMediaItem[]> {
   const rows = await db.select().from(library).where(eq(library.userId, userId)).orderBy(desc(library.updatedAt))
   return rows.map(toLibraryMediaItem)
 }
 
-export async function getSavedItem(
+export async function getLibraryItem(
   db: Db,
   userId: string,
   kind: MediaKind,
@@ -30,10 +21,10 @@ export async function getSavedItem(
     .from(library)
     .where(and(eq(library.userId, userId), eq(library.mediaKey, mediaKey(kind, tmdbId))))
     .limit(1)
-  return rows[0]?.savedAt ? toLibraryMediaItem(rows[0]) : null
+  return rows[0] ? toLibraryMediaItem(rows[0]) : null
 }
 
-export async function saveSavedItem(db: Db, userId: string, input: LibraryMediaInput): Promise<LibraryMediaItem> {
+export async function saveLibraryItem(db: Db, userId: string, input: LibraryMediaInput): Promise<LibraryMediaItem> {
   const now = new Date().toISOString()
   const key = mediaKey(input.kind, input.id)
   const existing = await getLibraryRow(db, userId, key)
@@ -80,10 +71,10 @@ export async function saveSavedItem(db: Db, userId: string, input: LibraryMediaI
   return toLibraryMediaItem(row)
 }
 
-export async function deleteSavedItem(db: Db, userId: string, kind: MediaKind, tmdbId: number): Promise<boolean> {
+export async function deleteLibraryItem(db: Db, userId: string, kind: MediaKind, tmdbId: number): Promise<boolean> {
   const key = mediaKey(kind, tmdbId)
   const existing = await getLibraryRow(db, userId, key)
-  if (!existing?.savedAt) return false
+  if (!existing) return false
 
   const rows = await db.delete(library).where(and(eq(library.userId, userId), eq(library.mediaKey, key))).returning({
     id: library.id,

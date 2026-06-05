@@ -15,12 +15,11 @@ import {
   updateDownloader,
 } from './services/downloaders'
 import {
-  deleteSavedItem,
+  deleteLibraryItem,
   deleteWatched,
-  getSavedItem,
-  listSavedItems,
+  getLibraryItem,
   listLibrary,
-  saveSavedItem,
+  saveLibraryItem,
   setWatched,
 } from './services/library'
 import {
@@ -98,7 +97,7 @@ const personParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
 })
 
-const favoriteParamsSchema = mediaDetailParamsSchema
+const libraryItemParamsSchema = mediaDetailParamsSchema
 
 const languageQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
@@ -112,7 +111,7 @@ const mediaDetailQuerySchema = languageQuerySchema.extend({
     .default('US'),
 })
 
-const favoriteSchema = z.object({
+const libraryItemSchema = z.object({
   id: z.number().int().positive(),
   kind: z.enum(['movie', 'tv']),
   title: z.string().trim().min(1),
@@ -392,63 +391,47 @@ function parseAliases(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-routes.get('/favorites', async (c) => {
-  const items = await listSavedItems(createDb(c.env), c.get('user').id)
-  return c.json({ items })
-})
-
 routes.get('/library', async (c) => {
   const items = await listLibrary(createDb(c.env), c.get('user').id)
   return c.json({ items })
 })
 
-routes.get('/favorites/:kind/:id', zValidator('param', favoriteParamsSchema), async (c) => {
+routes.get('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
   const { kind, id } = c.req.valid('param')
-  const item = await getSavedItem(createDb(c.env), c.get('user').id, kind, id)
-  if (!item) return c.json({ error: 'Favorite not found.' }, 404)
+  const item = await getLibraryItem(createDb(c.env), c.get('user').id, kind, id)
+  if (!item) return c.json({ error: 'Library item not found.' }, 404)
   return c.json({ item })
 })
 
-routes.post('/favorites', zValidator('json', favoriteSchema), async (c) => {
-  const item = await saveSavedItem(createDb(c.env), c.get('user').id, c.req.valid('json'))
-  return c.json({ item }, 201)
+routes.put('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), zValidator('json', libraryItemSchema), async (c) => {
+  const { kind, id } = c.req.valid('param')
+  const input = c.req.valid('json')
+  if (input.kind !== kind || input.id !== id) return c.json({ error: 'Library route does not match request body.' }, 400)
+
+  const item = await saveLibraryItem(createDb(c.env), c.get('user').id, input)
+  return c.json({ item })
 })
 
-routes.delete('/favorites/:kind/:id', zValidator('param', favoriteParamsSchema), async (c) => {
+routes.delete('/library/:kind/:id', zValidator('param', libraryItemParamsSchema), async (c) => {
   const { kind, id } = c.req.valid('param')
-  const deleted = await deleteSavedItem(createDb(c.env), c.get('user').id, kind, id)
-  if (!deleted) return c.json({ error: 'Favorite not found.' }, 404)
+  const deleted = await deleteLibraryItem(createDb(c.env), c.get('user').id, kind, id)
+  if (!deleted) return c.json({ error: 'Library item not found.' }, 404)
   return c.json({ kind, id })
 })
 
-routes.put('/movies/:id/watched', zValidator('param', mediaIdParamsSchema), zValidator('json', favoriteSchema), async (c) => {
-  const { id } = c.req.valid('param')
+routes.put('/library/:kind/:id/watched', zValidator('param', libraryItemParamsSchema), zValidator('json', libraryItemSchema), async (c) => {
+  const { kind, id } = c.req.valid('param')
   const input = c.req.valid('json')
-  if (input.kind !== 'movie' || input.id !== id) return c.json({ error: 'Media route does not match request body.' }, 400)
+  if (input.kind !== kind || input.id !== id) return c.json({ error: 'Library route does not match request body.' }, 400)
 
   const item = await setWatched(createDb(c.env), c.get('user').id, input, true)
   return c.json({ item })
 })
 
-routes.delete('/movies/:id/watched', zValidator('param', mediaIdParamsSchema), async (c) => {
-  const { id } = c.req.valid('param')
-  const item = await deleteWatched(createDb(c.env), c.get('user').id, 'movie', id)
-  return c.json({ item, kind: 'movie', id })
-})
-
-routes.put('/series/:id/watched', zValidator('param', mediaIdParamsSchema), zValidator('json', favoriteSchema), async (c) => {
-  const { id } = c.req.valid('param')
-  const input = c.req.valid('json')
-  if (input.kind !== 'tv' || input.id !== id) return c.json({ error: 'Media route does not match request body.' }, 400)
-
-  const item = await setWatched(createDb(c.env), c.get('user').id, input, true)
-  return c.json({ item })
-})
-
-routes.delete('/series/:id/watched', zValidator('param', mediaIdParamsSchema), async (c) => {
-  const { id } = c.req.valid('param')
-  const item = await deleteWatched(createDb(c.env), c.get('user').id, 'tv', id)
-  return c.json({ item, kind: 'tv', id })
+routes.delete('/library/:kind/:id/watched', zValidator('param', libraryItemParamsSchema), async (c) => {
+  const { kind, id } = c.req.valid('param')
+  const item = await deleteWatched(createDb(c.env), c.get('user').id, kind, id)
+  return c.json({ item, kind, id })
 })
 
 routes.get('/media-sources', async (c) => {

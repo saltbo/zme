@@ -180,28 +180,34 @@ export async function searchIndexers(input: {
   )
 }
 
-export async function listFavorites() {
-  return apiRequest<{ items: LibraryMediaItem[] }>('/api/favorites', 'Failed to load favorites.')
-}
-
 export async function listLibrary() {
   return apiRequest<{ items: LibraryMediaItem[] }>('/api/library', 'Failed to load library.')
 }
 
-export async function createFavorite(input: LibraryMediaInput) {
-  return apiRequest<{ item: LibraryMediaItem }>('/api/favorites', 'Failed to save favorite.', jsonBody(input))
+export async function saveLibraryItem(input: LibraryMediaInput) {
+  return apiRequest<{ item: LibraryMediaItem }>(
+    `/api/library/${input.kind}/${input.id}`,
+    'Failed to save library item.',
+    {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    },
+  )
 }
 
-export async function deleteFavorite(kind: MediaKind, id: number) {
-  return apiRequest<{ kind: MediaKind; id: number }>(`/api/favorites/${kind}/${id}`, 'Failed to remove favorite.', {
-    method: 'DELETE',
-  })
+export async function removeLibraryItem(kind: MediaKind, id: number) {
+  return apiRequest<{ kind: MediaKind; id: number }>(
+    `/api/library/${kind}/${id}`,
+    'Failed to remove library item.',
+    {
+      method: 'DELETE',
+    },
+  )
 }
 
 export async function markWatched(input: LibraryMediaInput) {
-  const resource = input.kind === 'movie' ? 'movies' : 'series'
   return apiRequest<{ item: LibraryMediaItem }>(
-    `/api/${resource}/${input.id}/watched`,
+    `/api/library/${input.kind}/${input.id}/watched`,
     'Failed to update watched status.',
     {
       method: 'PUT',
@@ -211,9 +217,8 @@ export async function markWatched(input: LibraryMediaInput) {
 }
 
 export async function unmarkWatched(kind: MediaKind, id: number) {
-  const resource = kind === 'movie' ? 'movies' : 'series'
   return apiRequest<{ item: LibraryMediaItem | null; kind: MediaKind; id: number }>(
-    `/api/${resource}/${id}/watched`,
+    `/api/library/${kind}/${id}/watched`,
     'Failed to update watched status.',
     {
       method: 'DELETE',

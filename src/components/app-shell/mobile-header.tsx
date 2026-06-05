@@ -53,7 +53,7 @@ export function MobileHeader() {
             <MobileMenuLink icon={Film} label={t('movies')} to="/movies" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Tv} label={t('series')} to="/series" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Sparkles} label={t('animations')} to="/animations" onNavigate={() => setOpen(false)} />
-            <MobileMenuLink icon={Bookmark} label={t('favorites')} to="/favorites" onNavigate={() => setOpen(false)} />
+            <MobileMenuLink icon={Bookmark} label={t('myLibrary')} to="/library" onNavigate={() => setOpen(false)} />
             <MobileMenuLink
               icon={DownloadCloud}
               label={t('downloads')}

@@ -40,7 +40,7 @@ export function AppSidebar() {
             <SidebarLink icon={Film} label={t('movies')} to="/movies" />
             <SidebarLink icon={Tv} label={t('series')} to="/series" />
             <SidebarLink icon={Sparkles} label={t('animations')} to="/animations" />
-            <SidebarLink icon={Bookmark} label={t('favorites')} to="/favorites" />
+            <SidebarLink icon={Bookmark} label={t('myLibrary')} to="/library" />
             <SidebarLink icon={DownloadCloud} label={t('downloads')} to="/downloads" />
             {isAdmin ? (
               <>

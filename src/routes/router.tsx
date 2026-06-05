@@ -4,8 +4,8 @@ import { AuthenticatedShell } from '@/components/app-shell/authenticated-shell'
 import { useAuth } from '@/contexts/auth'
 import { AuthGate } from '@/routes/auth-gate'
 import { DownloadsPage } from '@/routes/downloads'
-import { FavoritesPage } from '@/routes/favorites'
 import { IndexersPage } from '@/routes/indexers'
+import { LibraryPage } from '@/routes/library'
 import { MediaDetailPage } from '@/routes/media-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
@@ -58,8 +58,8 @@ export const router = createBrowserRouter([
             element: <PersonCreditsPage />,
           },
           {
-            path: 'favorites',
-            element: <FavoritesPage />,
+            path: 'library',
+            element: <LibraryPage />,
           },
           {
             path: 'downloads',

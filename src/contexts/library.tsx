@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { createFavorite, deleteFavorite, listLibrary, markWatched, unmarkWatched } from '@/lib/api'
+import { listLibrary, markWatched, removeLibraryItem, saveLibraryItem, unmarkWatched } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export type MediaStatus = 'none' | 'saved' | 'watched'
@@ -12,11 +12,11 @@ export type MediaStatus = 'none' | 'saved' | 'watched'
 interface LibraryContextValue {
   items: LibraryMediaItem[]
   loading: boolean
-  isFavorite: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
+  isSaved: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
   isWatched: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => boolean
   getMediaStatus: (item: Pick<MediaSearchItem, 'id' | 'kind'>) => MediaStatus
   setMediaStatus: (item: MediaSearchItem, status: MediaStatus) => Promise<void>
-  toggleFavorite: (item: MediaSearchItem) => Promise<void>
+  toggleSaved: (item: MediaSearchItem) => Promise<void>
   toggleWatched: (item: MediaSearchItem) => Promise<void>
 }
 
@@ -39,7 +39,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   )
   const stateByKey = useMemo(() => new Map(libraryItems.map((item) => [getMediaKey(item), item])), [libraryItems])
 
-  const isFavorite = useCallback(
+  const isSaved = useCallback(
     (item: Pick<MediaSearchItem, 'id' | 'kind'>) => savedKeys.has(getMediaKey(item)),
     [savedKeys],
   )
@@ -60,28 +60,25 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   )
 
   const saveSavedItem = useMutation({
-    mutationFn: createFavorite,
+    mutationFn: saveLibraryItem,
     onSuccess: (payload, item) => {
       const key = getMediaKey(item)
       queryClient.setQueryData<LibraryMediaItem[]>(queryKeys.library, (current = []) => [
         payload.item,
         ...current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
       ])
-      toast.success(t('favoriteAdded'))
+      toast.success(t('savedAdded'))
     },
   })
 
   const removeSavedItem = useMutation({
-    mutationFn: (item: MediaSearchItem) => deleteFavorite(item.kind, item.id),
+    mutationFn: (item: MediaSearchItem) => removeLibraryItem(item.kind, item.id),
     onSuccess: (_payload, item) => {
       const key = getMediaKey(item)
       queryClient.setQueryData<LibraryMediaItem[]>(queryKeys.library, (current = []) =>
-        current.flatMap((libraryItem) => {
-          if (getMediaKey(libraryItem) !== key) return [libraryItem]
-          return libraryItem.watchedAt ? [{ ...libraryItem, savedAt: null }] : []
-        }),
+        current.filter((libraryItem) => getMediaKey(libraryItem) !== key),
       )
-      toast.success(t('favoriteRemoved'))
+      toast.success(t('savedRemoved'))
     },
   })
 
@@ -98,7 +95,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     },
   })
 
-  const toggleFavorite = useCallback(
+  const toggleSaved = useCallback(
     async (item: MediaSearchItem) => {
       if (savedKeys.has(getMediaKey(item))) {
         await removeSavedItem.mutateAsync(item)
@@ -150,19 +147,19 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     () => ({
       items,
       loading: library.isLoading,
-      isFavorite,
+      isSaved,
       isWatched,
       getMediaStatus,
       setMediaStatus,
-      toggleFavorite,
+      toggleSaved,
       toggleWatched,
     }),
-    [items, library.isLoading, isFavorite, isWatched, getMediaStatus, setMediaStatus, toggleFavorite, toggleWatched],
+    [items, library.isLoading, isSaved, isWatched, getMediaStatus, setMediaStatus, toggleSaved, toggleWatched],
   )
 
   useEffect(() => {
     if (library.error) {
-      toast.error(library.error instanceof Error ? library.error.message : t('favoritesLoadFailed'))
+      toast.error(library.error instanceof Error ? library.error.message : t('libraryLoadFailed'))
     }
   }, [library.error, t])
 

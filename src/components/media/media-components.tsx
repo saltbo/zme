@@ -90,13 +90,13 @@ export function FilterBar({
   mode,
   resultCount,
 }: {
-  mode: 'discover' | MediaKind | 'animation' | 'favorites'
+  mode: 'discover' | MediaKind | 'animation' | 'library'
   resultCount: number
 }) {
   const { t } = useTranslation()
   const copy =
-    mode === 'favorites'
-      ? t('favoritesOnly')
+    mode === 'library'
+      ? t('libraryOnly')
       : mode === 'discover'
         ? t('mixedDiscoveryWall')
         : mode === 'movie'
