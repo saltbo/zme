@@ -617,11 +617,13 @@ routes.post('/library/sources/:source/sync', zValidator('param', librarySourcePa
 routes.put('/library/resources', zValidator('json', libraryResourceSchema), async (c) => {
   const input = c.req.valid('json')
   const db = createDb(c.env)
+  const userId = c.get('user').id
   const row =
     input.status === 'watched'
-      ? await setWatchedState(db, c.get('user').id, input, true)
-      : ((await setWatchedState(db, c.get('user').id, input, false)) ??
-        (await saveLibraryState(db, c.get('user').id, input)))
+      ? await setWatchedState(db, userId, input, true)
+      : ((await setWatchedState(db, userId, input, false)) ?? (await saveLibraryState(db, userId, input)))
+
+  if (!row) return c.json({ error: 'Library item not found.' }, 404)
 
   return c.json({ item: toLibraryStateResponse(row) })
 })

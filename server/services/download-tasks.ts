@@ -9,6 +9,7 @@ type DownloadTaskSnapshot = { items: DownloadTaskSummary[] }
 type DownloadTaskEvent =
   | { event: 'snapshot'; data: DownloadTaskSnapshot }
   | { event: 'error'; data: { message: string } }
+type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']
 
 interface ZpanCredentials {
   apiKey?: string
@@ -118,7 +119,7 @@ async function listZpanTasks(downloader: Downloader, input: ListDownloadTasksInp
   const payload = await getZpanClient(downloader).listDownloadTasks({
     page: input.page,
     pageSize: input.pageSize,
-    status: input.status,
+    status: input.status ? toZpanStatus(input.status) : undefined,
   })
   return {
     items: payload.items.map((task) => toTaskSummary(downloader, task)),
@@ -147,25 +148,40 @@ async function streamZpanTasks(
 }
 
 function toTaskSummary(downloader: Downloader, task: ZpanDownloadTask): DownloadTaskSummary {
+  const progress = task.status.runtime?.progress ?? task.status.progress
+  const name = task.spec.destination.name || task.status.runtime?.torrent?.name || task.spec.source.uri
+
   return {
     id: task.id,
     downloaderId: downloader.id,
     downloaderName: getDownloaderName(downloader),
     downloaderKind: downloader.kind as DownloaderKind,
-    sourceType: task.sourceType,
-    sourceUri: task.sourceUri,
-    name: task.name || task.sourceUri,
-    targetFolder: task.targetFolder || '',
-    category: task.category ?? null,
-    tags: task.tags ?? [],
-    status: task.status as DownloadTaskStatus,
-    downloadedBytes: task.downloadedBytes ?? 0,
-    storageUploadedBytes: task.storageUploadedBytes ?? 0,
-    totalBytes: task.totalBytes ?? null,
-    downloadBps: task.downloadBps ?? 0,
-    storageUploadBps: task.storageUploadBps ?? 0,
-    errorMessage: task.errorMessage ?? null,
+    sourceType: task.spec.source.type,
+    sourceUri: task.spec.source.uri,
+    name,
+    targetFolder: task.spec.destination.folder,
+    category: task.spec.labels.category,
+    tags: task.spec.labels.tags,
+    status: fromZpanStatus(task.status.state),
+    downloadedBytes: progress.download.bytes,
+    storageUploadedBytes: progress.upload.bytes,
+    totalBytes: progress.download.totalBytes ?? null,
+    downloadBps: progress.download.bytesPerSecond,
+    storageUploadBps: progress.upload.bytesPerSecond,
+    errorMessage: task.status.error?.message ?? null,
   }
+}
+
+function toZpanStatus(status: DownloadTaskStatus): ZpanDownloadTaskState {
+  if (status === 'running') return 'downloading'
+  if (status === 'billing_paused') return 'suspended'
+  return status
+}
+
+function fromZpanStatus(status: ZpanDownloadTaskState): DownloadTaskStatus {
+  if (status === 'downloading' || status === 'interrupted') return 'running'
+  if (status === 'suspended') return 'billing_paused'
+  return status
 }
 
 function getZpanClient(downloader: Downloader) {

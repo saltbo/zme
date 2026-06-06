@@ -35,17 +35,6 @@ export type DeviceTokenRequest = {
     client_id: string;
 };
 
-export type ObjectDraft = {
-    id: string;
-    name: string;
-    uploadUrl?: string;
-    contentDisposition?: string;
-};
-
-export type ConfirmObjectRequest = {
-    action: 'confirm';
-};
-
 export type PostApiAuthDeviceCodeData = {
     body: DeviceCodeRequest;
     path?: never;
@@ -91,7 +80,7 @@ export type GetApiDownloadTasksData = {
     body?: never;
     path?: never;
     query?: {
-        status?: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'pausing' | 'paused' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+        status?: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
         assignedTo?: 'me';
         category?: string;
         tag?: string;
@@ -121,58 +110,120 @@ export type GetApiDownloadTasksResponses = {
     200: {
         items: Array<{
             id: string;
-            sourceType: 'http' | 'magnet' | 'torrent_url';
-            sourceUri: string;
-            name: string;
-            targetFolder: string;
-            category: string | null;
-            tags: Array<string>;
-            status: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'paused' | 'uploading' | 'completed' | 'failed' | 'canceled';
-            downloadedBytes: number;
-            storageUploadedBytes: number;
-            totalBytes: number | null;
-            downloadBps: number;
-            storageUploadBps: number;
-            errorMessage?: string | null;
-            resultObjectId?: string | null;
-            detail?: {
-                engine?: 'builtin' | 'aria2' | 'qbittorrent';
-                phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
-                engineState?: string;
-                message?: string;
-                etaSeconds?: number | null;
-                connections?: number;
-                infoHash?: string;
-                torrentName?: string;
-                seeders?: number;
-                leechers?: number;
-                peers?: number;
-                peerUploadedBytes?: number;
-                peerUploadBps?: number;
-                trackers?: Array<{
-                    url: string;
-                    status?: string;
-                    peers?: number;
-                    seeds?: number;
-                    leechers?: number;
+            orgId?: string;
+            createdBy?: string;
+            spec: {
+                source: {
+                    type: 'http' | 'magnet' | 'torrent_url';
+                    uri: string;
+                };
+                destination: {
+                    folder: string;
+                    name: string | null;
+                };
+                labels: {
+                    category: string | null;
+                    tags: Array<string>;
+                };
+            };
+            status: {
+                state: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+                attempt: number;
+                assignment: {
+                    downloaderId: string;
+                    assignedAt?: string | null;
+                    uploadToken?: string;
+                } | null;
+                progress: {
+                    download: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                    upload: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                };
+                billing: {
+                    state: 'none' | 'ok' | 'insufficient_credits';
+                    authorizedBytes: number;
+                    chargedBytes: number;
+                    chargedCredits: number;
+                };
+                output: {
+                    objectId: string;
+                } | null;
+                runtime: {
+                    engine?: 'builtin' | 'aria2' | 'qbittorrent';
+                    state?: string;
+                    phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
                     message?: string;
-                }>;
-                peerSamples?: Array<{
-                    address: string;
-                    client?: string;
-                    progress?: number;
-                    downloadBps?: number;
-                    uploadBps?: number;
-                }>;
-                files?: Array<{
-                    path: string;
-                    size: number;
-                    completedBytes?: number;
-                    selected?: boolean;
-                }>;
-            } | null;
-            uploadToken?: string;
-            assignedDownloaderId?: string | null;
+                    updatedAt?: string;
+                    progress?: {
+                        download: {
+                            bytes: number;
+                            totalBytes?: number | null;
+                            bytesPerSecond: number;
+                        };
+                        upload: {
+                            bytes: number;
+                            totalBytes?: number | null;
+                            bytesPerSecond: number;
+                        };
+                    };
+                    torrent?: {
+                        infoHash?: string;
+                        name?: string;
+                        seeders?: number;
+                        leechers?: number;
+                        peers?: number;
+                    };
+                    seeding?: {
+                        enabled?: boolean;
+                        active?: boolean;
+                        uploadedBytes?: number;
+                        uploadBytesPerSecond?: number;
+                        ratio?: number;
+                        startedAt?: string | null;
+                        expiresAt?: string | null;
+                    };
+                    connections?: number;
+                    etaSeconds?: number | null;
+                    trackers?: Array<{
+                        url: string;
+                        status?: string;
+                        peers?: number;
+                        seeds?: number;
+                        leechers?: number;
+                        message?: string;
+                    }>;
+                    peers?: Array<{
+                        address: string;
+                        client?: string;
+                        progress?: number;
+                        downloadBps?: number;
+                        uploadBps?: number;
+                        countryCode?: string;
+                        regionCode?: string;
+                    }>;
+                    files?: Array<{
+                        path: string;
+                        size: number;
+                        completedBytes?: number;
+                        selected?: boolean;
+                    }>;
+                } | null;
+                error: {
+                    code?: string | null;
+                    message: string | null;
+                } | null;
+                startedAt: string | null;
+                finishedAt: string | null;
+                updatedAt: string;
+            };
+            createdAt: string;
         }>;
         total: number;
         page: number;
@@ -227,58 +278,120 @@ export type PostApiDownloadTasksResponses = {
      */
     201: {
         id: string;
-        sourceType: 'http' | 'magnet' | 'torrent_url';
-        sourceUri: string;
-        name: string;
-        targetFolder: string;
-        category: string | null;
-        tags: Array<string>;
-        status: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'paused' | 'uploading' | 'completed' | 'failed' | 'canceled';
-        downloadedBytes: number;
-        storageUploadedBytes: number;
-        totalBytes: number | null;
-        downloadBps: number;
-        storageUploadBps: number;
-        errorMessage?: string | null;
-        resultObjectId?: string | null;
-        detail?: {
-            engine?: 'builtin' | 'aria2' | 'qbittorrent';
-            phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
-            engineState?: string;
-            message?: string;
-            etaSeconds?: number | null;
-            connections?: number;
-            infoHash?: string;
-            torrentName?: string;
-            seeders?: number;
-            leechers?: number;
-            peers?: number;
-            peerUploadedBytes?: number;
-            peerUploadBps?: number;
-            trackers?: Array<{
-                url: string;
-                status?: string;
-                peers?: number;
-                seeds?: number;
-                leechers?: number;
+        orgId?: string;
+        createdBy?: string;
+        spec: {
+            source: {
+                type: 'http' | 'magnet' | 'torrent_url';
+                uri: string;
+            };
+            destination: {
+                folder: string;
+                name: string | null;
+            };
+            labels: {
+                category: string | null;
+                tags: Array<string>;
+            };
+        };
+        status: {
+            state: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+            attempt: number;
+            assignment: {
+                downloaderId: string;
+                assignedAt?: string | null;
+                uploadToken?: string;
+            } | null;
+            progress: {
+                download: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+                upload: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+            };
+            billing: {
+                state: 'none' | 'ok' | 'insufficient_credits';
+                authorizedBytes: number;
+                chargedBytes: number;
+                chargedCredits: number;
+            };
+            output: {
+                objectId: string;
+            } | null;
+            runtime: {
+                engine?: 'builtin' | 'aria2' | 'qbittorrent';
+                state?: string;
+                phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
                 message?: string;
-            }>;
-            peerSamples?: Array<{
-                address: string;
-                client?: string;
-                progress?: number;
-                downloadBps?: number;
-                uploadBps?: number;
-            }>;
-            files?: Array<{
-                path: string;
-                size: number;
-                completedBytes?: number;
-                selected?: boolean;
-            }>;
-        } | null;
-        uploadToken?: string;
-        assignedDownloaderId?: string | null;
+                updatedAt?: string;
+                progress?: {
+                    download: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                    upload: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                };
+                torrent?: {
+                    infoHash?: string;
+                    name?: string;
+                    seeders?: number;
+                    leechers?: number;
+                    peers?: number;
+                };
+                seeding?: {
+                    enabled?: boolean;
+                    active?: boolean;
+                    uploadedBytes?: number;
+                    uploadBytesPerSecond?: number;
+                    ratio?: number;
+                    startedAt?: string | null;
+                    expiresAt?: string | null;
+                };
+                connections?: number;
+                etaSeconds?: number | null;
+                trackers?: Array<{
+                    url: string;
+                    status?: string;
+                    peers?: number;
+                    seeds?: number;
+                    leechers?: number;
+                    message?: string;
+                }>;
+                peers?: Array<{
+                    address: string;
+                    client?: string;
+                    progress?: number;
+                    downloadBps?: number;
+                    uploadBps?: number;
+                    countryCode?: string;
+                    regionCode?: string;
+                }>;
+                files?: Array<{
+                    path: string;
+                    size: number;
+                    completedBytes?: number;
+                    selected?: boolean;
+                }>;
+            } | null;
+            error: {
+                code?: string | null;
+                message: string | null;
+            } | null;
+            startedAt: string | null;
+            finishedAt: string | null;
+            updatedAt: string;
+        };
+        createdAt: string;
     };
 };
 
@@ -288,7 +401,7 @@ export type GetApiDownloadTasksEventsData = {
     body?: never;
     path?: never;
     query?: {
-        status?: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'pausing' | 'paused' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+        status?: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
         assignedTo?: 'me';
         category?: string;
         tag?: string;
@@ -346,58 +459,120 @@ export type GetApiDownloadTasksByIdResponses = {
      */
     200: {
         id: string;
-        sourceType: 'http' | 'magnet' | 'torrent_url';
-        sourceUri: string;
-        name: string;
-        targetFolder: string;
-        category: string | null;
-        tags: Array<string>;
-        status: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'paused' | 'uploading' | 'completed' | 'failed' | 'canceled';
-        downloadedBytes: number;
-        storageUploadedBytes: number;
-        totalBytes: number | null;
-        downloadBps: number;
-        storageUploadBps: number;
-        errorMessage?: string | null;
-        resultObjectId?: string | null;
-        detail?: {
-            engine?: 'builtin' | 'aria2' | 'qbittorrent';
-            phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
-            engineState?: string;
-            message?: string;
-            etaSeconds?: number | null;
-            connections?: number;
-            infoHash?: string;
-            torrentName?: string;
-            seeders?: number;
-            leechers?: number;
-            peers?: number;
-            peerUploadedBytes?: number;
-            peerUploadBps?: number;
-            trackers?: Array<{
-                url: string;
-                status?: string;
-                peers?: number;
-                seeds?: number;
-                leechers?: number;
+        orgId?: string;
+        createdBy?: string;
+        spec: {
+            source: {
+                type: 'http' | 'magnet' | 'torrent_url';
+                uri: string;
+            };
+            destination: {
+                folder: string;
+                name: string | null;
+            };
+            labels: {
+                category: string | null;
+                tags: Array<string>;
+            };
+        };
+        status: {
+            state: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+            attempt: number;
+            assignment: {
+                downloaderId: string;
+                assignedAt?: string | null;
+                uploadToken?: string;
+            } | null;
+            progress: {
+                download: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+                upload: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+            };
+            billing: {
+                state: 'none' | 'ok' | 'insufficient_credits';
+                authorizedBytes: number;
+                chargedBytes: number;
+                chargedCredits: number;
+            };
+            output: {
+                objectId: string;
+            } | null;
+            runtime: {
+                engine?: 'builtin' | 'aria2' | 'qbittorrent';
+                state?: string;
+                phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
                 message?: string;
-            }>;
-            peerSamples?: Array<{
-                address: string;
-                client?: string;
-                progress?: number;
-                downloadBps?: number;
-                uploadBps?: number;
-            }>;
-            files?: Array<{
-                path: string;
-                size: number;
-                completedBytes?: number;
-                selected?: boolean;
-            }>;
-        } | null;
-        uploadToken?: string;
-        assignedDownloaderId?: string | null;
+                updatedAt?: string;
+                progress?: {
+                    download: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                    upload: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                };
+                torrent?: {
+                    infoHash?: string;
+                    name?: string;
+                    seeders?: number;
+                    leechers?: number;
+                    peers?: number;
+                };
+                seeding?: {
+                    enabled?: boolean;
+                    active?: boolean;
+                    uploadedBytes?: number;
+                    uploadBytesPerSecond?: number;
+                    ratio?: number;
+                    startedAt?: string | null;
+                    expiresAt?: string | null;
+                };
+                connections?: number;
+                etaSeconds?: number | null;
+                trackers?: Array<{
+                    url: string;
+                    status?: string;
+                    peers?: number;
+                    seeds?: number;
+                    leechers?: number;
+                    message?: string;
+                }>;
+                peers?: Array<{
+                    address: string;
+                    client?: string;
+                    progress?: number;
+                    downloadBps?: number;
+                    uploadBps?: number;
+                    countryCode?: string;
+                    regionCode?: string;
+                }>;
+                files?: Array<{
+                    path: string;
+                    size: number;
+                    completedBytes?: number;
+                    selected?: boolean;
+                }>;
+            } | null;
+            error: {
+                code?: string | null;
+                message: string | null;
+            } | null;
+            startedAt: string | null;
+            finishedAt: string | null;
+            updatedAt: string;
+        };
+        createdAt: string;
     };
 };
 
@@ -405,28 +580,57 @@ export type GetApiDownloadTasksByIdResponse = GetApiDownloadTasksByIdResponses[k
 
 export type PatchApiDownloadTasksByIdData = {
     body: {
-        status?: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'pausing' | 'paused' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
-        downloadedBytes?: number;
-        storageUploadedBytes?: number;
-        totalBytes?: number | null;
-        downloadBps?: number;
-        storageUploadBps?: number;
+        status?: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+        progress?: {
+            download?: {
+                bytes: number;
+                totalBytes?: number | null;
+                bytesPerSecond: number;
+            };
+            upload?: {
+                bytes: number;
+                totalBytes?: number | null;
+                bytesPerSecond: number;
+            };
+        };
         errorMessage?: string | null;
         resultObjectId?: string | null;
-        detail?: {
+        runtime?: {
             engine?: 'builtin' | 'aria2' | 'qbittorrent';
+            state?: string;
             phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
-            engineState?: string;
             message?: string;
-            etaSeconds?: number | null;
+            updatedAt?: string;
+            progress?: {
+                download: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+                upload: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+            };
+            torrent?: {
+                infoHash?: string;
+                name?: string;
+                seeders?: number;
+                leechers?: number;
+                peers?: number;
+            };
+            seeding?: {
+                enabled?: boolean;
+                active?: boolean;
+                uploadedBytes?: number;
+                uploadBytesPerSecond?: number;
+                ratio?: number;
+                startedAt?: string | null;
+                expiresAt?: string | null;
+            };
             connections?: number;
-            infoHash?: string;
-            torrentName?: string;
-            seeders?: number;
-            leechers?: number;
-            peers?: number;
-            peerUploadedBytes?: number;
-            peerUploadBps?: number;
+            etaSeconds?: number | null;
             trackers?: Array<{
                 url: string;
                 status?: string;
@@ -435,12 +639,14 @@ export type PatchApiDownloadTasksByIdData = {
                 leechers?: number;
                 message?: string;
             }>;
-            peerSamples?: Array<{
+            peers?: Array<{
                 address: string;
                 client?: string;
                 progress?: number;
                 downloadBps?: number;
                 uploadBps?: number;
+                countryCode?: string;
+                regionCode?: string;
             }>;
             files?: Array<{
                 path: string;
@@ -492,58 +698,120 @@ export type PatchApiDownloadTasksByIdResponses = {
      */
     200: {
         id: string;
-        sourceType: 'http' | 'magnet' | 'torrent_url';
-        sourceUri: string;
-        name: string;
-        targetFolder: string;
-        category: string | null;
-        tags: Array<string>;
-        status: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'paused' | 'uploading' | 'completed' | 'failed' | 'canceled';
-        downloadedBytes: number;
-        storageUploadedBytes: number;
-        totalBytes: number | null;
-        downloadBps: number;
-        storageUploadBps: number;
-        errorMessage?: string | null;
-        resultObjectId?: string | null;
-        detail?: {
-            engine?: 'builtin' | 'aria2' | 'qbittorrent';
-            phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
-            engineState?: string;
-            message?: string;
-            etaSeconds?: number | null;
-            connections?: number;
-            infoHash?: string;
-            torrentName?: string;
-            seeders?: number;
-            leechers?: number;
-            peers?: number;
-            peerUploadedBytes?: number;
-            peerUploadBps?: number;
-            trackers?: Array<{
-                url: string;
-                status?: string;
-                peers?: number;
-                seeds?: number;
-                leechers?: number;
+        orgId?: string;
+        createdBy?: string;
+        spec: {
+            source: {
+                type: 'http' | 'magnet' | 'torrent_url';
+                uri: string;
+            };
+            destination: {
+                folder: string;
+                name: string | null;
+            };
+            labels: {
+                category: string | null;
+                tags: Array<string>;
+            };
+        };
+        status: {
+            state: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+            attempt: number;
+            assignment: {
+                downloaderId: string;
+                assignedAt?: string | null;
+                uploadToken?: string;
+            } | null;
+            progress: {
+                download: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+                upload: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+            };
+            billing: {
+                state: 'none' | 'ok' | 'insufficient_credits';
+                authorizedBytes: number;
+                chargedBytes: number;
+                chargedCredits: number;
+            };
+            output: {
+                objectId: string;
+            } | null;
+            runtime: {
+                engine?: 'builtin' | 'aria2' | 'qbittorrent';
+                state?: string;
+                phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
                 message?: string;
-            }>;
-            peerSamples?: Array<{
-                address: string;
-                client?: string;
-                progress?: number;
-                downloadBps?: number;
-                uploadBps?: number;
-            }>;
-            files?: Array<{
-                path: string;
-                size: number;
-                completedBytes?: number;
-                selected?: boolean;
-            }>;
-        } | null;
-        uploadToken?: string;
-        assignedDownloaderId?: string | null;
+                updatedAt?: string;
+                progress?: {
+                    download: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                    upload: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                };
+                torrent?: {
+                    infoHash?: string;
+                    name?: string;
+                    seeders?: number;
+                    leechers?: number;
+                    peers?: number;
+                };
+                seeding?: {
+                    enabled?: boolean;
+                    active?: boolean;
+                    uploadedBytes?: number;
+                    uploadBytesPerSecond?: number;
+                    ratio?: number;
+                    startedAt?: string | null;
+                    expiresAt?: string | null;
+                };
+                connections?: number;
+                etaSeconds?: number | null;
+                trackers?: Array<{
+                    url: string;
+                    status?: string;
+                    peers?: number;
+                    seeds?: number;
+                    leechers?: number;
+                    message?: string;
+                }>;
+                peers?: Array<{
+                    address: string;
+                    client?: string;
+                    progress?: number;
+                    downloadBps?: number;
+                    uploadBps?: number;
+                    countryCode?: string;
+                    regionCode?: string;
+                }>;
+                files?: Array<{
+                    path: string;
+                    size: number;
+                    completedBytes?: number;
+                    selected?: boolean;
+                }>;
+            } | null;
+            error: {
+                code?: string | null;
+                message: string | null;
+            } | null;
+            startedAt: string | null;
+            finishedAt: string | null;
+            updatedAt: string;
+        };
+        createdAt: string;
     };
 };
 
@@ -551,7 +819,7 @@ export type PatchApiDownloadTasksByIdResponse = PatchApiDownloadTasksByIdRespons
 
 export type PostApiDownloadTasksByIdActionsData = {
     body: {
-        action: 'pause' | 'resume' | 'cancel' | 'retry' | 'delete';
+        action: 'pause' | 'resume' | 'cancel' | 'retry' | 'restart' | 'delete';
     };
     path: {
         id: string;
@@ -595,58 +863,120 @@ export type PostApiDownloadTasksByIdActionsResponses = {
      */
     200: {
         id: string;
-        sourceType: 'http' | 'magnet' | 'torrent_url';
-        sourceUri: string;
-        name: string;
-        targetFolder: string;
-        category: string | null;
-        tags: Array<string>;
-        status: 'queued' | 'assigned' | 'running' | 'billing_paused' | 'paused' | 'uploading' | 'completed' | 'failed' | 'canceled';
-        downloadedBytes: number;
-        storageUploadedBytes: number;
-        totalBytes: number | null;
-        downloadBps: number;
-        storageUploadBps: number;
-        errorMessage?: string | null;
-        resultObjectId?: string | null;
-        detail?: {
-            engine?: 'builtin' | 'aria2' | 'qbittorrent';
-            phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
-            engineState?: string;
-            message?: string;
-            etaSeconds?: number | null;
-            connections?: number;
-            infoHash?: string;
-            torrentName?: string;
-            seeders?: number;
-            leechers?: number;
-            peers?: number;
-            peerUploadedBytes?: number;
-            peerUploadBps?: number;
-            trackers?: Array<{
-                url: string;
-                status?: string;
-                peers?: number;
-                seeds?: number;
-                leechers?: number;
+        orgId?: string;
+        createdBy?: string;
+        spec: {
+            source: {
+                type: 'http' | 'magnet' | 'torrent_url';
+                uri: string;
+            };
+            destination: {
+                folder: string;
+                name: string | null;
+            };
+            labels: {
+                category: string | null;
+                tags: Array<string>;
+            };
+        };
+        status: {
+            state: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+            attempt: number;
+            assignment: {
+                downloaderId: string;
+                assignedAt?: string | null;
+                uploadToken?: string;
+            } | null;
+            progress: {
+                download: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+                upload: {
+                    bytes: number;
+                    totalBytes?: number | null;
+                    bytesPerSecond: number;
+                };
+            };
+            billing: {
+                state: 'none' | 'ok' | 'insufficient_credits';
+                authorizedBytes: number;
+                chargedBytes: number;
+                chargedCredits: number;
+            };
+            output: {
+                objectId: string;
+            } | null;
+            runtime: {
+                engine?: 'builtin' | 'aria2' | 'qbittorrent';
+                state?: string;
+                phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
                 message?: string;
-            }>;
-            peerSamples?: Array<{
-                address: string;
-                client?: string;
-                progress?: number;
-                downloadBps?: number;
-                uploadBps?: number;
-            }>;
-            files?: Array<{
-                path: string;
-                size: number;
-                completedBytes?: number;
-                selected?: boolean;
-            }>;
-        } | null;
-        uploadToken?: string;
-        assignedDownloaderId?: string | null;
+                updatedAt?: string;
+                progress?: {
+                    download: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                    upload: {
+                        bytes: number;
+                        totalBytes?: number | null;
+                        bytesPerSecond: number;
+                    };
+                };
+                torrent?: {
+                    infoHash?: string;
+                    name?: string;
+                    seeders?: number;
+                    leechers?: number;
+                    peers?: number;
+                };
+                seeding?: {
+                    enabled?: boolean;
+                    active?: boolean;
+                    uploadedBytes?: number;
+                    uploadBytesPerSecond?: number;
+                    ratio?: number;
+                    startedAt?: string | null;
+                    expiresAt?: string | null;
+                };
+                connections?: number;
+                etaSeconds?: number | null;
+                trackers?: Array<{
+                    url: string;
+                    status?: string;
+                    peers?: number;
+                    seeds?: number;
+                    leechers?: number;
+                    message?: string;
+                }>;
+                peers?: Array<{
+                    address: string;
+                    client?: string;
+                    progress?: number;
+                    downloadBps?: number;
+                    uploadBps?: number;
+                    countryCode?: string;
+                    regionCode?: string;
+                }>;
+                files?: Array<{
+                    path: string;
+                    size: number;
+                    completedBytes?: number;
+                    selected?: boolean;
+                }>;
+            } | null;
+            error: {
+                code?: string | null;
+                message: string | null;
+            } | null;
+            startedAt: string | null;
+            finishedAt: string | null;
+            updatedAt: string;
+        };
+        createdAt: string;
     } | {
         id: string;
         deleted: true;
@@ -939,17 +1269,30 @@ export type PostApiObjectsResponses = {
     /**
      * Object draft with upload URL
      */
-    200: ObjectDraft;
+    200: {
+        id: string;
+        name: string;
+        uploadUrl?: string;
+        contentDisposition?: string;
+    };
     /**
      * Object draft with upload URL
      */
-    201: ObjectDraft;
+    201: {
+        id: string;
+        name: string;
+        uploadUrl?: string;
+        contentDisposition?: string;
+    };
 };
 
 export type PostApiObjectsResponse = PostApiObjectsResponses[keyof PostApiObjectsResponses];
 
 export type PatchApiObjectsByIdData = {
-    body: ConfirmObjectRequest;
+    body: {
+        action: 'confirm';
+        onConflict?: 'fail' | 'rename' | 'replace';
+    };
     path: {
         id: string;
     };
@@ -974,7 +1317,156 @@ export type PatchApiObjectsByIdResponses = {
     /**
      * Confirmed object
      */
-    200: ObjectDraft;
+    200: {
+        id: string;
+        name: string;
+        uploadUrl?: string;
+        contentDisposition?: string;
+    };
 };
 
 export type PatchApiObjectsByIdResponse = PatchApiObjectsByIdResponses[keyof PatchApiObjectsByIdResponses];
+
+export type PostApiObjectsByIdUploadsData = {
+    body: {
+        partSize?: number;
+    };
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/objects/{id}/uploads';
+};
+
+export type PostApiObjectsByIdUploadsErrors = {
+    /**
+     * Invalid upload session
+     */
+    400: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type PostApiObjectsByIdUploadsError = PostApiObjectsByIdUploadsErrors[keyof PostApiObjectsByIdUploadsErrors];
+
+export type PostApiObjectsByIdUploadsResponses = {
+    /**
+     * Object multipart upload session
+     */
+    201: {
+        id: string;
+        objectId: string;
+        uploadId: string;
+        partSize: number;
+        status: 'active' | 'completed' | 'aborted';
+        expiresAt: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type PostApiObjectsByIdUploadsResponse = PostApiObjectsByIdUploadsResponses[keyof PostApiObjectsByIdUploadsResponses];
+
+export type PostApiObjectsByIdUploadsByUploadSessionIdPartsData = {
+    body: {
+        partNumbers: Array<number>;
+    };
+    path: {
+        id: string;
+        uploadSessionId: string;
+    };
+    query?: never;
+    url: '/api/objects/{id}/uploads/{uploadSessionId}/parts';
+};
+
+export type PostApiObjectsByIdUploadsByUploadSessionIdPartsErrors = {
+    /**
+     * Invalid upload session
+     */
+    400: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type PostApiObjectsByIdUploadsByUploadSessionIdPartsError = PostApiObjectsByIdUploadsByUploadSessionIdPartsErrors[keyof PostApiObjectsByIdUploadsByUploadSessionIdPartsErrors];
+
+export type PostApiObjectsByIdUploadsByUploadSessionIdPartsResponses = {
+    /**
+     * Presigned multipart upload parts
+     */
+    200: {
+        uploadId: string;
+        partSize: number;
+        parts: Array<{
+            partNumber: number;
+            url: string;
+        }>;
+    };
+};
+
+export type PostApiObjectsByIdUploadsByUploadSessionIdPartsResponse = PostApiObjectsByIdUploadsByUploadSessionIdPartsResponses[keyof PostApiObjectsByIdUploadsByUploadSessionIdPartsResponses];
+
+export type PatchApiObjectsByIdUploadsByUploadSessionIdData = {
+    body: {
+        action: 'complete';
+        parts: Array<{
+            partNumber: number;
+            etag: string;
+        }>;
+    } | {
+        action: 'abort';
+    };
+    path: {
+        id: string;
+        uploadSessionId: string;
+    };
+    query?: never;
+    url: '/api/objects/{id}/uploads/{uploadSessionId}';
+};
+
+export type PatchApiObjectsByIdUploadsByUploadSessionIdErrors = {
+    /**
+     * Invalid upload session
+     */
+    400: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Not found
+     */
+    404: ErrorResponse;
+};
+
+export type PatchApiObjectsByIdUploadsByUploadSessionIdError = PatchApiObjectsByIdUploadsByUploadSessionIdErrors[keyof PatchApiObjectsByIdUploadsByUploadSessionIdErrors];
+
+export type PatchApiObjectsByIdUploadsByUploadSessionIdResponses = {
+    /**
+     * Updated object multipart upload session
+     */
+    200: {
+        id: string;
+        objectId: string;
+        uploadId: string;
+        partSize: number;
+        status: 'active' | 'completed' | 'aborted';
+        expiresAt: string;
+        createdAt: string;
+        updatedAt: string;
+    };
+};
+
+export type PatchApiObjectsByIdUploadsByUploadSessionIdResponse = PatchApiObjectsByIdUploadsByUploadSessionIdResponses[keyof PatchApiObjectsByIdUploadsByUploadSessionIdResponses];

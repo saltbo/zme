@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { DeleteApiAdminDownloadersByIdData, DeleteApiAdminDownloadersByIdErrors, DeleteApiAdminDownloadersByIdResponses, GetApiAdminDownloadersData, GetApiAdminDownloadersErrors, GetApiAdminDownloadersResponses, GetApiDownloadTasksByIdData, GetApiDownloadTasksByIdErrors, GetApiDownloadTasksByIdResponses, GetApiDownloadTasksData, GetApiDownloadTasksErrors, GetApiDownloadTasksEventsData, GetApiDownloadTasksEventsErrors, GetApiDownloadTasksEventsResponse, GetApiDownloadTasksEventsResponses, GetApiDownloadTasksResponses, PatchApiAdminDownloadersByIdData, PatchApiAdminDownloadersByIdErrors, PatchApiAdminDownloadersByIdResponses, PatchApiDownloadTasksByIdData, PatchApiDownloadTasksByIdErrors, PatchApiDownloadTasksByIdResponses, PatchApiObjectsByIdData, PatchApiObjectsByIdErrors, PatchApiObjectsByIdResponses, PostApiAdminDownloadersData, PostApiAdminDownloadersErrors, PostApiAdminDownloadersResponses, PostApiAuthDeviceCodeData, PostApiAuthDeviceCodeResponses, PostApiAuthDeviceTokenData, PostApiAuthDeviceTokenErrors, PostApiAuthDeviceTokenResponses, PostApiDownloaderHeartbeatData, PostApiDownloaderHeartbeatErrors, PostApiDownloaderHeartbeatResponses, PostApiDownloadTasksByIdActionsData, PostApiDownloadTasksByIdActionsErrors, PostApiDownloadTasksByIdActionsResponses, PostApiDownloadTasksData, PostApiDownloadTasksErrors, PostApiDownloadTasksResponses, PostApiObjectsData, PostApiObjectsErrors, PostApiObjectsResponses } from './types.gen';
+import type { DeleteApiAdminDownloadersByIdData, DeleteApiAdminDownloadersByIdErrors, DeleteApiAdminDownloadersByIdResponses, GetApiAdminDownloadersData, GetApiAdminDownloadersErrors, GetApiAdminDownloadersResponses, GetApiDownloadTasksByIdData, GetApiDownloadTasksByIdErrors, GetApiDownloadTasksByIdResponses, GetApiDownloadTasksData, GetApiDownloadTasksErrors, GetApiDownloadTasksEventsData, GetApiDownloadTasksEventsErrors, GetApiDownloadTasksEventsResponse, GetApiDownloadTasksEventsResponses, GetApiDownloadTasksResponses, PatchApiAdminDownloadersByIdData, PatchApiAdminDownloadersByIdErrors, PatchApiAdminDownloadersByIdResponses, PatchApiDownloadTasksByIdData, PatchApiDownloadTasksByIdErrors, PatchApiDownloadTasksByIdResponses, PatchApiObjectsByIdData, PatchApiObjectsByIdErrors, PatchApiObjectsByIdResponses, PatchApiObjectsByIdUploadsByUploadSessionIdData, PatchApiObjectsByIdUploadsByUploadSessionIdErrors, PatchApiObjectsByIdUploadsByUploadSessionIdResponses, PostApiAdminDownloadersData, PostApiAdminDownloadersErrors, PostApiAdminDownloadersResponses, PostApiAuthDeviceCodeData, PostApiAuthDeviceCodeResponses, PostApiAuthDeviceTokenData, PostApiAuthDeviceTokenErrors, PostApiAuthDeviceTokenResponses, PostApiDownloaderHeartbeatData, PostApiDownloaderHeartbeatErrors, PostApiDownloaderHeartbeatResponses, PostApiDownloadTasksByIdActionsData, PostApiDownloadTasksByIdActionsErrors, PostApiDownloadTasksByIdActionsResponses, PostApiDownloadTasksData, PostApiDownloadTasksErrors, PostApiDownloadTasksResponses, PostApiObjectsByIdUploadsByUploadSessionIdPartsData, PostApiObjectsByIdUploadsByUploadSessionIdPartsErrors, PostApiObjectsByIdUploadsByUploadSessionIdPartsResponses, PostApiObjectsByIdUploadsData, PostApiObjectsByIdUploadsErrors, PostApiObjectsByIdUploadsResponses, PostApiObjectsData, PostApiObjectsErrors, PostApiObjectsResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -111,6 +111,33 @@ export const postApiObjects = <ThrowOnError extends boolean = false>(options: Op
 
 export const patchApiObjectsById = <ThrowOnError extends boolean = false>(options: Options<PatchApiObjectsByIdData, ThrowOnError>): RequestResult<PatchApiObjectsByIdResponses, PatchApiObjectsByIdErrors, ThrowOnError> => (options.client ?? client).patch<PatchApiObjectsByIdResponses, PatchApiObjectsByIdErrors, ThrowOnError>({
     url: '/api/objects/{id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const postApiObjectsByIdUploads = <ThrowOnError extends boolean = false>(options: Options<PostApiObjectsByIdUploadsData, ThrowOnError>): RequestResult<PostApiObjectsByIdUploadsResponses, PostApiObjectsByIdUploadsErrors, ThrowOnError> => (options.client ?? client).post<PostApiObjectsByIdUploadsResponses, PostApiObjectsByIdUploadsErrors, ThrowOnError>({
+    url: '/api/objects/{id}/uploads',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const postApiObjectsByIdUploadsByUploadSessionIdParts = <ThrowOnError extends boolean = false>(options: Options<PostApiObjectsByIdUploadsByUploadSessionIdPartsData, ThrowOnError>): RequestResult<PostApiObjectsByIdUploadsByUploadSessionIdPartsResponses, PostApiObjectsByIdUploadsByUploadSessionIdPartsErrors, ThrowOnError> => (options.client ?? client).post<PostApiObjectsByIdUploadsByUploadSessionIdPartsResponses, PostApiObjectsByIdUploadsByUploadSessionIdPartsErrors, ThrowOnError>({
+    url: '/api/objects/{id}/uploads/{uploadSessionId}/parts',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const patchApiObjectsByIdUploadsByUploadSessionId = <ThrowOnError extends boolean = false>(options: Options<PatchApiObjectsByIdUploadsByUploadSessionIdData, ThrowOnError>): RequestResult<PatchApiObjectsByIdUploadsByUploadSessionIdResponses, PatchApiObjectsByIdUploadsByUploadSessionIdErrors, ThrowOnError> => (options.client ?? client).patch<PatchApiObjectsByIdUploadsByUploadSessionIdResponses, PatchApiObjectsByIdUploadsByUploadSessionIdErrors, ThrowOnError>({
+    url: '/api/objects/{id}/uploads/{uploadSessionId}',
     ...options,
     headers: {
         'Content-Type': 'application/json',

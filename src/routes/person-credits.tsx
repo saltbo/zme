@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useOutletContext, useParams } from 'react-router'
-import { MediaWall } from '@/components/media/media-components'
 import type { AppOutletContext } from '@/components/app-shell/types'
+import { MediaWall } from '@/components/media/media-components'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePersonCredits } from '@/hooks/use-media-queries'
@@ -34,8 +34,9 @@ export function PersonCreditsPage() {
   }, [backTo, location.pathname, person, results.length, setTopbarOverride, t])
 
   useEffect(() => {
+    if (!id) return
     setBioExpanded(false)
-  }, [personId])
+  }, [id])
 
   if (!Number.isInteger(personId) || personId <= 0) {
     return (

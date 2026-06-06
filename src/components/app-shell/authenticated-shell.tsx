@@ -28,9 +28,9 @@ function ScrollToTop() {
   const navigationType = useNavigationType()
 
   useEffect(() => {
-    if (navigationType === 'POP') return
+    if (navigationType === 'POP' || !location.key) return
     window.scrollTo({ top: 0, left: 0 })
-  }, [location.pathname, location.search, navigationType])
+  }, [location.key, navigationType])
 
   return null
 }
