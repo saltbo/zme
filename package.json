@@ -11,7 +11,7 @@
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply zme --local",
     "db:migrate:remote": "wrangler d1 migrations apply zme --remote",
-    "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p src/tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --project unit --coverage",
     "test:watch": "vitest",
@@ -22,8 +22,8 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "openapi:zpan": "openapi-ts -i https://raw.githubusercontent.com/saltbo/zpan/master/docs/openapi/downloader.json -o server/clients/zpan",
-    "cf-typegen": "wrangler types --include-runtime=false --env-file .dev.vars.example",
-    "postinstall": "wrangler types --include-runtime=false --env-file .dev.vars.example",
+    "cf-typegen": "wrangler types server/worker-configuration.d.ts --include-runtime=false --env-file .dev.vars.example",
+    "postinstall": "wrangler types server/worker-configuration.d.ts --include-runtime=false --env-file .dev.vars.example",
     "prepare": "husky"
   },
   "engines": {

@@ -87,7 +87,7 @@ module.exports = {
     doNotFollow: { path: 'node_modules' },
     // Tests are exempt; so is generated code (openapi-ts clients etc.).
     exclude: { path: ['\\.(test|spec)\\.[jt]sx?$', '\\.gen\\.[jt]s$'] },
-    tsConfig: { fileName: 'tsconfig.server.json' },
+    tsConfig: { fileName: 'server/tsconfig.json' },
     tsPreCompilationDeps: true,
   },
 }
