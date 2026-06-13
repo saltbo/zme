@@ -164,7 +164,7 @@ export function OnboardingPage({ onComplete }: { onComplete: () => Promise<void>
             <div className="mb-4 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Clapperboard className="size-5" />
             </div>
-            <h1 className="font-semibold text-3xl">Initialize ZME</h1>
+            <h1 className="font-semibold text-3xl">Initialize Curarr</h1>
             <p className="mt-2 max-w-xl text-muted-foreground">
               Create the first administrator. Media source, indexer, and downloader setup can be completed later in the
               admin area.

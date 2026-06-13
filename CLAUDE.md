@@ -1,4 +1,4 @@
-# ZME — agent guide
+# Curarr — agent guide
 
 Media discovery SPA that saves remote resources into downloaders. Hono API on
 Cloudflare Workers (serving the React SPA as static assets) + D1.

@@ -15,7 +15,7 @@ export function registerSetupRoutes(routes: Hono<AppEnv>) {
   routes.get('/health', (c) =>
     c.json({
       ok: true,
-      name: 'zme',
+      name: 'curarr',
     }),
   )
 

@@ -38,7 +38,7 @@ export function MobileHeader() {
           <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Clapperboard className="size-4" />
           </span>
-          ZME
+          Curarr
           <Menu className="size-4 text-muted-foreground" />
         </Button>
       </div>
@@ -52,7 +52,7 @@ export function MobileHeader() {
                   <Clapperboard className="size-5" />
                 </span>
                 <span>
-                  <span className="block font-semibold text-xl">ZME</span>
+                  <span className="block font-semibold text-xl">Curarr</span>
                   <span className="block text-muted-foreground text-xs">{t('privateDesk')}</span>
                 </span>
               </Link>
