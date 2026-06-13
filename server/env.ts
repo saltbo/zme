@@ -1,11 +1,4 @@
-import type { D1Database } from '@cloudflare/workers-types'
-
-export interface Env {
-  ASSETS: {
-    fetch(request: Request): Promise<Response>
-  }
-  DB: D1Database
-  BETTER_AUTH_SECRET?: string
-  TMDB_API_KEY?: string
-  TMDB_LANGUAGE?: string
-}
+// Bindings + vars are the source of truth in wrangler.toml and .dev.vars.example.
+// `pnpm cf-typegen` regenerates worker-configuration.d.ts (gitignored), which
+// declares the global Cloudflare.Env. Re-exported here so code imports one name.
+export type Env = Cloudflare.Env

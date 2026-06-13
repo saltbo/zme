@@ -6,15 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": [
-      "server/**/*.ts",
-      "shared/**/*.ts",
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "workers/**/*.ts",
-      "!dist",
-      "!server/clients/zpan"
-    ],
+    "includes": ["server/**/*.ts", "shared/**/*.ts", "src/**/*.ts", "src/**/*.tsx", "!dist", "!server/clients/zpan"],
     "ignoreUnknown": true
   },
   "formatter": {

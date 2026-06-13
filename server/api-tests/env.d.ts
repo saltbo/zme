@@ -1,10 +1,9 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 
-// Mirrors the bindings provided to the api test project in vitest.config.ts.
+// Adds the test-only migrations binding to the generated Cloudflare.Env
+// (DB / ASSETS / BETTER_AUTH_SECRET come from worker-configuration.d.ts).
 declare namespace Cloudflare {
   interface Env {
-    DB: D1Database
-    BETTER_AUTH_SECRET: string
     TEST_MIGRATIONS: import('@cloudflare/vitest-pool-workers').D1Migration[]
   }
 }
