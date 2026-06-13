@@ -11,6 +11,7 @@ import type {
   MusicTrack,
   ResourcePage,
 } from '@shared/types'
+import { type MusicProvider, MusicProviderError } from '../../usecases/ports'
 
 interface MusicBrainzSearchResponse {
   'release-groups'?: MusicBrainzReleaseGroup[]
@@ -123,16 +124,6 @@ interface ListenBrainzTopRecording {
   listen_count?: number
 }
 
-export class MusicProviderError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code: string,
-  ) {
-    super(message)
-    this.name = 'MusicProviderError'
-  }
-}
 
 const MUSICBRAINZ_API_BASE = 'https://musicbrainz.org/ws/2'
 const LISTENBRAINZ_API_BASE = 'https://api.listenbrainz.org/1'
@@ -779,4 +770,10 @@ function mergeCoverArt(primary: MusicCoverArt, secondary: MusicCoverArt): MusicC
     backUrl: primary.backUrl ?? secondary.backUrl,
     backThumbnailUrl: primary.backThumbnailUrl ?? secondary.backThumbnailUrl,
   }
+}
+
+export const musicBrainzMusicProvider: MusicProvider = {
+  search: (input) => searchMusicAlbums(input),
+  discover: (input) => discoverMusicAlbums(input),
+  details: (mediaKey) => getMusicAlbumDetails(mediaKey),
 }

@@ -7,6 +7,7 @@ import type {
   BookSearchItem,
   ResourcePage,
 } from '@shared/types'
+import { type BookProvider, BookProviderError } from '../../usecases/ports'
 
 interface OpenLibrarySearchResponse {
   docs?: OpenLibrarySearchDoc[]
@@ -72,15 +73,6 @@ type BookMediaKey =
   | { provider: 'isbn'; resourceType: 'book'; id: string }
   | { provider: 'openlibrary'; resourceType: 'work' | 'edition'; id: string }
 
-export class OpenLibraryError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-  ) {
-    super(message)
-    this.name = 'OpenLibraryError'
-  }
-}
 
 const OPEN_LIBRARY_BASE = 'https://openlibrary.org'
 const OPEN_LIBRARY_COVER_BASE = 'https://covers.openlibrary.org/b'
@@ -107,7 +99,7 @@ export async function searchBooks(query: string, page = 1, pageSize = 20): Promi
 
   const payload = await fetchOpenLibraryJson<OpenLibrarySearchResponse>(url, { notFoundStatus: 502 })
   if (payload.docs !== undefined && !Array.isArray(payload.docs)) {
-    throw new OpenLibraryError('Open Library search response has invalid docs.', 502)
+    throw new BookProviderError('Open Library search response has invalid docs.', 502)
   }
   const results = (payload.docs ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
   return toResourcePage(results, page, pageSize, payload.numFound)
@@ -121,7 +113,7 @@ export async function discoverBooks(input: BookDiscoveryInput): Promise<Resource
 
     const payload = await fetchOpenLibraryJson<OpenLibrarySubjectResponse>(url, { notFoundStatus: 502 })
     if (payload.works !== undefined && !Array.isArray(payload.works)) {
-      throw new OpenLibraryError('Open Library subject response has invalid works.', 502)
+      throw new BookProviderError('Open Library subject response has invalid works.', 502)
     }
     const results = (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
     return toResourcePage(results, input.page, input.pageSize, payload.work_count)
@@ -133,7 +125,7 @@ export async function discoverBooks(input: BookDiscoveryInput): Promise<Resource
 
   const payload = await fetchOpenLibraryJson<OpenLibraryTrendingResponse>(url, { notFoundStatus: 502 })
   if (payload.works !== undefined && !Array.isArray(payload.works)) {
-    throw new OpenLibraryError('Open Library trending response has invalid works.', 502)
+    throw new BookProviderError('Open Library trending response has invalid works.', 502)
   }
   const results = (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
   return toResourcePage(results, input.page, input.pageSize)
@@ -141,7 +133,7 @@ export async function discoverBooks(input: BookDiscoveryInput): Promise<Resource
 
 export async function getBookDetails(mediaKey: string): Promise<BookDetails> {
   const key = parseBookMediaKey(mediaKey)
-  if (!key) throw new OpenLibraryError(`Unsupported book media key: ${mediaKey}`, 400)
+  if (!key) throw new BookProviderError(`Unsupported book media key: ${mediaKey}`, 400)
 
   if (key.provider === 'isbn') {
     const edition = await fetchOpenLibraryJson<OpenLibraryEditionResponse>(`${OPEN_LIBRARY_BASE}/isbn/${key.id}.json`)
@@ -176,7 +168,7 @@ async function toBookDetailsFromEdition(
 ): Promise<BookDetails> {
   const editionId = parseOpenLibraryId(edition.key, 'edition')
   if (!editionId || !edition.title)
-    throw new OpenLibraryError('Open Library edition response is missing required fields.', 502)
+    throw new BookProviderError('Open Library edition response is missing required fields.', 502)
 
   const workId = parseOpenLibraryId(edition.works?.[0]?.key, 'work')
   const [work, authors] = await Promise.all([
@@ -226,7 +218,7 @@ async function toBookDetailsFromEdition(
 
 async function toBookDetailsFromWork(work: OpenLibraryWorkResponse): Promise<BookDetails> {
   const workId = parseOpenLibraryId(work.key, 'work')
-  if (!workId || !work.title) throw new OpenLibraryError('Open Library work response is missing required fields.', 502)
+  if (!workId || !work.title) throw new BookProviderError('Open Library work response is missing required fields.', 502)
 
   const [authors, editions] = await Promise.all([
     listAuthorNames(work.authors?.map((author) => author.author?.key) ?? []),
@@ -306,7 +298,7 @@ async function listWorkEditions(workId: string): Promise<OpenLibraryEditionRespo
   url.searchParams.set('limit', '20')
   const payload = await fetchOpenLibraryJson<OpenLibraryEditionsResponse>(url, { notFoundStatus: 502 })
   if (payload.entries !== undefined && !Array.isArray(payload.entries)) {
-    throw new OpenLibraryError('Open Library editions response has invalid entries.', 502)
+    throw new BookProviderError('Open Library editions response has invalid entries.', 502)
   }
   return payload.entries ?? []
 }
@@ -329,21 +321,21 @@ async function fetchOpenLibraryJson<T>(input: URL | string, options: { notFoundS
     response = await fetch(input, { headers: { Accept: 'application/json' } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Network request failed.'
-    throw new OpenLibraryError(`Open Library request failed: ${message}`, 502)
+    throw new BookProviderError(`Open Library request failed: ${message}`, 502)
   }
 
   if (response.status === 404) {
     const status = options.notFoundStatus ?? 404
     const message = status === 404 ? 'Book not found in Open Library.' : 'Open Library request failed: 404'
-    throw new OpenLibraryError(message, status)
+    throw new BookProviderError(message, status)
   }
-  if (!response.ok) throw new OpenLibraryError(`Open Library request failed: ${response.status}`, 502)
+  if (!response.ok) throw new BookProviderError(`Open Library request failed: ${response.status}`, 502)
 
   try {
     return (await response.json()) as T
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Invalid JSON response.'
-    throw new OpenLibraryError(`Open Library returned invalid JSON: ${message}`, 502)
+    throw new BookProviderError(`Open Library returned invalid JSON: ${message}`, 502)
   }
 }
 
@@ -436,4 +428,10 @@ function parseOpenLibraryId(value: string | undefined, kind: 'work' | 'edition' 
 
 function uniqueStrings(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))]
+}
+
+export const openLibraryBookProvider: BookProvider = {
+  search: (query, page, pageSize) => searchBooks(query, page, pageSize),
+  discover: (input) => discoverBooks(input),
+  details: (mediaKey) => getBookDetails(mediaKey),
 }

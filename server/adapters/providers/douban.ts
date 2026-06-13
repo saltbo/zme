@@ -1,3 +1,5 @@
+import type { LibraryEntryImporter } from '../../usecases/ports'
+
 export type DoubanMediaStatus = 'wish' | 'collect'
 
 export interface DoubanMediaEntry {
@@ -130,4 +132,8 @@ function dedupeEntries(entries: DoubanMediaEntry[]): DoubanMediaEntry[] {
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
+}
+
+export const doubanLibraryImporter: LibraryEntryImporter = {
+  fetchEntries: (profileId) => fetchDoubanProfileEntries(profileId),
 }

@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { createAuth } from './auth'
+import { createDeps } from './composition'
 import type { Env } from './env'
 import { registerBookRoutes } from './http/books'
 import type { AppEnv } from './http/context'
@@ -18,6 +19,11 @@ import { registerMusicRoutes } from './http/music'
 import { registerSetupRoutes } from './http/setup'
 
 const routes = new Hono<AppEnv>()
+
+routes.use('*', async (c, next) => {
+  c.set('deps', createDeps(c.env))
+  await next()
+})
 
 // Registration order is load-bearing: setup routes stay public because they are
 // registered before the auth middleware.

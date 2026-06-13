@@ -2,8 +2,7 @@ import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import { createAuth } from '../auth'
-import { createDb } from '../db/client'
-import { createInitialAdmin, isInitialized } from '../services/setup'
+import { createInitialAdmin, isInitialized } from '../usecases/setup'
 import type { AppEnv } from './context'
 
 const setupAdminSchema = z.object({
@@ -21,13 +20,18 @@ export function registerSetupRoutes(routes: Hono<AppEnv>) {
   )
 
   routes.get('/setup/status', async (c) => {
-    const initialized = await isInitialized(createDb(c.env))
+    const initialized = await isInitialized(c.get('deps'))
     return c.json({ initialized })
   })
 
   routes.post('/setup/admin', zValidator('json', setupAdminSchema), async (c) => {
+    const auth = createAuth(c.env, c.req.raw)
     try {
-      const user = await createInitialAdmin(createDb(c.env), createAuth(c.env, c.req.raw), c.req.valid('json'))
+      const user = await createInitialAdmin(
+        c.get('deps'),
+        async (input) => (await auth.api.createUser({ body: input })).user,
+        c.req.valid('json'),
+      )
       return c.json({ user }, 201)
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Setup failed.' }, 409)

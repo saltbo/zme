@@ -15,6 +15,7 @@ import type {
   MediaWatchInfo,
   MediaWatchProviderGroup,
 } from '@shared/types'
+import type { MediaProvider } from '../../usecases/ports'
 
 interface TmdbSearchResponse {
   results?: TmdbSearchResult[]
@@ -756,4 +757,29 @@ function formatRuntime(minutes: number): string {
   if (hours === 0) return `${remainingMinutes}m`
   if (remainingMinutes === 0) return `${hours}h`
   return `${hours}h ${remainingMinutes}m`
+}
+
+export const tmdbMediaProvider: MediaProvider = {
+  search: (source, query) => searchMedia(source.apiKey, query, source.language),
+  trending: (source) => getTrendingMedia(source.apiKey, source.language),
+  popular: (source, kind) => getPopularMedia(source.apiKey, kind, source.language),
+  discover: (source, input) => discoverMedia(source.apiKey, { ...input, language: source.language }),
+  genres: (source, kind) => listMediaGenres(source.apiKey, kind, source.language),
+  summary: (source, kind, id) => getMediaSummary(source.apiKey, kind, id, source.language),
+  details: (source, kind, id, watchRegion) => getMediaDetails(source.apiKey, kind, id, source.language, watchRegion),
+  season: (source, id, seasonNumber) => getSeasonDetails(source.apiKey, id, seasonNumber, source.language),
+  personCredits: (source, id) => getPersonCredits(source.apiKey, id, source.language),
+  watchClickouts: (kind, id, watchRegion) => getWatchClickouts(kind, id, watchRegion),
+  async probe(credentials) {
+    const apiKey = credentials.apiKey
+    if (!apiKey) throw new Error('TMDB API key is missing.')
+
+    const response = await fetch(`${TMDB_API_BASE}/configuration`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+      },
+    })
+    if (!response.ok) throw new Error(`TMDB request failed: ${response.status}`)
+  },
 }

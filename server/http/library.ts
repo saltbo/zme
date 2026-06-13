@@ -1,21 +1,19 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createDb } from '../db/client'
 import {
   deleteLibraryState,
   listLibrary,
   listLibraryStates,
   saveLibraryState,
   setWatchedState,
-} from '../services/library'
+} from '../usecases/library'
 import {
   deleteLibrarySource,
   listLibrarySources,
   saveLibrarySource,
   syncLibrarySource,
-} from '../services/library-sources'
-import { getActiveTmdbSource } from '../services/media-sources'
+} from '../usecases/library-sources'
 import type { LibraryRecord } from '../usecases/ports'
 import { mediaKeyParamsSchema } from './books'
 import type { AppEnv } from './context'
@@ -45,19 +43,16 @@ const libraryResourceSchema = z.object({
 
 export function registerLibraryRoutes(routes: Hono<AppEnv>) {
   routes.get('/library', zValidator('query', libraryQuerySchema), async (c) => {
-    const db = createDb(c.env)
-    const input = c.req.valid('query')
-    const tmdb = input.kind === 'music' || input.kind === 'book' ? null : await getActiveTmdbSource(db, input.language)
-    return c.json(await listLibrary(db, c.get('user').id, tmdb, input))
+    return c.json(await listLibrary(c.get('deps'), c.get('user').id, c.req.valid('query')))
   })
 
   routes.get('/library/states', async (c) => {
-    const items = await listLibraryStates(createDb(c.env), c.get('user').id)
+    const items = await listLibraryStates(c.get('deps'), c.get('user').id)
     return c.json({ items })
   })
 
   routes.get('/library/sources', async (c) => {
-    const items = await listLibrarySources(createDb(c.env), c.get('user').id)
+    const items = await listLibrarySources(c.get('deps'), c.get('user').id)
     return c.json({ items })
   })
 
@@ -67,33 +62,31 @@ export function registerLibraryRoutes(routes: Hono<AppEnv>) {
     zValidator('json', librarySourceSchema),
     async (c) => {
       const { source } = c.req.valid('param')
-      const item = await saveLibrarySource(createDb(c.env), c.get('user').id, source, c.req.valid('json'))
+      const item = await saveLibrarySource(c.get('deps'), c.get('user').id, source, c.req.valid('json'))
       return c.json({ item })
     },
   )
 
   routes.delete('/library/sources/:source', zValidator('param', librarySourceParamsSchema), async (c) => {
     const { source } = c.req.valid('param')
-    const deleted = await deleteLibrarySource(createDb(c.env), c.get('user').id, source)
+    const deleted = await deleteLibrarySource(c.get('deps'), c.get('user').id, source)
     if (!deleted) return c.json({ error: 'Library source not found.' }, 404)
     return c.json({ source })
   })
 
   routes.post('/library/sources/:source/sync', zValidator('param', librarySourceParamsSchema), async (c) => {
-    const db = createDb(c.env)
-    const tmdb = await getActiveTmdbSource(db)
-    const result = await syncLibrarySource(db, c.get('user').id, c.req.valid('param').source, tmdb)
+    const result = await syncLibrarySource(c.get('deps'), c.get('user').id, c.req.valid('param').source)
     return c.json({ result })
   })
 
   routes.put('/library/resources', zValidator('json', libraryResourceSchema), async (c) => {
     const input = c.req.valid('json')
-    const db = createDb(c.env)
+    const deps = c.get('deps')
     const userId = c.get('user').id
     const row =
       input.status === 'watched'
-        ? await setWatchedState(db, userId, input, true)
-        : ((await setWatchedState(db, userId, input, false)) ?? (await saveLibraryState(db, userId, input)))
+        ? await setWatchedState(deps, userId, input, true)
+        : ((await setWatchedState(deps, userId, input, false)) ?? (await saveLibraryState(deps, userId, input)))
 
     if (!row) return c.json({ error: 'Library item not found.' }, 404)
 
@@ -109,7 +102,7 @@ export function registerLibraryRoutes(routes: Hono<AppEnv>) {
       const input = c.req.valid('json')
       if (input.mediaKey !== mediaKey) return c.json({ error: 'Library route does not match request body.' }, 400)
 
-      const deleted = await deleteLibraryState(createDb(c.env), c.get('user').id, input)
+      const deleted = await deleteLibraryState(c.get('deps'), c.get('user').id, input)
       if (!deleted) return c.json({ error: 'Library item not found.' }, 404)
       return c.json({ mediaKey, kind: input.kind })
     },

@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
-import { discoverMusicAlbums, getMusicAlbumDetails, MusicProviderError, searchMusicAlbums } from '../adapters/providers/music'
+import { MusicProviderError } from '../usecases/ports'
 import type { AppEnv } from './context'
 
 const musicSearchQuerySchema = z
@@ -38,7 +38,7 @@ const musicDiscoverQuerySchema = z.object({
 export function registerMusicRoutes(routes: Hono<AppEnv>) {
   routes.get('/music/search', zValidator('query', musicSearchQuerySchema), async (c) => {
     try {
-      return c.json(await searchMusicAlbums(c.req.valid('query')))
+      return c.json(await c.get('deps').musicProvider.search(c.req.valid('query')))
     } catch (error) {
       return musicProviderErrorResponse(c, error)
     }
@@ -46,7 +46,7 @@ export function registerMusicRoutes(routes: Hono<AppEnv>) {
 
   routes.get('/music/discover', zValidator('query', musicDiscoverQuerySchema), async (c) => {
     try {
-      return c.json(await discoverMusicAlbums(c.req.valid('query')))
+      return c.json(await c.get('deps').musicProvider.discover(c.req.valid('query')))
     } catch (error) {
       return musicProviderErrorResponse(c, error)
     }
@@ -54,7 +54,7 @@ export function registerMusicRoutes(routes: Hono<AppEnv>) {
 
   routes.get('/music/details', zValidator('query', musicDetailsQuerySchema), async (c) => {
     try {
-      const item = await getMusicAlbumDetails(c.req.valid('query').mediaKey)
+      const item = await c.get('deps').musicProvider.details(c.req.valid('query').mediaKey)
       return c.json({ item })
     } catch (error) {
       return musicProviderErrorResponse(c, error)

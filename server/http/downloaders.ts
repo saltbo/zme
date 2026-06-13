@@ -1,7 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createDb } from '../db/client'
 import {
   checkDownloaderHealth,
   createDownloader,
@@ -9,7 +8,7 @@ import {
   getDownloader,
   listDownloaders,
   updateDownloader,
-} from '../services/downloaders'
+} from '../usecases/downloaders'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 
@@ -24,19 +23,19 @@ const downloaderSchema = z.object({
 
 export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloaders', async (c) => {
-    const items = await listDownloaders(createDb(c.env), c.get('user').id)
+    const items = await listDownloaders(c.get('deps'), c.get('user').id)
     return c.json({ items })
   })
 
   routes.get('/downloaders/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const item = await getDownloader(createDb(c.env), c.get('user').id, id)
+    const item = await getDownloader(c.get('deps'), c.get('user').id, id)
     if (!item) return c.json({ error: 'Downloader not found.' }, 404)
     return c.json({ item })
   })
 
   routes.post('/downloaders', zValidator('json', downloaderSchema), async (c) => {
-    const item = await createDownloader(createDb(c.env), c.get('user').id, c.req.valid('json'))
+    const item = await createDownloader(c.get('deps'), c.get('user').id, c.req.valid('json'))
     return c.json({ item }, 201)
   })
 
@@ -46,7 +45,7 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
     zValidator('json', downloaderSchema),
     async (c) => {
       const { id } = c.req.valid('param')
-      const item = await updateDownloader(createDb(c.env), c.get('user').id, id, c.req.valid('json'))
+      const item = await updateDownloader(c.get('deps'), c.get('user').id, id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Downloader not found.' }, 404)
       return c.json({ item })
     },
@@ -54,14 +53,14 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
 
   routes.delete('/downloaders/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const deleted = await deleteDownloader(createDb(c.env), c.get('user').id, id)
+    const deleted = await deleteDownloader(c.get('deps'), c.get('user').id, id)
     if (!deleted) return c.json({ error: 'Downloader not found.' }, 404)
     return c.json({ id })
   })
 
   routes.post('/downloaders/:id/health', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const health = await checkDownloaderHealth(createDb(c.env), c.get('user').id, id)
+    const health = await checkDownloaderHealth(c.get('deps'), c.get('user').id, id)
     if (!health) return c.json({ error: 'Downloader not found.' }, 404)
     return c.json({ health })
   })

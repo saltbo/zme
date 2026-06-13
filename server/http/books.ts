@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
-import { discoverBooks, getBookDetails, OpenLibraryError, searchBooks } from '../adapters/providers/books'
+import { BookProviderError } from '../usecases/ports'
 import type { AppEnv } from './context'
 
 const bookSearchQuerySchema = z.object({
@@ -24,35 +24,34 @@ export const mediaKeyParamsSchema = z.object({
 
 export function registerBookRoutes(routes: Hono<AppEnv>) {
   routes.get('/books/search', zValidator('query', bookSearchQuerySchema), async (c) => {
+    const { q, page, pageSize } = c.req.valid('query')
     try {
-      return c.json(
-        await searchBooks(c.req.valid('query').q, c.req.valid('query').page, c.req.valid('query').pageSize),
-      )
+      return c.json(await c.get('deps').bookProvider.search(q, page, pageSize))
     } catch (error) {
-      return openLibraryErrorResponse(c, error, 'Book search failed.')
+      return bookProviderErrorResponse(c, error, 'Book search failed.')
     }
   })
 
   routes.get('/books/discover', zValidator('query', bookDiscoverQuerySchema), async (c) => {
     try {
-      return c.json(await discoverBooks(c.req.valid('query')))
+      return c.json(await c.get('deps').bookProvider.discover(c.req.valid('query')))
     } catch (error) {
-      return openLibraryErrorResponse(c, error, 'Book discovery failed.')
+      return bookProviderErrorResponse(c, error, 'Book discovery failed.')
     }
   })
 
   routes.get('/books/:mediaKey', zValidator('param', mediaKeyParamsSchema), async (c) => {
     try {
-      const item = await getBookDetails(decodeURIComponent(c.req.valid('param').mediaKey))
+      const item = await c.get('deps').bookProvider.details(decodeURIComponent(c.req.valid('param').mediaKey))
       return c.json({ item })
     } catch (error) {
-      return openLibraryErrorResponse(c, error, 'Book detail lookup failed.')
+      return bookProviderErrorResponse(c, error, 'Book detail lookup failed.')
     }
   })
 }
 
-function openLibraryErrorResponse(c: Context<AppEnv>, error: unknown, fallback: string) {
-  if (error instanceof OpenLibraryError) {
+function bookProviderErrorResponse(c: Context<AppEnv>, error: unknown, fallback: string) {
+  if (error instanceof BookProviderError) {
     const status = error.status === 400 || error.status === 404 ? error.status : 502
     return c.json({ code: status === 404 ? 'BOOK_NOT_FOUND' : 'OPEN_LIBRARY_ERROR', error: error.message }, status)
   }

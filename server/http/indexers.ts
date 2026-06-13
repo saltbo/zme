@@ -1,7 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createDb } from '../db/client'
 import {
   checkIndexerHealth,
   createIndexer,
@@ -11,7 +10,7 @@ import {
   searchDownloadIndexers,
   searchIndexers,
   updateIndexer,
-} from '../services/indexers'
+} from '../usecases/indexers'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 
@@ -53,10 +52,10 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
     const { q, target, title, aliases, creators, formats, narrator, year, kind, imdbId, tmdbId, tvdbId } =
       c.req.valid('query')
     try {
-      const db = createDb(c.env)
+      const deps = c.get('deps')
       const results =
         target === 'music' || target === 'ebook' || target === 'audiobook'
-          ? await searchDownloadIndexers(db, {
+          ? await searchDownloadIndexers(deps, {
               target,
               query: q,
               title,
@@ -66,7 +65,7 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
               formats: parseDelimitedList(formats),
               narrator,
             })
-          : await searchIndexers(db, {
+          : await searchIndexers(deps, {
               query: q,
               title,
               aliases: parseDelimitedList(aliases),
@@ -91,39 +90,39 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.get('/indexers', async (c) => {
-    const items = await listIndexers(createDb(c.env))
+    const items = await listIndexers(c.get('deps'))
     return c.json({ items })
   })
 
   routes.get('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const item = await getIndexer(createDb(c.env), id)
+    const item = await getIndexer(c.get('deps'), id)
     if (!item) return c.json({ error: 'Indexer not found.' }, 404)
     return c.json({ item })
   })
 
   routes.post('/indexers', zValidator('json', indexerSchema), async (c) => {
-    const item = await createIndexer(createDb(c.env), c.req.valid('json'))
+    const item = await createIndexer(c.get('deps'), c.req.valid('json'))
     return c.json({ item }, 201)
   })
 
   routes.patch('/indexers/:id', zValidator('param', idParamsSchema), zValidator('json', indexerSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const item = await updateIndexer(createDb(c.env), id, c.req.valid('json'))
+    const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'))
     if (!item) return c.json({ error: 'Indexer not found.' }, 404)
     return c.json({ item })
   })
 
   routes.delete('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const deleted = await deleteIndexer(createDb(c.env), id)
+    const deleted = await deleteIndexer(c.get('deps'), id)
     if (!deleted) return c.json({ error: 'Indexer not found.' }, 404)
     return c.json({ id })
   })
 
   routes.post('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const health = await checkIndexerHealth(createDb(c.env), id)
+    const health = await checkIndexerHealth(c.get('deps'), id)
     if (!health) return c.json({ error: 'Indexer not found.' }, 404)
     return c.json({ health })
   })

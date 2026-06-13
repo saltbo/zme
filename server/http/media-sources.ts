@@ -1,7 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createDb } from '../db/client'
 import {
   checkMediaSourceHealth,
   createMediaSource,
@@ -9,7 +8,7 @@ import {
   getMediaSource,
   listMediaSources,
   updateMediaSource,
-} from '../services/media-sources'
+} from '../usecases/media-sources'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 
@@ -23,19 +22,19 @@ const mediaSourceSchema = z.object({
 
 export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
   routes.get('/media-sources', async (c) => {
-    const items = await listMediaSources(createDb(c.env))
+    const items = await listMediaSources(c.get('deps'))
     return c.json({ items })
   })
 
   routes.get('/media-sources/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const item = await getMediaSource(createDb(c.env), id)
+    const item = await getMediaSource(c.get('deps'), id)
     if (!item) return c.json({ error: 'Media source not found.' }, 404)
     return c.json({ item })
   })
 
   routes.post('/media-sources', zValidator('json', mediaSourceSchema), async (c) => {
-    const item = await createMediaSource(createDb(c.env), c.req.valid('json'))
+    const item = await createMediaSource(c.get('deps'), c.req.valid('json'))
     return c.json({ item }, 201)
   })
 
@@ -45,7 +44,7 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
     zValidator('json', mediaSourceSchema),
     async (c) => {
       const { id } = c.req.valid('param')
-      const item = await updateMediaSource(createDb(c.env), id, c.req.valid('json'))
+      const item = await updateMediaSource(c.get('deps'), id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Media source not found.' }, 404)
       return c.json({ item })
     },
@@ -53,14 +52,14 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
 
   routes.delete('/media-sources/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const deleted = await deleteMediaSource(createDb(c.env), id)
+    const deleted = await deleteMediaSource(c.get('deps'), id)
     if (!deleted) return c.json({ error: 'Media source not found.' }, 404)
     return c.json({ id })
   })
 
   routes.post('/media-sources/:id/health', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const health = await checkMediaSourceHealth(createDb(c.env), id)
+    const health = await checkMediaSourceHealth(c.get('deps'), id)
     if (!health) return c.json({ error: 'Media source not found.' }, 404)
     return c.json({ health })
   })

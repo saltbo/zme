@@ -1,4 +1,7 @@
 import type {
+  BookDetails,
+  BookDiscoveryInput,
+  BookSearchItem,
   CreateDownloadInput,
   DownloaderInput,
   DownloaderKind,
@@ -13,8 +16,20 @@ import type {
   LibraryKind,
   LibrarySourceKind,
   LibrarySourceSyncResult,
+  MediaDetails,
+  MediaDiscoverInput,
+  MediaDiscoverPage,
+  MediaGenre,
+  MediaKind,
+  MediaPersonCredits,
+  MediaSearchItem,
+  MediaSeasonDetails,
   MediaSourceInput,
   MediaSourceKind,
+  MusicAlbumDetails,
+  MusicAlbumSearchItem,
+  MusicDiscoveryInput,
+  ResourcePage,
 } from '@shared/types'
 
 /** Parsed connection settings for an external service configured by the user. */
@@ -223,4 +238,79 @@ export interface UsersRepo {
   isInitialized(): Promise<boolean>
   /** Assigns library rows created before the first admin existed to that admin. */
   adoptOrphanLibraryItems(userId: string): Promise<void>
+}
+
+/** Resolved credentials/locale of the enabled media metadata source. */
+export interface ActiveMediaSource {
+  apiKey: string
+  language: string
+}
+
+export interface MediaProvider {
+  search(source: ActiveMediaSource, query: string): Promise<MediaSearchItem[]>
+  trending(source: ActiveMediaSource): Promise<MediaSearchItem[]>
+  popular(source: ActiveMediaSource, kind: MediaKind): Promise<MediaSearchItem[]>
+  discover(source: ActiveMediaSource, input: Omit<MediaDiscoverInput, 'language'>): Promise<MediaDiscoverPage>
+  genres(source: ActiveMediaSource, kind: MediaKind): Promise<MediaGenre[]>
+  summary(source: ActiveMediaSource, kind: MediaKind, id: number): Promise<MediaSearchItem>
+  details(source: ActiveMediaSource, kind: MediaKind, id: number, watchRegion: string): Promise<MediaDetails>
+  season(source: ActiveMediaSource, id: number, seasonNumber: number): Promise<MediaSeasonDetails>
+  personCredits(source: ActiveMediaSource, id: number): Promise<MediaPersonCredits>
+  watchClickouts(kind: MediaKind, id: number, watchRegion: string): Promise<Record<string, string>>
+  /** Throws when the source is unreachable or its credentials are invalid. */
+  probe(credentials: Record<string, string>): Promise<void>
+}
+
+export class BookProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message)
+    this.name = 'BookProviderError'
+  }
+}
+
+export interface BookProvider {
+  search(query: string, page: number, pageSize: number): Promise<ResourcePage<BookSearchItem>>
+  discover(input: BookDiscoveryInput): Promise<ResourcePage<BookSearchItem>>
+  details(mediaKey: string): Promise<BookDetails>
+}
+
+export class MusicProviderError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code: string,
+  ) {
+    super(message)
+    this.name = 'MusicProviderError'
+  }
+}
+
+export interface MusicSearchInput {
+  q?: string
+  artist?: string
+  title?: string
+  page: number
+  pageSize: number
+}
+
+export interface MusicProvider {
+  search(input: MusicSearchInput): Promise<ResourcePage<MusicAlbumSearchItem>>
+  discover(input: MusicDiscoveryInput): Promise<ResourcePage<MusicAlbumSearchItem>>
+  details(mediaKey: string): Promise<MusicAlbumDetails>
+}
+
+export interface ImportedLibraryEntry {
+  sourceId: string
+  status: 'wish' | 'collect'
+  title: string
+  aliases: string[]
+  year: string | null
+  markedAt: string | null
+}
+
+export interface LibraryEntryImporter {
+  fetchEntries(profileId: string): Promise<ImportedLibraryEntry[]>
 }

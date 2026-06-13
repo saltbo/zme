@@ -1,8 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createDb } from '../db/client'
-import { getActiveTmdbSource } from '../services/media-sources'
 import {
   discoverMedia,
   getMediaDetails,
@@ -13,7 +11,7 @@ import {
   getWatchClickouts,
   listMediaGenres,
   searchMedia,
-} from '../adapters/providers/tmdb'
+} from '../usecases/media'
 import type { AppEnv } from './context'
 
 const searchQuerySchema = z.object({
@@ -76,39 +74,30 @@ const personParamsSchema = z.object({
 export function registerMediaRoutes(routes: Hono<AppEnv>) {
   routes.get('/tmdb/search', zValidator('query', searchQuerySchema), async (c) => {
     const { q, language } = c.req.valid('query')
-    const source = await getActiveTmdbSource(createDb(c.env), language)
-    const results = await searchMedia(source.apiKey, q, source.language)
+    const results = await searchMedia(c.get('deps'), q, language)
     return c.json({ results })
   })
 
   routes.get('/tmdb/trending', zValidator('query', languageQuerySchema), async (c) => {
     const { language } = c.req.valid('query')
-    const source = await getActiveTmdbSource(createDb(c.env), language)
-    const results = await getTrendingMedia(source.apiKey, source.language)
+    const results = await getTrendingMedia(c.get('deps'), language)
     return c.json({ results })
   })
 
   routes.get('/tmdb/popular', zValidator('query', popularQuerySchema), async (c) => {
     const { kind, language } = c.req.valid('query')
-    const source = await getActiveTmdbSource(createDb(c.env), language)
-    const results = await getPopularMedia(source.apiKey, kind, source.language)
+    const results = await getPopularMedia(c.get('deps'), kind, language)
     return c.json({ results })
   })
 
   routes.get('/tmdb/discover', zValidator('query', discoverQuerySchema), async (c) => {
-    const input = c.req.valid('query')
-    const source = await getActiveTmdbSource(createDb(c.env), input.language)
-    const page = await discoverMedia(source.apiKey, {
-      ...input,
-      language: source.language,
-    })
+    const page = await discoverMedia(c.get('deps'), c.req.valid('query'))
     return c.json(page)
   })
 
   routes.get('/tmdb/genres', zValidator('query', popularQuerySchema), async (c) => {
     const { kind, language } = c.req.valid('query')
-    const source = await getActiveTmdbSource(createDb(c.env), language)
-    const genres = await listMediaGenres(source.apiKey, kind, source.language)
+    const genres = await listMediaGenres(c.get('deps'), kind, language)
     return c.json({ genres })
   })
 
@@ -119,8 +108,7 @@ export function registerMediaRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const { id } = c.req.valid('param')
       const { language } = c.req.valid('query')
-      const source = await getActiveTmdbSource(createDb(c.env), language)
-      const credits = await getPersonCredits(source.apiKey, id, source.language)
+      const credits = await getPersonCredits(c.get('deps'), id, language)
       return c.json(credits)
     },
   )
@@ -132,7 +120,7 @@ export function registerMediaRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const { id } = c.req.valid('param')
       const { watchRegion } = c.req.valid('query')
-      const clickouts = await getWatchClickouts('movie', id, watchRegion)
+      const clickouts = await getWatchClickouts(c.get('deps'), 'movie', id, watchRegion)
       return c.json({ clickouts })
     },
   )
@@ -144,7 +132,7 @@ export function registerMediaRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const { id } = c.req.valid('param')
       const { watchRegion } = c.req.valid('query')
-      const clickouts = await getWatchClickouts('tv', id, watchRegion)
+      const clickouts = await getWatchClickouts(c.get('deps'), 'tv', id, watchRegion)
       return c.json({ clickouts })
     },
   )
@@ -156,8 +144,7 @@ export function registerMediaRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const { id } = c.req.valid('param')
       const { language, watchRegion } = c.req.valid('query')
-      const source = await getActiveTmdbSource(createDb(c.env), language)
-      const item = await getMediaDetails(source.apiKey, 'movie', id, source.language, watchRegion)
+      const item = await getMediaDetails(c.get('deps'), 'movie', id, watchRegion, language)
       return c.json({ item })
     },
   )
@@ -169,8 +156,7 @@ export function registerMediaRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const { id, seasonNumber } = c.req.valid('param')
       const { language } = c.req.valid('query')
-      const source = await getActiveTmdbSource(createDb(c.env), language)
-      const item = await getSeasonDetails(source.apiKey, id, seasonNumber, source.language)
+      const item = await getSeasonDetails(c.get('deps'), id, seasonNumber, language)
       return c.json({ item })
     },
   )
@@ -182,8 +168,7 @@ export function registerMediaRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const { id } = c.req.valid('param')
       const { language, watchRegion } = c.req.valid('query')
-      const source = await getActiveTmdbSource(createDb(c.env), language)
-      const item = await getMediaDetails(source.apiKey, 'tv', id, source.language, watchRegion)
+      const item = await getMediaDetails(c.get('deps'), 'tv', id, watchRegion, language)
       return c.json({ item })
     },
   )

@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { indexerGateways } from '../adapters/gateways/indexers'
+import type { Deps } from './deps'
 import { searchDownloadIndexers, searchIndexers } from './indexers'
+import type { IndexerRecord } from './ports'
 
-const indexer = {
+const indexer: IndexerRecord = {
   id: 'indexer-1',
   description: 'Prowlarr',
   kind: 'prowlarr',
-  endpoint: 'http://prowlarr.local',
-  credentialsJson: JSON.stringify({ apiKey: 'secret' }),
-  optionsJson: '{}',
+  config: {
+    endpoint: 'http://prowlarr.local',
+    credentials: { apiKey: 'secret' },
+    options: {},
+  },
   enabled: true,
   healthStatus: 'online',
   healthMessage: null,
@@ -41,7 +46,7 @@ describe('searchIndexers', () => {
     })
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchIndexers(createDepsWithIndexers([indexer]), {
       query: 'Correct Movie 2026',
       title: 'Correct Movie',
       aliases: ['Correct Movie English'],
@@ -78,7 +83,7 @@ describe('searchIndexers', () => {
     )
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchIndexers(createDepsWithIndexers([indexer]), {
       query: 'Correct Show 2026',
       title: 'Correct Show',
       aliases: [],
@@ -125,7 +130,7 @@ describe('searchIndexers', () => {
     )
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchDownloadIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchDownloadIndexers(createDepsWithIndexers([indexer]), {
       target: 'music',
       query: 'OK Computer Radiohead',
       title: 'OK Computer',
@@ -166,7 +171,7 @@ describe('searchIndexers', () => {
     )
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchDownloadIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchDownloadIndexers(createDepsWithIndexers([indexer]), {
       target: 'ebook',
       query: 'Dune Frank Herbert ebook',
       title: 'Dune',
@@ -207,7 +212,7 @@ describe('searchIndexers', () => {
     )
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchDownloadIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchDownloadIndexers(createDepsWithIndexers([indexer]), {
       target: 'audiobook',
       query: 'Project Hail Mary Andy Weir audiobook',
       title: 'Project Hail Mary',
@@ -255,7 +260,7 @@ describe('searchIndexers', () => {
     )
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchDownloadIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchDownloadIndexers(createDepsWithIndexers([indexer]), {
       target: 'ebook',
       query: 'Dune Frank Herbert ebook',
       title: 'Dune',
@@ -292,7 +297,7 @@ describe('searchIndexers', () => {
     })
     vi.stubGlobal('fetch', fetch)
 
-    const results = await searchDownloadIndexers(createDbWithIndexers([indexer]), {
+    const results = await searchDownloadIndexers(createDepsWithIndexers([indexer]), {
       target: 'ebook',
       query: 'Dune Frank Herbert ebook',
       title: 'Dune',
@@ -309,12 +314,11 @@ describe('searchIndexers', () => {
   })
 })
 
-function createDbWithIndexers(rows: unknown[]) {
+function createDepsWithIndexers(records: IndexerRecord[]): Deps {
   return {
-    select: () => ({
-      from: () => ({
-        where: () => rows,
-      }),
-    }),
-  } as never
+    indexersRepo: {
+      listEnabled: async () => records,
+    },
+    indexerGateways,
+  } as never as Deps
 }

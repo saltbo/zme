@@ -1,9 +1,8 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createDb } from '../db/client'
-import { listDownloadTasks, streamDownloadTaskEvents } from '../services/download-tasks'
-import { submitDownload } from '../services/downloaders'
+import { type DownloadTaskEvent, listDownloadTasks, streamDownloadTaskEvents } from '../usecases/download-tasks'
+import { submitDownload } from '../usecases/downloaders'
 import type { AppEnv } from './context'
 
 const createDownloadSchema = z.object({
@@ -37,17 +36,54 @@ const downloadsQuerySchema = z.object({
 
 export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloads', zValidator('query', downloadsQuerySchema), async (c) => {
-    const result = await listDownloadTasks(createDb(c.env), c.get('user').id, c.req.valid('query'))
+    const result = await listDownloadTasks(c.get('deps'), c.get('user').id, c.req.valid('query'))
     return c.json(result)
   })
 
-  routes.get('/downloads/events', async (c) => {
-    return streamDownloadTaskEvents(createDb(c.env), c.get('user').id, c.req.raw.signal)
+  routes.get('/downloads/events', (c) => {
+    const deps = c.get('deps')
+    const userId = c.get('user').id
+    const signal = c.req.raw.signal
+    const encoder = new TextEncoder()
+    let closed = false
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const send = (event: DownloadTaskEvent) => {
+          if (closed) return
+          controller.enqueue(encoder.encode(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`))
+        }
+
+        streamDownloadTaskEvents(deps, userId, signal, send)
+          .catch((error) => {
+            send({
+              event: 'error',
+              data: { message: error instanceof Error ? error.message : 'Download task stream failed.' },
+            })
+          })
+          .finally(() => {
+            if (closed) return
+            closed = true
+            controller.close()
+          })
+      },
+      cancel() {
+        closed = true
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    })
   })
 
   routes.post('/downloads', zValidator('json', createDownloadSchema), async (c) => {
     try {
-      const item = await submitDownload(createDb(c.env), c.get('user').id, c.req.valid('json'))
+      const item = await submitDownload(c.get('deps'), c.get('user').id, c.req.valid('json'))
       return c.json({ item }, 201)
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : 'Download submission failed.' }, 502)

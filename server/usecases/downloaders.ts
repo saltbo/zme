@@ -6,53 +6,47 @@ import type {
   DownloaderInput,
   DownloaderSummary,
 } from '@shared/types'
-import { downloaderGateways } from '../adapters/gateways/downloaders'
-import { indexerGateways } from '../adapters/gateways/indexers'
-import { createDownloadersRepo } from '../adapters/repos/downloaders'
-import { createIndexersRepo } from '../adapters/repos/indexers'
-import type { createDb } from '../db/client'
-import type { DownloaderRecord } from '../usecases/ports'
+import type { Deps } from './deps'
+import type { DownloaderRecord } from './ports'
 
-type Db = ReturnType<typeof createDb>
-
-export async function listDownloaders(db: Db, userId: string): Promise<DownloaderSummary[]> {
-  const records = await createDownloadersRepo(db).list(userId)
+export async function listDownloaders(deps: Deps, userId: string): Promise<DownloaderSummary[]> {
+  const records = await deps.downloadersRepo.list(userId)
   return records.map(toSummary)
 }
 
-export async function getDownloader(db: Db, userId: string, id: string): Promise<DownloaderDetails | null> {
-  const record = await createDownloadersRepo(db).get(userId, id)
+export async function getDownloader(deps: Deps, userId: string, id: string): Promise<DownloaderDetails | null> {
+  const record = await deps.downloadersRepo.get(userId, id)
   return record ? toDetails(record) : null
 }
 
-export async function createDownloader(db: Db, userId: string, input: DownloaderInput): Promise<DownloaderSummary> {
-  return toSummary(await createDownloadersRepo(db).create(userId, input))
+export async function createDownloader(deps: Deps, userId: string, input: DownloaderInput): Promise<DownloaderSummary> {
+  return toSummary(await deps.downloadersRepo.create(userId, input))
 }
 
 export async function updateDownloader(
-  db: Db,
+  deps: Deps,
   userId: string,
   id: string,
   input: DownloaderInput,
 ): Promise<DownloaderSummary | null> {
-  const record = await createDownloadersRepo(db).update(userId, id, input)
+  const record = await deps.downloadersRepo.update(userId, id, input)
   return record ? toSummary(record) : null
 }
 
-export async function deleteDownloader(db: Db, userId: string, id: string): Promise<boolean> {
-  return createDownloadersRepo(db).delete(userId, id)
+export async function deleteDownloader(deps: Deps, userId: string, id: string): Promise<boolean> {
+  return deps.downloadersRepo.delete(userId, id)
 }
 
 export async function submitDownload(
-  db: Db,
+  deps: Deps,
   userId: string,
   input: CreateDownloadInput,
 ): Promise<CreateDownloadResult> {
-  const downloader = await createDownloadersRepo(db).getEnabled(userId, input.downloaderId)
+  const downloader = await deps.downloadersRepo.getEnabled(userId, input.downloaderId)
   if (!downloader) throw new Error('Downloader is not available.')
-  const resolvedInput = await resolveDownloadInput(db, input)
+  const resolvedInput = await resolveDownloadInput(deps, input)
 
-  await downloaderGateways[downloader.kind].submit(downloader.config, resolvedInput)
+  await deps.downloaderGateways[downloader.kind].submit(downloader.config, resolvedInput)
 
   return {
     downloaderId: downloader.id,
@@ -60,31 +54,30 @@ export async function submitDownload(
   }
 }
 
-async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise<CreateDownloadInput> {
+async function resolveDownloadInput(deps: Deps, input: CreateDownloadInput): Promise<CreateDownloadInput> {
   if (input.sourceType !== 'torrent_url') return input
 
-  const records = await createIndexersRepo(db).listEnabled()
+  const records = await deps.indexersRepo.listEnabled()
   const matchingIndexers = records.filter((indexer) =>
-    indexerGateways[indexer.kind].matchesDownloadUrl(indexer.config, input.uri),
+    deps.indexerGateways[indexer.kind].matchesDownloadUrl(indexer.config, input.uri),
   )
   if (matchingIndexers.length === 0) return input
 
   for (const indexer of matchingIndexers) {
-    const resolved = await indexerGateways[indexer.kind].resolveDownloadSource(indexer.config, input.uri)
+    const resolved = await deps.indexerGateways[indexer.kind].resolveDownloadSource(indexer.config, input.uri)
     if (resolved) return { ...input, ...resolved }
   }
 
   throw new Error('Prowlarr download URL could not be resolved.')
 }
 
-export async function checkDownloaderHealth(db: Db, userId: string, id: string): Promise<DownloaderHealth | null> {
-  const repo = createDownloadersRepo(db)
-  const downloader = await repo.get(userId, id)
+export async function checkDownloaderHealth(deps: Deps, userId: string, id: string): Promise<DownloaderHealth | null> {
+  const downloader = await deps.downloadersRepo.get(userId, id)
   if (!downloader) return null
 
   const checkedAt = new Date().toISOString()
-  const result = await probeDownloader(downloader)
-  const updated = await repo.setHealth(userId, id, { ...result, checkedAt })
+  const result = await probeDownloader(deps, downloader)
+  const updated = await deps.downloadersRepo.setHealth(userId, id, { ...result, checkedAt })
   if (!updated) return null
 
   return {
@@ -95,10 +88,11 @@ export async function checkDownloaderHealth(db: Db, userId: string, id: string):
 }
 
 async function probeDownloader(
+  deps: Deps,
   downloader: DownloaderRecord,
 ): Promise<{ status: 'online' | 'offline'; message: string }> {
   try {
-    await downloaderGateways[downloader.kind].probe(downloader.config)
+    await deps.downloaderGateways[downloader.kind].probe(downloader.config)
     return { status: 'online', message: 'Connection check succeeded.' }
   } catch (error) {
     return {
