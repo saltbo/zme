@@ -22,7 +22,14 @@ export default defineConfig(() => {
         },
       },
     },
-    plugins: [react(), tailwindcss(), !isVitest && cloudflare()].filter(Boolean),
+    plugins: [
+      react(),
+      tailwindcss(),
+      // E2E_PERSIST isolates the local D1/state from the default dev store so
+      // end-to-end runs never clobber `pnpm dev` data.
+      !isVitest &&
+        cloudflare(process.env.E2E_PERSIST ? { persistState: { path: process.env.E2E_PERSIST } } : undefined),
+    ].filter(Boolean),
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

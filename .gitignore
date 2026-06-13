@@ -6,3 +6,7 @@ worker-configuration.d.ts
 *.local
 coverage
 .playwright-cli
+test-results
+playwright-report
+blob-report
+playwright/.cache
