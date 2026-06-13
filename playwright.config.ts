@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const PORT = 5173
+const PORT = 7171
 const baseURL = `http://localhost:${PORT}`
 
 // E2E runs against the real stack: vite dev serves the SPA + the Worker against

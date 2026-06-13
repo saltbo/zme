@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react-swc'
 import { defineConfig } from 'vite'
 
-const appPort = Number(process.env.E2E_APP_PORT ?? 5173)
+const appPort = Number(process.env.E2E_APP_PORT ?? 7171)
 
 export default defineConfig(() => {
   const isVitest = process.env.VITEST === 'true'
