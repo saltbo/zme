@@ -130,4 +130,3 @@ remain as applied history; `migrations/meta/` is drizzle's baseline snapshot.
 2. Make your change with tests where it makes sense.
 3. Ensure every gate above passes locally.
 4. Open a PR with a clear description of the what and why.
-</content>
