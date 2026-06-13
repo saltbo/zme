@@ -1,10 +1,14 @@
 import type { DownloadTaskPage, DownloadTaskSummary } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
 import { downloadTaskGateways } from '../adapters/gateways/downloaders'
+import { createDownloadersRepo } from '../adapters/repos/downloaders'
 import type { createDb } from '../db/client'
-import { type Downloader, downloaders } from '../db/schema'
-import type { DownloadTaskEvent, DownloadTaskGateway, DownloadTaskOwner, ListDownloadTasksInput } from '../usecases/ports'
-import { toConnectorConfig } from './connectors'
+import type {
+  DownloaderRecord,
+  DownloadTaskEvent,
+  DownloadTaskGateway,
+  DownloadTaskOwner,
+  ListDownloadTasksInput,
+} from '../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
 
@@ -15,12 +19,10 @@ export async function listDownloadTasks(
   userId: string,
   input: ListDownloadTasksInput,
 ): Promise<DownloadTaskPage> {
-  const rows = await listEnabledDownloaders(db, userId)
+  const rows = await listTaskCapableDownloaders(db, userId)
 
   const results = await Promise.all(
-    rows.map(({ downloader, gateway }) =>
-      gateway.list(toConnectorConfig(downloader), toOwner(downloader), input),
-    ),
+    rows.map(({ downloader, gateway }) => gateway.list(downloader.config, toOwner(downloader), input)),
   )
   return {
     items: results.flatMap((result) => result.items),
@@ -31,7 +33,7 @@ export async function listDownloadTasks(
 }
 
 export async function streamDownloadTaskEvents(db: Db, userId: string, signal: AbortSignal): Promise<Response> {
-  const rows = await listEnabledDownloaders(db, userId)
+  const rows = await listTaskCapableDownloaders(db, userId)
   const encoder = new TextEncoder()
   const latestByDownloader = new Map<string, DownloadTaskSummary[]>()
   let abortController: AbortController | null = null
@@ -73,7 +75,7 @@ export async function streamDownloadTaskEvents(db: Db, userId: string, signal: A
 
       for (const { downloader, gateway } of rows) {
         void gateway
-          .stream(toConnectorConfig(downloader), toOwner(downloader), abortController.signal, (event) => {
+          .stream(downloader.config, toOwner(downloader), abortController.signal, (event) => {
             if (event.event === 'snapshot') {
               latestByDownloader.set(downloader.id, event.data.items)
               sendSnapshot()
@@ -102,22 +104,19 @@ export async function streamDownloadTaskEvents(db: Db, userId: string, signal: A
   })
 }
 
-async function listEnabledDownloaders(
+async function listTaskCapableDownloaders(
   db: Db,
   userId: string,
-): Promise<Array<{ downloader: Downloader; gateway: DownloadTaskGateway }>> {
-  const rows = await db
-    .select()
-    .from(downloaders)
-    .where(and(eq(downloaders.userId, userId), eq(downloaders.enabled, true)))
+): Promise<Array<{ downloader: DownloaderRecord; gateway: DownloadTaskGateway }>> {
+  const records = await createDownloadersRepo(db).listEnabled(userId)
 
-  return rows.flatMap((downloader) => {
+  return records.flatMap((downloader) => {
     const gateway = downloadTaskGateways[downloader.kind]
     return gateway ? [{ downloader, gateway }] : []
   })
 }
 
-function toOwner(downloader: Downloader): DownloadTaskOwner {
+function toOwner(downloader: DownloaderRecord): DownloadTaskOwner {
   return {
     downloaderId: downloader.id,
     downloaderName: getDownloaderName(downloader),
@@ -125,7 +124,7 @@ function toOwner(downloader: Downloader): DownloadTaskOwner {
   }
 }
 
-function getDownloaderName(downloader: Downloader) {
+function getDownloaderName(downloader: DownloaderRecord) {
   return downloader.description || 'ZPan'
 }
 

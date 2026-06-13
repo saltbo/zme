@@ -1,7 +1,5 @@
 import { buildTmdbMediaKey, getMediaKeyLibraryKind, parseTmdbMediaKey } from '@shared/media-key'
 import type {
-  LibraryFilterKind,
-  LibraryFilterStatus,
   LibraryMediaInput,
   LibraryMediaItem,
   LibraryMediaPage,
@@ -10,11 +8,11 @@ import type {
   LibraryStateItem,
   MediaKind,
 } from '@shared/types'
-import { and, count, desc, eq, inArray, isNotNull, isNull, type SQL } from 'drizzle-orm'
-import type { createDb } from '../db/client'
-import { type LibraryItem, library } from '../db/schema'
-import type { ActiveTmdbSource } from './media-sources'
 import { getMediaSummary } from '../adapters/providers/tmdb'
+import { createLibraryRepo } from '../adapters/repos/library'
+import type { createDb } from '../db/client'
+import type { LibraryRecord } from '../usecases/ports'
+import type { ActiveTmdbSource } from './media-sources'
 
 type Db = ReturnType<typeof createDb>
 
@@ -38,29 +36,21 @@ export async function listLibrary(
   const pageSize = Math.min(60, Math.max(1, input.pageSize))
   if (!tmdb) throw new Error('TMDB source is required for movie and tv library items.')
 
-  const where = libraryWhere(userId, input.kind, input.status)
-  const totalRows = await db.select({ value: count() }).from(library).where(where)
-  const totalResults = totalRows[0]?.value ?? 0
-  const totalPages = Math.max(1, Math.ceil(totalResults / pageSize))
-  const rows = await db
-    .select()
-    .from(library)
-    .where(where)
-    .orderBy(desc(library.updatedAt))
-    .limit(pageSize)
-    .offset((page - 1) * pageSize)
+  const repo = createLibraryRepo(db)
+  const { rows, total } = await repo.listPage(userId, { kind: input.kind, status: input.status }, page, pageSize)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const items = await Promise.all(rows.map((row) => toLibraryMediaItem(row, tmdb)))
   return {
     items,
     page,
     pageSize,
-    totalResults,
+    totalResults: total,
     totalPages,
   }
 }
 
 export async function listLibraryStates(db: Db, userId: string): Promise<LibraryStateItem[]> {
-  const rows = await db.select().from(library).where(eq(library.userId, userId))
+  const rows = await createLibraryRepo(db).listAll(userId)
   return rows.map((row) => ({
     mediaKey: row.mediaKey,
     id: row.tmdbId,
@@ -76,26 +66,23 @@ export async function saveLibraryState(
   userId: string,
   input: LibraryMediaInput | LibraryResourceInput,
   savedAt?: string,
-): Promise<LibraryItem> {
+): Promise<LibraryRecord> {
+  const repo = createLibraryRepo(db)
   const now = new Date().toISOString()
   const nextSavedAt = savedAt ?? now
   const resource = toLibraryResource(input)
   const key = resource.mediaKey
-  const existing = await getLibraryRow(db, userId, key)
+  const existing = await repo.get(userId, key)
   if (existing) {
-    const rows = await db
-      .update(library)
-      .set({
-        savedAt: existing.savedAt ?? nextSavedAt,
-        updatedAt: now,
-      })
-      .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-      .returning()
-
-    return rows[0] ?? existing
+    const updated = await repo.setStates(userId, key, {
+      savedAt: existing.savedAt ?? nextSavedAt,
+      watchedAt: existing.watchedAt,
+      updatedAt: now,
+    })
+    return updated ?? existing
   }
 
-  const row: LibraryItem = {
+  const record: LibraryRecord = {
     id: crypto.randomUUID(),
     userId,
     mediaKey: key,
@@ -107,19 +94,13 @@ export async function saveLibraryState(
     updatedAt: now,
   }
 
-  await db.insert(library).values(row)
-  return row
+  await repo.insert(record)
+  return record
 }
 
 export async function deleteLibraryState(db: Db, userId: string, input: LibraryResourceInput): Promise<boolean> {
   const resource = toLibraryResource(input)
-  const rows = await db
-    .delete(library)
-    .where(and(eq(library.userId, userId), eq(library.mediaKey, resource.mediaKey)))
-    .returning({
-      id: library.id,
-    })
-  return rows.length > 0
+  return createLibraryRepo(db).delete(userId, resource.mediaKey)
 }
 
 export async function setWatchedState(
@@ -128,35 +109,30 @@ export async function setWatchedState(
   input: LibraryMediaInput | LibraryResourceInput,
   watched: boolean,
   watchedAt?: string,
-): Promise<LibraryItem | null> {
+): Promise<LibraryRecord | null> {
+  const repo = createLibraryRepo(db)
   const now = new Date().toISOString()
   const nextWatchedAt = watchedAt ?? now
   const resource = toLibraryResource(input)
   const key = resource.mediaKey
-  const existing = await getLibraryRow(db, userId, key)
+  const existing = await repo.get(userId, key)
 
   if (existing) {
     if (!watched && !existing.savedAt) {
-      await db.delete(library).where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
+      await repo.delete(userId, key)
       return null
     }
 
-    const rows = await db
-      .update(library)
-      .set({
-        savedAt: watched ? (existing.savedAt ?? nextWatchedAt) : existing.savedAt,
-        watchedAt: watched ? (existing.watchedAt ?? nextWatchedAt) : null,
-        updatedAt: now,
-      })
-      .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-      .returning()
-
-    return rows[0] ?? null
+    return repo.setStates(userId, key, {
+      savedAt: watched ? (existing.savedAt ?? nextWatchedAt) : existing.savedAt,
+      watchedAt: watched ? (existing.watchedAt ?? nextWatchedAt) : null,
+      updatedAt: now,
+    })
   }
 
   if (!watched) return null
 
-  const row: LibraryItem = {
+  const record: LibraryRecord = {
     id: crypto.randomUUID(),
     userId,
     mediaKey: key,
@@ -168,20 +144,11 @@ export async function setWatchedState(
     updatedAt: now,
   }
 
-  await db.insert(library).values(row)
-  return row
+  await repo.insert(record)
+  return record
 }
 
-async function getLibraryRow(db: Db, userId: string, key: string): Promise<LibraryItem | null> {
-  const rows = await db
-    .select()
-    .from(library)
-    .where(and(eq(library.userId, userId), eq(library.mediaKey, key)))
-    .limit(1)
-  return rows[0] ?? null
-}
-
-async function toLibraryMediaItem(row: LibraryItem, tmdb: ActiveTmdbSource): Promise<LibraryMediaItem> {
+async function toLibraryMediaItem(row: LibraryRecord, tmdb: ActiveTmdbSource): Promise<LibraryMediaItem> {
   if (row.kind !== 'movie' && row.kind !== 'tv') throw new Error(`Unsupported TMDB library kind: ${row.kind}`)
   if (!row.tmdbId) throw new Error(`Library item ${row.id} is missing tmdb_id.`)
 
@@ -198,7 +165,7 @@ async function toLibraryMediaItem(row: LibraryItem, tmdb: ActiveTmdbSource): Pro
 
 function toLibraryResource(input: LibraryMediaInput | LibraryResourceInput): {
   mediaKey: string
-  kind: LibraryItem['kind']
+  kind: LibraryRecord['kind']
   tmdbId: number | null
 } {
   if ('mediaKey' in input) {
@@ -227,22 +194,4 @@ function toTmdbLibraryResource(input: LibraryMediaInput): {
     kind: input.kind,
     tmdbId: input.id,
   }
-}
-
-function libraryWhere(userId: string, kind?: LibraryFilterKind, status?: LibraryFilterStatus): SQL {
-  const filters: SQL[] = [eq(library.userId, userId)]
-
-  if (kind === 'movie' || kind === 'tv') {
-    filters.push(eq(library.kind, kind))
-  } else {
-    filters.push(inArray(library.kind, ['movie', 'tv']))
-  }
-
-  if (status === 'watched') {
-    filters.push(isNotNull(library.watchedAt))
-  } else if (status === 'unwatched') {
-    filters.push(isNotNull(library.savedAt), isNull(library.watchedAt))
-  }
-
-  return and(...filters) as SQL
 }

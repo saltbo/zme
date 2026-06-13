@@ -5,25 +5,21 @@ import type {
   LibrarySourceSyncResult,
   MediaSearchItem,
 } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
-import type { createDb } from '../db/client'
-import { type LibrarySource, librarySources } from '../db/schema'
 import { type DoubanMediaEntry, fetchDoubanProfileEntries } from '../adapters/providers/douban'
+import { searchMedia } from '../adapters/providers/tmdb'
+import { createLibrarySourcesRepo } from '../adapters/repos/library-sources'
+import type { createDb } from '../db/client'
+import type { LibrarySourceRecord } from '../usecases/ports'
 import { saveLibraryState, setWatchedState } from './library'
 import type { ActiveTmdbSource } from './media-sources'
-import { searchMedia } from '../adapters/providers/tmdb'
 
 type Db = ReturnType<typeof createDb>
 
 const ACCEPTED_MATCH_SCORE = 4
 
 export async function listLibrarySources(db: Db, userId: string): Promise<LibrarySourceSummary[]> {
-  const rows = await db
-    .select()
-    .from(librarySources)
-    .where(eq(librarySources.userId, userId))
-    .orderBy(librarySources.createdAt)
-  return rows.map(toSummary)
+  const records = await createLibrarySourcesRepo(db).list(userId)
+  return records.map(toSummary)
 }
 
 export async function saveLibrarySource(
@@ -32,47 +28,15 @@ export async function saveLibrarySource(
   source: LibrarySourceKind,
   input: LibrarySourceInput,
 ): Promise<LibrarySourceSummary> {
-  const now = new Date().toISOString()
-  const profileId = normalizeProfileId(input.profileId)
-  const existing = await getLibrarySourceRow(db, userId, source)
-
-  if (existing) {
-    const rows = await db
-      .update(librarySources)
-      .set({
-        profileId,
-        enabled: input.enabled,
-        lastError: null,
-        updatedAt: now,
-      })
-      .where(and(eq(librarySources.userId, userId), eq(librarySources.source, source)))
-      .returning()
-    return toSummary(rows[0] ?? existing)
-  }
-
-  const row: LibrarySource = {
-    id: crypto.randomUUID(),
-    userId,
-    source,
-    profileId,
+  const record = await createLibrarySourcesRepo(db).save(userId, source, {
+    profileId: normalizeProfileId(input.profileId),
     enabled: input.enabled,
-    lastSyncedAt: null,
-    lastError: null,
-    lastResultJson: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await db.insert(librarySources).values(row)
-  return toSummary(row)
+  })
+  return toSummary(record)
 }
 
 export async function deleteLibrarySource(db: Db, userId: string, source: LibrarySourceKind): Promise<boolean> {
-  const rows = await db
-    .delete(librarySources)
-    .where(and(eq(librarySources.userId, userId), eq(librarySources.source, source)))
-    .returning({ id: librarySources.id })
-  return rows.length > 0
+  return createLibrarySourcesRepo(db).delete(userId, source)
 }
 
 export async function syncLibrarySource(
@@ -81,35 +45,36 @@ export async function syncLibrarySource(
   source: LibrarySourceKind,
   tmdb: ActiveTmdbSource,
 ): Promise<LibrarySourceSyncResult> {
-  const row = await getLibrarySourceRow(db, userId, source)
-  if (!row) throw new Error('Library source is not configured.')
-  return syncLibrarySourceRow(db, row, tmdb)
+  const record = await createLibrarySourcesRepo(db).get(userId, source)
+  if (!record) throw new Error('Library source is not configured.')
+  return syncLibrarySourceRecord(db, record, tmdb)
 }
 
 export async function syncEnabledLibrarySources(db: Db, tmdb: ActiveTmdbSource): Promise<void> {
-  const rows = await db.select().from(librarySources).where(eq(librarySources.enabled, true))
-  for (const row of rows) {
-    await syncLibrarySourceRow(db, row, tmdb).catch(() => undefined)
+  const records = await createLibrarySourcesRepo(db).listEnabled()
+  for (const record of records) {
+    await syncLibrarySourceRecord(db, record, tmdb).catch(() => undefined)
   }
 }
 
-async function syncLibrarySourceRow(
+async function syncLibrarySourceRecord(
   db: Db,
-  source: LibrarySource,
+  source: LibrarySourceRecord,
   tmdb: ActiveTmdbSource,
 ): Promise<LibrarySourceSyncResult> {
+  const repo = createLibrarySourcesRepo(db)
   try {
     const entries = await fetchEntries(source)
     const result = await importEntries(db, source.userId, entries, tmdb)
-    await markSourceSynced(db, source, result, null)
+    await repo.markSynced(source.id, result, null)
     return result
   } catch (error) {
-    await markSourceSynced(db, source, null, error instanceof Error ? error.message : 'Library source sync failed.')
+    await repo.markSynced(source.id, null, error instanceof Error ? error.message : 'Library source sync failed.')
     throw error
   }
 }
 
-async function fetchEntries(source: LibrarySource): Promise<DoubanMediaEntry[]> {
+async function fetchEntries(source: LibrarySourceRecord): Promise<DoubanMediaEntry[]> {
   if (source.source === 'douban') {
     return fetchDoubanProfileEntries(source.profileId)
   }
@@ -200,43 +165,17 @@ function normalizeTitle(value: string): string {
     .replace(/[^\p{Letter}\p{Number}]+/gu, '')
 }
 
-async function markSourceSynced(
-  db: Db,
-  source: LibrarySource,
-  result: LibrarySourceSyncResult | null,
-  error: string | null,
-): Promise<void> {
-  await db
-    .update(librarySources)
-    .set({
-      lastSyncedAt: new Date().toISOString(),
-      lastError: error,
-      lastResultJson: result ? JSON.stringify(result) : source.lastResultJson,
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(librarySources.id, source.id))
-}
-
-async function getLibrarySourceRow(db: Db, userId: string, source: LibrarySourceKind): Promise<LibrarySource | null> {
-  const rows = await db
-    .select()
-    .from(librarySources)
-    .where(and(eq(librarySources.userId, userId), eq(librarySources.source, source)))
-    .limit(1)
-  return rows[0] ?? null
-}
-
-function toSummary(row: LibrarySource): LibrarySourceSummary {
+function toSummary(record: LibrarySourceRecord): LibrarySourceSummary {
   return {
-    id: row.id,
-    source: row.source,
-    profileId: row.profileId,
-    enabled: row.enabled,
-    lastSyncedAt: row.lastSyncedAt,
-    lastError: row.lastError,
-    lastResult: row.lastResultJson ? (JSON.parse(row.lastResultJson) as LibrarySourceSyncResult) : null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    id: record.id,
+    source: record.source,
+    profileId: record.profileId,
+    enabled: record.enabled,
+    lastSyncedAt: record.lastSyncedAt,
+    lastError: record.lastError,
+    lastResult: record.lastResult,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   }
 }
 

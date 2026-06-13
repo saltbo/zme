@@ -1,8 +1,6 @@
 import type { DownloadSearchTarget, IndexerSearchItem } from '@shared/types'
 import { indexerGateways } from '../adapters/gateways/indexers'
-import type { Indexer } from '../db/schema'
-import type { IndexerSearchInput } from '../usecases/ports'
-import { toConnectorConfig } from './connectors'
+import type { IndexerRecord, IndexerSearchInput } from '../usecases/ports'
 
 export interface ResourceDownloadSearchInput {
   target: DownloadSearchTarget
@@ -48,7 +46,7 @@ const targetConfigs: Record<DownloadSearchTarget, TargetConfig> = {
 }
 
 export async function searchResourceDownloads(
-  indexers: Indexer[],
+  indexers: IndexerRecord[],
   input: ResourceDownloadSearchInput,
 ): Promise<IndexerSearchItem[]> {
   const searches = getResourceSearchInputs(input, true)
@@ -74,7 +72,7 @@ export async function searchResourceDownloads(
   return []
 }
 
-async function searchEnabledIndexers(indexers: Indexer[], input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
+async function searchEnabledIndexers(indexers: IndexerRecord[], input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
   const results = await Promise.allSettled(indexers.map((indexer) => searchConfiguredIndexer(indexer, input)))
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
   if (items.length > 0) return items
@@ -89,8 +87,8 @@ async function searchEnabledIndexers(indexers: Indexer[], input: IndexerSearchIn
   throw new Error('Indexer search failed.')
 }
 
-function searchConfiguredIndexer(indexer: Indexer, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
-  return indexerGateways[indexer.kind].search(toConnectorConfig(indexer), input)
+function searchConfiguredIndexer(indexer: IndexerRecord, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
+  return indexerGateways[indexer.kind].search(indexer.config, input)
 }
 
 function getResourceSearchInputs(

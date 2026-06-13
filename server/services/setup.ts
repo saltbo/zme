@@ -1,7 +1,6 @@
-import { eq, isNull } from 'drizzle-orm'
+import { createUsersRepo } from '../adapters/repos/users'
 import type { Auth } from '../auth'
 import type { createDb } from '../db/client'
-import { library, user } from '../db/schema'
 
 type Db = ReturnType<typeof createDb>
 
@@ -12,12 +11,12 @@ export interface SetupAdminInput {
 }
 
 export async function isInitialized(db: Db): Promise<boolean> {
-  const rows = await db.select({ id: user.id }).from(user).limit(1)
-  return rows.length > 0
+  return createUsersRepo(db).isInitialized()
 }
 
 export async function createInitialAdmin(db: Db, auth: Auth, input: SetupAdminInput) {
-  if (await isInitialized(db)) {
+  const repo = createUsersRepo(db)
+  if (await repo.isInitialized()) {
     throw new Error('ZME has already been initialized.')
   }
 
@@ -30,12 +29,7 @@ export async function createInitialAdmin(db: Db, auth: Auth, input: SetupAdminIn
     },
   })
 
-  await db.update(library).set({ userId: created.user.id }).where(isNull(library.userId))
+  await repo.adoptOrphanLibraryItems(created.user.id)
 
   return created.user
-}
-
-export async function userExists(db: Db, userId: string): Promise<boolean> {
-  const rows = await db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1)
-  return rows.length > 0
 }

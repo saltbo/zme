@@ -1,74 +1,37 @@
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
 import { indexerGateways } from '../adapters/gateways/indexers'
+import { createIndexersRepo } from '../adapters/repos/indexers'
 import type { createDb } from '../db/client'
-import { type Indexer, indexers } from '../db/schema'
-import type { IndexerSearchInput } from '../usecases/ports'
-import { toConnectorConfig } from './connectors'
+import type { IndexerRecord, IndexerSearchInput } from '../usecases/ports'
 import { type ResourceDownloadSearchInput, searchResourceDownloads } from './download-search'
 
 type Db = ReturnType<typeof createDb>
 
 export async function listIndexers(db: Db): Promise<IndexerSummary[]> {
-  const rows = await db.select().from(indexers).orderBy(indexers.createdAt)
-  return rows.map(toSummary)
+  const records = await createIndexersRepo(db).list()
+  return records.map(toSummary)
 }
 
 export async function getIndexer(db: Db, id: string): Promise<IndexerDetails | null> {
-  const rows = await db.select().from(indexers).where(eq(indexers.id, id)).limit(1)
-  return rows[0] ? toDetails(rows[0]) : null
+  const record = await createIndexersRepo(db).get(id)
+  return record ? toDetails(record) : null
 }
 
 export async function createIndexer(db: Db, input: IndexerInput): Promise<IndexerSummary> {
-  const now = new Date().toISOString()
-  const row: Indexer = {
-    id: crypto.randomUUID(),
-    description: input.description || null,
-    kind: input.kind,
-    endpoint: input.endpoint,
-    credentialsJson: JSON.stringify(input.credentials),
-    optionsJson: JSON.stringify(input.options),
-    enabled: input.enabled,
-    healthStatus: 'unknown',
-    healthMessage: null,
-    healthCheckedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await db.insert(indexers).values(row)
-  return toSummary(row)
+  return toSummary(await createIndexersRepo(db).create(input))
 }
 
 export async function updateIndexer(db: Db, id: string, input: IndexerInput): Promise<IndexerSummary | null> {
-  const updatedAt = new Date().toISOString()
-  const rows = await db
-    .update(indexers)
-    .set({
-      description: input.description || null,
-      kind: input.kind,
-      endpoint: input.endpoint,
-      credentialsJson: JSON.stringify(input.credentials),
-      optionsJson: JSON.stringify(input.options),
-      enabled: input.enabled,
-      updatedAt,
-    })
-    .where(eq(indexers.id, id))
-    .returning()
-
-  return rows[0] ? toSummary(rows[0]) : null
+  const record = await createIndexersRepo(db).update(id, input)
+  return record ? toSummary(record) : null
 }
 
 export async function deleteIndexer(db: Db, id: string): Promise<boolean> {
-  const rows = await db.delete(indexers).where(eq(indexers.id, id)).returning({ id: indexers.id })
-  return rows.length > 0
+  return createIndexersRepo(db).delete(id)
 }
 
 export async function searchIndexers(db: Db, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
-  const rows = await db
-    .select()
-    .from(indexers)
-    .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
+  const rows = await createIndexersRepo(db).listEnabled()
   if (rows.length === 0) throw new Error('No enabled indexers are configured.')
 
   const searches = getSearchInputs(input)
@@ -84,18 +47,15 @@ export async function searchIndexers(db: Db, input: IndexerSearchInput): Promise
 }
 
 export async function searchDownloadIndexers(db: Db, input: ResourceDownloadSearchInput): Promise<IndexerSearchItem[]> {
-  const rows = await db
-    .select()
-    .from(indexers)
-    .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
+  const rows = await createIndexersRepo(db).listEnabled()
   if (rows.length === 0) throw new Error('No enabled indexers are configured.')
 
   return searchResourceDownloads(rows, input)
 }
 
-async function searchEnabledIndexers(rows: Indexer[], input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
+async function searchEnabledIndexers(rows: IndexerRecord[], input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
   const results = await Promise.allSettled(
-    rows.map((row) => indexerGateways[row.kind].search(toConnectorConfig(row), input)),
+    rows.map((row) => indexerGateways[row.kind].search(row.config, input)),
   )
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
   if (items.length > 0) return items
@@ -197,25 +157,15 @@ function normalizeReleaseText(value: string): string {
 }
 
 export async function checkIndexerHealth(db: Db, id: string): Promise<IndexerHealth | null> {
-  const rows = await db.select().from(indexers).where(eq(indexers.id, id)).limit(1)
-  const indexer = rows[0]
+  const repo = createIndexersRepo(db)
+  const indexer = await repo.get(id)
   if (!indexer) return null
 
   const checkedAt = new Date().toISOString()
   const result = await probeIndexer(indexer)
-  const rowsAfterUpdate = await db
-    .update(indexers)
-    .set({
-      healthStatus: result.status,
-      healthMessage: result.message,
-      healthCheckedAt: checkedAt,
-      updatedAt: checkedAt,
-    })
-    .where(eq(indexers.id, id))
-    .returning()
-
-  const updated = rowsAfterUpdate[0]
+  const updated = await repo.setHealth(id, { ...result, checkedAt })
   if (!updated) return null
+
   return {
     status: updated.healthStatus === 'online' ? 'online' : 'offline',
     message: updated.healthMessage || result.message,
@@ -223,32 +173,32 @@ export async function checkIndexerHealth(db: Db, id: string): Promise<IndexerHea
   }
 }
 
-function toSummary(row: Indexer): IndexerSummary {
+function toSummary(record: IndexerRecord): IndexerSummary {
   return {
-    id: row.id,
-    description: row.description,
-    kind: row.kind,
-    endpoint: row.endpoint,
-    enabled: row.enabled,
-    healthStatus: row.healthStatus,
-    healthMessage: row.healthMessage,
-    healthCheckedAt: row.healthCheckedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    id: record.id,
+    description: record.description,
+    kind: record.kind,
+    endpoint: record.config.endpoint,
+    enabled: record.enabled,
+    healthStatus: record.healthStatus,
+    healthMessage: record.healthMessage,
+    healthCheckedAt: record.healthCheckedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   }
 }
 
-function toDetails(row: Indexer): IndexerDetails {
+function toDetails(record: IndexerRecord): IndexerDetails {
   return {
-    ...toSummary(row),
-    credentials: JSON.parse(row.credentialsJson) as Record<string, string>,
-    options: JSON.parse(row.optionsJson) as Record<string, string>,
+    ...toSummary(record),
+    credentials: record.config.credentials,
+    options: record.config.options,
   }
 }
 
-async function probeIndexer(indexer: Indexer): Promise<{ status: 'online' | 'offline'; message: string }> {
+async function probeIndexer(indexer: IndexerRecord): Promise<{ status: 'online' | 'offline'; message: string }> {
   try {
-    await indexerGateways[indexer.kind].probe(toConnectorConfig(indexer))
+    await indexerGateways[indexer.kind].probe(indexer.config)
     return { status: 'online', message: 'Connection check succeeded.' }
   } catch (error) {
     return {

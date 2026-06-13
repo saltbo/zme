@@ -2,7 +2,6 @@ import { zValidator } from '@hono/zod-validator'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import { createDb } from '../db/client'
-import type { LibraryItem } from '../db/schema'
 import {
   deleteLibraryState,
   listLibrary,
@@ -17,6 +16,7 @@ import {
   syncLibrarySource,
 } from '../services/library-sources'
 import { getActiveTmdbSource } from '../services/media-sources'
+import type { LibraryRecord } from '../usecases/ports'
 import { mediaKeyParamsSchema } from './books'
 import type { AppEnv } from './context'
 
@@ -124,7 +124,7 @@ function decodeRouteMediaKey(value: string): string {
   }
 }
 
-function toLibraryStateResponse(row: LibraryItem) {
+function toLibraryStateResponse(row: LibraryRecord) {
   return {
     mediaKey: row.mediaKey,
     id: row.tmdbId,

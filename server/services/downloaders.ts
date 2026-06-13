@@ -6,49 +6,27 @@ import type {
   DownloaderInput,
   DownloaderSummary,
 } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
 import { downloaderGateways } from '../adapters/gateways/downloaders'
 import { indexerGateways } from '../adapters/gateways/indexers'
+import { createDownloadersRepo } from '../adapters/repos/downloaders'
+import { createIndexersRepo } from '../adapters/repos/indexers'
 import type { createDb } from '../db/client'
-import { type Downloader, downloaders, indexers } from '../db/schema'
-import { toConnectorConfig } from './connectors'
+import type { DownloaderRecord } from '../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
 
 export async function listDownloaders(db: Db, userId: string): Promise<DownloaderSummary[]> {
-  const rows = await db.select().from(downloaders).where(eq(downloaders.userId, userId)).orderBy(downloaders.createdAt)
-  return rows.map(toSummary)
+  const records = await createDownloadersRepo(db).list(userId)
+  return records.map(toSummary)
 }
 
 export async function getDownloader(db: Db, userId: string, id: string): Promise<DownloaderDetails | null> {
-  const rows = await db
-    .select()
-    .from(downloaders)
-    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
-    .limit(1)
-  return rows[0] ? toDetails(rows[0]) : null
+  const record = await createDownloadersRepo(db).get(userId, id)
+  return record ? toDetails(record) : null
 }
 
 export async function createDownloader(db: Db, userId: string, input: DownloaderInput): Promise<DownloaderSummary> {
-  const now = new Date().toISOString()
-  const row: Downloader = {
-    id: crypto.randomUUID(),
-    userId,
-    description: input.description || null,
-    kind: input.kind,
-    endpoint: input.endpoint,
-    credentialsJson: JSON.stringify(input.credentials),
-    optionsJson: JSON.stringify(input.options),
-    enabled: input.enabled,
-    healthStatus: 'unknown',
-    healthMessage: null,
-    healthCheckedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await db.insert(downloaders).values(row)
-  return toSummary(row)
+  return toSummary(await createDownloadersRepo(db).create(userId, input))
 }
 
 export async function updateDownloader(
@@ -57,30 +35,12 @@ export async function updateDownloader(
   id: string,
   input: DownloaderInput,
 ): Promise<DownloaderSummary | null> {
-  const updatedAt = new Date().toISOString()
-  const rows = await db
-    .update(downloaders)
-    .set({
-      description: input.description || null,
-      kind: input.kind,
-      endpoint: input.endpoint,
-      credentialsJson: JSON.stringify(input.credentials),
-      optionsJson: JSON.stringify(input.options),
-      enabled: input.enabled,
-      updatedAt,
-    })
-    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
-    .returning()
-
-  return rows[0] ? toSummary(rows[0]) : null
+  const record = await createDownloadersRepo(db).update(userId, id, input)
+  return record ? toSummary(record) : null
 }
 
 export async function deleteDownloader(db: Db, userId: string, id: string): Promise<boolean> {
-  const rows = await db
-    .delete(downloaders)
-    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
-    .returning({ id: downloaders.id })
-  return rows.length > 0
+  return createDownloadersRepo(db).delete(userId, id)
 }
 
 export async function submitDownload(
@@ -88,16 +48,11 @@ export async function submitDownload(
   userId: string,
   input: CreateDownloadInput,
 ): Promise<CreateDownloadResult> {
-  const rows = await db
-    .select()
-    .from(downloaders)
-    .where(and(eq(downloaders.id, input.downloaderId), eq(downloaders.userId, userId), eq(downloaders.enabled, true)))
-    .limit(1)
-  const downloader = rows[0]
+  const downloader = await createDownloadersRepo(db).getEnabled(userId, input.downloaderId)
   if (!downloader) throw new Error('Downloader is not available.')
   const resolvedInput = await resolveDownloadInput(db, input)
 
-  await downloaderGateways[downloader.kind].submit(toConnectorConfig(downloader), resolvedInput)
+  await downloaderGateways[downloader.kind].submit(downloader.config, resolvedInput)
 
   return {
     downloaderId: downloader.id,
@@ -108,17 +63,14 @@ export async function submitDownload(
 async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise<CreateDownloadInput> {
   if (input.sourceType !== 'torrent_url') return input
 
-  const rows = await db
-    .select()
-    .from(indexers)
-    .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
-  const matchingIndexers = rows.filter((indexer) =>
-    indexerGateways[indexer.kind].matchesDownloadUrl(toConnectorConfig(indexer), input.uri),
+  const records = await createIndexersRepo(db).listEnabled()
+  const matchingIndexers = records.filter((indexer) =>
+    indexerGateways[indexer.kind].matchesDownloadUrl(indexer.config, input.uri),
   )
   if (matchingIndexers.length === 0) return input
 
   for (const indexer of matchingIndexers) {
-    const resolved = await indexerGateways[indexer.kind].resolveDownloadSource(toConnectorConfig(indexer), input.uri)
+    const resolved = await indexerGateways[indexer.kind].resolveDownloadSource(indexer.config, input.uri)
     if (resolved) return { ...input, ...resolved }
   }
 
@@ -126,29 +78,15 @@ async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise
 }
 
 export async function checkDownloaderHealth(db: Db, userId: string, id: string): Promise<DownloaderHealth | null> {
-  const rows = await db
-    .select()
-    .from(downloaders)
-    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
-    .limit(1)
-  const downloader = rows[0]
+  const repo = createDownloadersRepo(db)
+  const downloader = await repo.get(userId, id)
   if (!downloader) return null
 
   const checkedAt = new Date().toISOString()
   const result = await probeDownloader(downloader)
-  const rowsAfterUpdate = await db
-    .update(downloaders)
-    .set({
-      healthStatus: result.status,
-      healthMessage: result.message,
-      healthCheckedAt: checkedAt,
-      updatedAt: checkedAt,
-    })
-    .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
-    .returning()
-
-  const updated = rowsAfterUpdate[0]
+  const updated = await repo.setHealth(userId, id, { ...result, checkedAt })
   if (!updated) return null
+
   return {
     status: updated.healthStatus === 'online' ? 'online' : 'offline',
     message: updated.healthMessage || result.message,
@@ -156,9 +94,11 @@ export async function checkDownloaderHealth(db: Db, userId: string, id: string):
   }
 }
 
-async function probeDownloader(downloader: Downloader): Promise<{ status: 'online' | 'offline'; message: string }> {
+async function probeDownloader(
+  downloader: DownloaderRecord,
+): Promise<{ status: 'online' | 'offline'; message: string }> {
   try {
-    await downloaderGateways[downloader.kind].probe(toConnectorConfig(downloader))
+    await downloaderGateways[downloader.kind].probe(downloader.config)
     return { status: 'online', message: 'Connection check succeeded.' }
   } catch (error) {
     return {
@@ -168,25 +108,25 @@ async function probeDownloader(downloader: Downloader): Promise<{ status: 'onlin
   }
 }
 
-function toSummary(row: Downloader): DownloaderSummary {
+function toSummary(record: DownloaderRecord): DownloaderSummary {
   return {
-    id: row.id,
-    description: row.description,
-    kind: row.kind,
-    endpoint: row.endpoint,
-    enabled: row.enabled,
-    healthStatus: row.healthStatus,
-    healthMessage: row.healthMessage,
-    healthCheckedAt: row.healthCheckedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    id: record.id,
+    description: record.description,
+    kind: record.kind,
+    endpoint: record.config.endpoint,
+    enabled: record.enabled,
+    healthStatus: record.healthStatus,
+    healthMessage: record.healthMessage,
+    healthCheckedAt: record.healthCheckedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   }
 }
 
-function toDetails(row: Downloader): DownloaderDetails {
+function toDetails(record: DownloaderRecord): DownloaderDetails {
   return {
-    ...toSummary(row),
-    credentials: JSON.parse(row.credentialsJson) as Record<string, string>,
-    options: JSON.parse(row.optionsJson) as Record<string, string>,
+    ...toSummary(record),
+    credentials: record.config.credentials,
+    options: record.config.options,
   }
 }

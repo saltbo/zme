@@ -1,17 +1,9 @@
 import type { MediaSourceDetails, MediaSourceHealth, MediaSourceInput, MediaSourceSummary } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
+import { createMediaSourcesRepo } from '../adapters/repos/media-sources'
 import type { createDb } from '../db/client'
-import { type MediaSource, mediaSources } from '../db/schema'
+import type { MediaSourceRecord } from '../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
-
-interface TmdbCredentials {
-  apiKey?: string
-}
-
-interface TmdbOptions {
-  language?: string
-}
 
 export interface ActiveTmdbSource {
   apiKey: string
@@ -19,33 +11,17 @@ export interface ActiveTmdbSource {
 }
 
 export async function listMediaSources(db: Db): Promise<MediaSourceSummary[]> {
-  const rows = await db.select().from(mediaSources).orderBy(mediaSources.createdAt)
-  return rows.map(toSummary)
+  const records = await createMediaSourcesRepo(db).list()
+  return records.map(toSummary)
 }
 
 export async function getMediaSource(db: Db, id: string): Promise<MediaSourceDetails | null> {
-  const rows = await db.select().from(mediaSources).where(eq(mediaSources.id, id)).limit(1)
-  return rows[0] ? toDetails(rows[0]) : null
+  const record = await createMediaSourcesRepo(db).get(id)
+  return record ? toDetails(record) : null
 }
 
 export async function createMediaSource(db: Db, input: MediaSourceInput): Promise<MediaSourceSummary> {
-  const now = new Date().toISOString()
-  const row: MediaSource = {
-    id: crypto.randomUUID(),
-    description: input.description || null,
-    kind: input.kind,
-    credentialsJson: JSON.stringify(input.credentials),
-    optionsJson: JSON.stringify(input.options),
-    enabled: input.enabled,
-    healthStatus: 'unknown',
-    healthMessage: null,
-    healthCheckedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  }
-
-  await db.insert(mediaSources).values(row)
-  return toSummary(row)
+  return toSummary(await createMediaSourcesRepo(db).create(input))
 }
 
 export async function updateMediaSource(
@@ -53,65 +29,35 @@ export async function updateMediaSource(
   id: string,
   input: MediaSourceInput,
 ): Promise<MediaSourceSummary | null> {
-  const updatedAt = new Date().toISOString()
-  const rows = await db
-    .update(mediaSources)
-    .set({
-      description: input.description || null,
-      kind: input.kind,
-      credentialsJson: JSON.stringify(input.credentials),
-      optionsJson: JSON.stringify(input.options),
-      enabled: input.enabled,
-      updatedAt,
-    })
-    .where(eq(mediaSources.id, id))
-    .returning()
-
-  return rows[0] ? toSummary(rows[0]) : null
+  const record = await createMediaSourcesRepo(db).update(id, input)
+  return record ? toSummary(record) : null
 }
 
 export async function deleteMediaSource(db: Db, id: string): Promise<boolean> {
-  const rows = await db.delete(mediaSources).where(eq(mediaSources.id, id)).returning({ id: mediaSources.id })
-  return rows.length > 0
+  return createMediaSourcesRepo(db).delete(id)
 }
 
 export async function getActiveTmdbSource(db: Db, requestedLanguage?: string): Promise<ActiveTmdbSource> {
-  const rows = await db
-    .select()
-    .from(mediaSources)
-    .where(and(eq(mediaSources.enabled, true), eq(mediaSources.kind, 'tmdb')))
-    .limit(1)
-  const source = rows[0]
-  if (!source) throw new Error('TMDB media source is not configured.')
+  const record = await createMediaSourcesRepo(db).findEnabled('tmdb')
+  if (!record) throw new Error('TMDB media source is not configured.')
 
-  const credentials = readJson<TmdbCredentials>(source.credentialsJson)
-  if (!credentials.apiKey) throw new Error('TMDB API key is missing.')
-  const options = readJson<TmdbOptions>(source.optionsJson)
+  const apiKey = record.credentials.apiKey
+  if (!apiKey) throw new Error('TMDB API key is missing.')
 
   return {
-    apiKey: credentials.apiKey,
-    language: requestedLanguage || options.language || 'zh-CN',
+    apiKey,
+    language: requestedLanguage || record.options.language || 'zh-CN',
   }
 }
 
 export async function checkMediaSourceHealth(db: Db, id: string): Promise<MediaSourceHealth | null> {
-  const rows = await db.select().from(mediaSources).where(eq(mediaSources.id, id)).limit(1)
-  const source = rows[0]
-  if (!source) return null
+  const repo = createMediaSourcesRepo(db)
+  const record = await repo.get(id)
+  if (!record) return null
 
   const checkedAt = new Date().toISOString()
-  const result = await probeMediaSource(source)
-  const rowsAfterUpdate = await db
-    .update(mediaSources)
-    .set({
-      healthStatus: result.status,
-      healthMessage: result.message,
-      healthCheckedAt: checkedAt,
-      updatedAt: checkedAt,
-    })
-    .where(eq(mediaSources.id, id))
-    .returning()
-  const updated = rowsAfterUpdate[0]
+  const result = await probeMediaSource(record)
+  const updated = await repo.setHealth(id, { ...result, checkedAt })
   if (!updated) return null
 
   return {
@@ -121,36 +67,36 @@ export async function checkMediaSourceHealth(db: Db, id: string): Promise<MediaS
   }
 }
 
-function toSummary(row: MediaSource): MediaSourceSummary {
+function toSummary(record: MediaSourceRecord): MediaSourceSummary {
   return {
-    id: row.id,
-    description: row.description,
-    kind: row.kind,
-    enabled: row.enabled,
-    healthStatus: row.healthStatus,
-    healthMessage: row.healthMessage,
-    healthCheckedAt: row.healthCheckedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+    id: record.id,
+    description: record.description,
+    kind: record.kind,
+    enabled: record.enabled,
+    healthStatus: record.healthStatus,
+    healthMessage: record.healthMessage,
+    healthCheckedAt: record.healthCheckedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   }
 }
 
-function toDetails(row: MediaSource): MediaSourceDetails {
+function toDetails(record: MediaSourceRecord): MediaSourceDetails {
   return {
-    ...toSummary(row),
-    credentials: readJson<Record<string, string>>(row.credentialsJson),
-    options: readJson<Record<string, string>>(row.optionsJson),
+    ...toSummary(record),
+    credentials: record.credentials,
+    options: record.options,
   }
 }
 
-async function probeMediaSource(source: MediaSource): Promise<{ status: 'online' | 'offline'; message: string }> {
+async function probeMediaSource(record: MediaSourceRecord): Promise<{ status: 'online' | 'offline'; message: string }> {
   try {
-    const credentials = readJson<TmdbCredentials>(source.credentialsJson)
-    if (!credentials.apiKey) throw new Error('TMDB API key is missing.')
+    const apiKey = record.credentials.apiKey
+    if (!apiKey) throw new Error('TMDB API key is missing.')
 
     const response = await fetch('https://api.themoviedb.org/3/configuration', {
       headers: {
-        Authorization: `Bearer ${credentials.apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         Accept: 'application/json',
       },
     })
@@ -162,8 +108,4 @@ async function probeMediaSource(source: MediaSource): Promise<{ status: 'online'
       message: error instanceof Error ? error.message : 'Connection check failed.',
     }
   }
-}
-
-function readJson<T>(value: string): T {
-  return JSON.parse(value) as T
 }
