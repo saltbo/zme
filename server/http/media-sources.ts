@@ -1,6 +1,4 @@
 import { zValidator } from '@hono/zod-validator'
-import type { Hono } from 'hono'
-import { z } from 'zod'
 import {
   checkMediaSourceHealth,
   createMediaSource,
@@ -8,7 +6,9 @@ import {
   getMediaSource,
   listMediaSources,
   updateMediaSource,
-} from '../usecases/media-sources'
+} from '@server/usecases/media-sources'
+import type { Hono } from 'hono'
+import { z } from 'zod'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 

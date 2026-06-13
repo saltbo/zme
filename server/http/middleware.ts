@@ -1,5 +1,5 @@
+import { type AuthUser, createAuth } from '@server/auth'
 import type { MiddlewareHandler } from 'hono'
-import { type AuthUser, createAuth } from '../auth'
 import type { AppEnv } from './context'
 
 export const requireAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {

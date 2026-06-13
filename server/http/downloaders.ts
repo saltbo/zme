@@ -1,6 +1,4 @@
 import { zValidator } from '@hono/zod-validator'
-import type { Hono } from 'hono'
-import { z } from 'zod'
 import {
   checkDownloaderHealth,
   createDownloader,
@@ -8,7 +6,9 @@ import {
   getDownloader,
   listDownloaders,
   updateDownloader,
-} from '../usecases/downloaders'
+} from '@server/usecases/downloaders'
+import type { Hono } from 'hono'
+import { z } from 'zod'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 

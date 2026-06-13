@@ -1,3 +1,4 @@
+import { type BookProvider, BookProviderError } from '@server/usecases/ports'
 import { buildMediaKey, parseMediaKey } from '@shared/media-key'
 import type {
   BookCover,
@@ -7,7 +8,6 @@ import type {
   BookSearchItem,
   ResourcePage,
 } from '@shared/types'
-import { type BookProvider, BookProviderError } from '../../usecases/ports'
 
 interface OpenLibrarySearchResponse {
   docs?: OpenLibrarySearchDoc[]

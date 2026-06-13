@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:test'
+import { app } from '@server/app'
 import { describe, expect, it } from 'vitest'
-import { app } from '../app'
 
 const ADMIN = { name: 'Admin', email: 'admin@zme.test', password: 'admin-password-1' }
 

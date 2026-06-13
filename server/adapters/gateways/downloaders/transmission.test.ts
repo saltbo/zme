@@ -1,5 +1,5 @@
+import type { ConnectorConfig, DownloaderGateway } from '@server/usecases/ports'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ConnectorConfig, DownloaderGateway } from '../../../usecases/ports'
 import { jsonResponse, stubFetch } from './test-support'
 import { transmissionDownloaderGateway } from './transmission'
 

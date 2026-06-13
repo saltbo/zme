@@ -1,8 +1,8 @@
+import type { createDb } from '@server/db/client'
+import { type Indexer, indexers } from '@server/db/schema'
+import type { ConnectorHealthPatch, IndexerRecord, IndexersRepo } from '@server/usecases/ports'
 import type { IndexerInput } from '@shared/types'
 import { eq } from 'drizzle-orm'
-import type { createDb } from '../../db/client'
-import { type Indexer, indexers } from '../../db/schema'
-import type { ConnectorHealthPatch, IndexerRecord, IndexersRepo } from '../../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
 

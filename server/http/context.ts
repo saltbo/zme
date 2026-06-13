@@ -1,6 +1,6 @@
-import type { AuthSession, AuthUser } from '../auth'
-import type { Env } from '../env'
-import type { Deps } from '../usecases/deps'
+import type { AuthSession, AuthUser } from '@server/auth'
+import type { Env } from '@server/env'
+import type { Deps } from '@server/usecases/deps'
 
 export type AppEnv = {
   Bindings: Env

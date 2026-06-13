@@ -1,9 +1,9 @@
-import type { IndexerSearchItem } from '@shared/types'
 import {
   getResourceSearchQueries,
   type ResourceDownloadSearchInput,
   scoreResourceResults,
-} from '../domain/resource-download-matching'
+} from '@server/domain/resource-download-matching'
+import type { IndexerSearchItem } from '@shared/types'
 import type { Deps } from './deps'
 import type { IndexerRecord, IndexerSearchInput } from './ports'
 

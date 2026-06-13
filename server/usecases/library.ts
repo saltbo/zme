@@ -1,3 +1,5 @@
+import { toLibraryResource } from '@server/domain/library-resource'
+import { planSaveTransition, planWatchedTransition } from '@server/domain/library-state'
 import type {
   LibraryMediaInput,
   LibraryMediaItem,
@@ -6,8 +8,6 @@ import type {
   LibraryResourceInput,
   LibraryStateItem,
 } from '@shared/types'
-import { toLibraryResource } from '../domain/library-resource'
-import { planSaveTransition, planWatchedTransition } from '../domain/library-state'
 import type { Deps } from './deps'
 import { getActiveTmdbSource } from './media-sources'
 import type { ActiveMediaSource, LibraryRecord } from './ports'

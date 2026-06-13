@@ -1,5 +1,5 @@
+import type { ConnectorConfig, DownloaderGateway } from '@server/usecases/ports'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ConnectorConfig, DownloaderGateway } from '../../../usecases/ports'
 import { qbittorrentDownloaderGateway } from './qbittorrent'
 import { jsonResponse, stubFetch } from './test-support'
 

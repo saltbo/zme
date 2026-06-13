@@ -1,6 +1,6 @@
+import { app } from '@server/app'
+import type { Env } from '@server/env'
 import { describe, expect, it } from 'vitest'
-import { app } from '../app'
-import type { Env } from '../env'
 
 // The DB throws on any access: these tests cover routing, auth gating, and
 // validation, all of which must resolve before any persistence is touched.

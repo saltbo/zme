@@ -1,3 +1,4 @@
+import type { MediaProvider } from '@server/usecases/ports'
 import type {
   MediaCredit,
   MediaDetails,
@@ -15,7 +16,6 @@ import type {
   MediaWatchInfo,
   MediaWatchProviderGroup,
 } from '@shared/types'
-import type { MediaProvider } from '../../usecases/ports'
 
 interface TmdbSearchResponse {
   results?: TmdbSearchResult[]

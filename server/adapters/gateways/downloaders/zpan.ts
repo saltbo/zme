@@ -1,13 +1,13 @@
-import { normalizeZmeDownloadCategory } from '@shared/download-metadata'
-import type { DownloaderKind, DownloadTaskPage, DownloadTaskStatus, DownloadTaskSummary } from '@shared/types'
+import { ZpanClient, type ZpanDownloadTask, type ZpanDownloadTaskPage } from '@server/adapters/gateways/zpan-client'
 import type {
   ConnectorConfig,
   DownloaderGateway,
   DownloadTaskGateway,
   DownloadTaskOwner,
   ListDownloadTasksInput,
-} from '../../../usecases/ports'
-import { ZpanClient, type ZpanDownloadTask, type ZpanDownloadTaskPage } from '../zpan-client'
+} from '@server/usecases/ports'
+import { normalizeZmeDownloadCategory } from '@shared/download-metadata'
+import type { DownloaderKind, DownloadTaskPage, DownloadTaskStatus, DownloadTaskSummary } from '@shared/types'
 import { assertOk, getTypedDownloadDirectory, normalizeBaseUrl } from './shared'
 
 type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']

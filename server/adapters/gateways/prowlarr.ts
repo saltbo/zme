@@ -1,5 +1,5 @@
+import type { IndexerGateway, IndexerSearchInput } from '@server/usecases/ports'
 import type { IndexerSearchItem } from '@shared/types'
-import type { IndexerGateway, IndexerSearchInput } from '../../usecases/ports'
 import {
   applyProwlarrBaseUrl,
   isProwlarrProxyDownloadUrl,

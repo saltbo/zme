@@ -1,6 +1,4 @@
 import { zValidator } from '@hono/zod-validator'
-import type { Hono } from 'hono'
-import { z } from 'zod'
 import {
   discoverMedia,
   getMediaDetails,
@@ -11,7 +9,9 @@ import {
   getWatchClickouts,
   listMediaGenres,
   searchMedia,
-} from '../usecases/media'
+} from '@server/usecases/media'
+import type { Hono } from 'hono'
+import { z } from 'zod'
 import type { AppEnv } from './context'
 
 const searchQuerySchema = z.object({

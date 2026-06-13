@@ -75,6 +75,13 @@ module.exports = {
       from: { path: '^src' },
       to: { path: '^server' },
     },
+    {
+      name: 'server-not-into-frontend',
+      comment: 'The server never reaches into the SPA; the two halves meet only through shared/.',
+      severity: 'error',
+      from: { path: '^server' },
+      to: { path: '^src' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },

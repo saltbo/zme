@@ -1,8 +1,8 @@
 import { zValidator } from '@hono/zod-validator'
+import { createAuth } from '@server/auth'
+import { createInitialAdmin, isInitialized } from '@server/usecases/setup'
 import type { Hono } from 'hono'
 import { z } from 'zod'
-import { createAuth } from '../auth'
-import { createInitialAdmin, isInitialized } from '../usecases/setup'
 import type { AppEnv } from './context'
 
 const setupAdminSchema = z.object({

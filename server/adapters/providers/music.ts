@@ -1,3 +1,4 @@
+import { type MusicProvider, MusicProviderError } from '@server/usecases/ports'
 import { buildMusicBrainzMediaKey, parseMusicBrainzMediaKey } from '@shared/media-key'
 import type {
   MusicAlbumDetails,
@@ -11,7 +12,6 @@ import type {
   MusicTrack,
   ResourcePage,
 } from '@shared/types'
-import { type MusicProvider, MusicProviderError } from '../../usecases/ports'
 
 interface MusicBrainzSearchResponse {
   'release-groups'?: MusicBrainzReleaseGroup[]

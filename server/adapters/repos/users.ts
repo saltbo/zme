@@ -1,7 +1,7 @@
+import type { createDb } from '@server/db/client'
+import { library, user } from '@server/db/schema'
+import type { UsersRepo } from '@server/usecases/ports'
 import { isNull } from 'drizzle-orm'
-import type { createDb } from '../../db/client'
-import { library, user } from '../../db/schema'
-import type { UsersRepo } from '../../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
 

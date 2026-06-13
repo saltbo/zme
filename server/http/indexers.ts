@@ -1,6 +1,4 @@
 import { zValidator } from '@hono/zod-validator'
-import type { Hono } from 'hono'
-import { z } from 'zod'
 import {
   checkIndexerHealth,
   createIndexer,
@@ -10,8 +8,10 @@ import {
   searchDownloadIndexers,
   searchIndexers,
   updateIndexer,
-} from '../usecases/indexers'
-import { IndexerNotConfiguredError } from '../usecases/ports'
+} from '@server/usecases/indexers'
+import { IndexerNotConfiguredError } from '@server/usecases/ports'
+import type { Hono } from 'hono'
+import { z } from 'zod'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 

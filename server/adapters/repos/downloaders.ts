@@ -1,8 +1,8 @@
+import type { createDb } from '@server/db/client'
+import { type Downloader, downloaders } from '@server/db/schema'
+import type { ConnectorHealthPatch, DownloaderRecord, DownloadersRepo } from '@server/usecases/ports'
 import type { DownloaderInput } from '@shared/types'
 import { and, eq } from 'drizzle-orm'
-import type { createDb } from '../../db/client'
-import { type Downloader, downloaders } from '../../db/schema'
-import type { ConnectorHealthPatch, DownloaderRecord, DownloadersRepo } from '../../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
 

@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
+import { BookProviderError } from '@server/usecases/ports'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
-import { BookProviderError } from '../usecases/ports'
 import type { AppEnv } from './context'
 
 const bookSearchQuerySchema = z.object({

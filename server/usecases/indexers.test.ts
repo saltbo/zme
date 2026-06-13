@@ -1,5 +1,5 @@
+import { indexerGateways } from '@server/adapters/gateways/indexers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { indexerGateways } from '../adapters/gateways/indexers'
 import type { Deps } from './deps'
 import { searchDownloadIndexers, searchIndexers } from './indexers'
 import type { IndexerRecord } from './ports'

@@ -1,8 +1,8 @@
+import type { createDb } from '@server/db/client'
+import { type MediaSource, mediaSources } from '@server/db/schema'
+import type { ConnectorHealthPatch, MediaSourceRecord, MediaSourcesRepo } from '@server/usecases/ports'
 import type { MediaSourceInput } from '@shared/types'
 import { and, eq } from 'drizzle-orm'
-import type { createDb } from '../../db/client'
-import { type MediaSource, mediaSources } from '../../db/schema'
-import type { ConnectorHealthPatch, MediaSourceRecord, MediaSourcesRepo } from '../../usecases/ports'
 
 type Db = ReturnType<typeof createDb>
 

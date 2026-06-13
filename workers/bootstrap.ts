@@ -1,7 +1,7 @@
-import { app } from '../server/app'
-import { createDeps } from '../server/composition'
-import type { Env } from '../server/env'
-import { syncEnabledLibrarySources } from '../server/usecases/library-sources'
+import { app } from '@server/app'
+import { createDeps } from '@server/composition'
+import type { Env } from '@server/env'
+import { syncEnabledLibrarySources } from '@server/usecases/library-sources'
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

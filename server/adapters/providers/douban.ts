@@ -1,4 +1,4 @@
-import type { LibraryEntryImporter } from '../../usecases/ports'
+import type { LibraryEntryImporter } from '@server/usecases/ports'
 
 export type DoubanMediaStatus = 'wish' | 'collect'
 

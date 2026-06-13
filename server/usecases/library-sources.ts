@@ -1,3 +1,4 @@
+import { chooseBestMatch } from '@server/domain/douban-match'
 import type {
   LibrarySourceInput,
   LibrarySourceKind,
@@ -5,7 +6,6 @@ import type {
   LibrarySourceSyncResult,
   MediaSearchItem,
 } from '@shared/types'
-import { chooseBestMatch } from '../domain/douban-match'
 import type { Deps } from './deps'
 import { saveLibraryState, setWatchedState } from './library'
 import { getActiveTmdbSource } from './media-sources'

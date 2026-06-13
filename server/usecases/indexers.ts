@@ -1,6 +1,6 @@
+import { buildTitleSearches, filterExactMediaMatches, uniqueById } from '@server/domain/release-matching'
+import type { ResourceDownloadSearchInput } from '@server/domain/resource-download-matching'
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
-import { buildTitleSearches, filterExactMediaMatches, uniqueById } from '../domain/release-matching'
-import type { ResourceDownloadSearchInput } from '../domain/resource-download-matching'
 import type { Deps } from './deps'
 import { searchResourceDownloads } from './download-search'
 import { IndexerNotConfiguredError, type IndexerRecord, type IndexerSearchInput } from './ports'

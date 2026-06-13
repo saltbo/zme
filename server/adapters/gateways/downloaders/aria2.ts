@@ -1,4 +1,4 @@
-import type { DownloaderGateway } from '../../../usecases/ports'
+import type { DownloaderGateway } from '@server/usecases/ports'
 import { assertOk, getTypedDownloadDirectory } from './shared'
 
 export const aria2DownloaderGateway: DownloaderGateway = {

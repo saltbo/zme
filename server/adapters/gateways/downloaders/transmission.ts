@@ -1,4 +1,4 @@
-import type { DownloaderGateway } from '../../../usecases/ports'
+import type { DownloaderGateway } from '@server/usecases/ports'
 import { assertOk, basicAuthHeader, getTypedDownloadDirectory, normalizeBaseUrl } from './shared'
 
 export const transmissionDownloaderGateway: DownloaderGateway = {

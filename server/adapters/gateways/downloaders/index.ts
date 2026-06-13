@@ -1,5 +1,5 @@
+import type { DownloaderGateway, DownloadTaskGateway } from '@server/usecases/ports'
 import type { DownloaderKind } from '@shared/types'
-import type { DownloaderGateway, DownloadTaskGateway } from '../../../usecases/ports'
 import { aria2DownloaderGateway } from './aria2'
 import { qbittorrentDownloaderGateway } from './qbittorrent'
 import { transmissionDownloaderGateway } from './transmission'
