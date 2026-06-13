@@ -1,4 +1,4 @@
-name = "curarr"
+name = "zme"
 main = "./server/worker.ts"
 compatibility_date = "2026-06-03"
 compatibility_flags = ["nodejs_compat"]
