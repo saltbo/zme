@@ -29,6 +29,15 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Migrations are generated from schema
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain migrations)" ]; then
+            echo "::error::schema.ts changed without a generated migration. Run 'pnpm db:generate' and commit."
+            git status --short migrations
+            exit 1
+          fi
+
       - name: Test (unit + api)
         run: pnpm test
 

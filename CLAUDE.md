@@ -38,5 +38,9 @@ same-directory siblings.
 ## Notes
 
 - Env type is `Cloudflare.Env` (generated); edit bindings in `wrangler.toml`, not by hand.
+- Migrations are generated, never hand-written: edit `server/db/schema.ts`, then
+  `pnpm db:generate` (drizzle-kit) emits the diff into `migrations/`. The legacy
+  0001-0010 SQL predate drizzle-kit and stay as applied history; `migrations/meta/`
+  is drizzle's baseline snapshot. CI fails if `schema.ts` changed without generating.
 - `server/clients/zpan/` is generated (`pnpm openapi:zpan`) — don't hand-edit.
 - Local verification account: see AGENTS.md.
