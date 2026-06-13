@@ -57,4 +57,11 @@ describe('spec coverage', () => {
     const orphans = [...annotatedIds()].filter((id) => !specs.has(id)).sort()
     expect(orphans, `[spec: id] annotations with no scenario in spec/:\n${orphans.join('\n')}`).toEqual([])
   })
+
+  it('specs are .feature files only (no stray markdown except README)', () => {
+    const stray = walk(path.join(ROOT, 'spec'), (f) => f.endsWith('.md') && path.basename(f) !== 'README.md')
+      .map((f) => path.relative(ROOT, f))
+      .sort()
+    expect(stray, `specs must be .feature; unexpected markdown:\n${stray.join('\n')}`).toEqual([])
+  })
 })
