@@ -12,6 +12,7 @@
       "src/**/*.ts",
       "src/**/*.tsx",
       "e2e/**/*.ts",
+      "spec/**/*.ts",
       "*.ts",
       "!dist",
       "!server/clients/zpan"

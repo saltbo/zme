@@ -29,7 +29,7 @@ async function signIn(email: string, password: string): Promise<string> {
 }
 
 describe('onboarding', () => {
-  it('reports uninitialized, creates the first admin once, then locks', async () => {
+  it('reports uninitialized, creates the first admin once, then locks [spec: onboarding/first-admin]', async () => {
     expect(await (await request('/api/setup/status')).json()).toEqual({ initialized: false })
 
     const created = await request('/api/setup/admin', { method: 'POST', body: JSON.stringify(ADMIN) })
@@ -42,7 +42,7 @@ describe('onboarding', () => {
     expect(again.status).toBe(409)
   })
 
-  it('rejects api access without a session even after setup', async () => {
+  it('rejects api access without a session even after setup [spec: auth/api-requires-session]', async () => {
     await setupAdmin()
     expect((await request('/api/library/states')).status).toBe(401)
   })
@@ -95,7 +95,7 @@ describe('library resources', () => {
     expect(response.status).toBe(400)
   })
 
-  it('serves the book/music library kinds without a TMDB source', async () => {
+  it('serves the book/music library kinds without a TMDB source [spec: library/book-music-no-tmdb]', async () => {
     const cookie = await setupAdmin()
     const response = await request('/api/library?kind=book', { cookie })
     expect(response.status).toBe(200)
@@ -104,7 +104,7 @@ describe('library resources', () => {
 })
 
 describe('admin-managed connectors', () => {
-  it('runs the media source crud lifecycle', async () => {
+  it('runs the media source crud lifecycle [spec: admin/media-source-crud]', async () => {
     const cookie = await setupAdmin()
     const input = {
       description: 'TMDB main',
@@ -136,7 +136,7 @@ describe('admin-managed connectors', () => {
     expect((await request(`/api/media-sources/${item.id}`, { cookie })).status).toBe(404)
   })
 
-  it('runs the downloader crud lifecycle scoped to the user', async () => {
+  it('runs the downloader crud lifecycle scoped to the user [spec: admin/downloader-crud]', async () => {
     const cookie = await setupAdmin()
     const input = {
       description: 'My ZPan',
@@ -158,7 +158,7 @@ describe('admin-managed connectors', () => {
     expect(deleted.status).toBe(200)
   })
 
-  it('hides admin routes from non-admin users', async () => {
+  it('hides admin routes from non-admin users [spec: auth/admin-only]', async () => {
     const cookie = await setupAdmin()
     // Demote the signed-in user; the session stays valid but loses the role.
     await env.DB.prepare("UPDATE user SET role = 'user'").run()

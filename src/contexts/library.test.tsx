@@ -57,7 +57,7 @@ async function renderLibrary() {
 const movie = { id: 550, kind: 'movie' as const } as never
 
 describe('LibraryProvider', () => {
-  it('reflects loaded states', async () => {
+  it('reflects loaded states [spec: library/list-states]', async () => {
     mockLibraryBackend([libraryItem(550, '2026-05-01T00:00:00.000Z', null)])
 
     const { result } = await renderLibrary()
@@ -67,7 +67,7 @@ describe('LibraryProvider', () => {
     expect(result.current.getMediaStatus(movie)).toBe('saved')
   })
 
-  it('saving an unsaved item updates the cache to saved', async () => {
+  it('saving an unsaved item updates the cache to saved [spec: library/save-resource]', async () => {
     mockLibraryBackend()
 
     const { result } = await renderLibrary()
@@ -79,7 +79,7 @@ describe('LibraryProvider', () => {
     expect(result.current.getMediaStatus(movie)).toBe('saved')
   })
 
-  it('marking watched reflects the watched status', async () => {
+  it('marking watched reflects the watched status [spec: library/watch-resource]', async () => {
     mockLibraryBackend()
 
     const { result } = await renderLibrary()
@@ -89,7 +89,7 @@ describe('LibraryProvider', () => {
     expect(result.current.isWatched(movie)).toBe(true)
   })
 
-  it('removing a saved item drops it from the cache', async () => {
+  it('removing a saved item drops it from the cache [spec: library/remove-resource]', async () => {
     mockLibraryBackend([libraryItem(550, '2026-05-01T00:00:00.000Z', null)])
 
     const { result } = await renderLibrary()

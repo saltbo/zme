@@ -20,13 +20,16 @@ test.describe
       await expect(page.locator('#setup-tmdb-api-key')).toBeVisible()
     })
 
-    test('setup is locked once initialized', async ({ page }) => {
+    test('setup is locked once initialized [spec: onboarding/locked-after-init]', async ({ page }) => {
       await page.goto('/onboarding')
       // Re-running onboarding from scratch is no longer offered: the admin step is gone.
       await expect(page.locator('#setup-name')).toHaveCount(0)
     })
 
-    test('a logged-out visitor is sent to login and can sign in', async ({ page, context }) => {
+    test('a logged-out visitor is sent to login and can sign in [spec: auth/login-redirect, auth/sign-in]', async ({
+      page,
+      context,
+    }) => {
       await context.clearCookies()
 
       await page.goto('/library')
@@ -41,7 +44,7 @@ test.describe
       await expect(page.locator('#login-email')).toHaveCount(0)
     })
 
-    test('the session survives a reload', async ({ page }) => {
+    test('the session survives a reload [spec: auth/session-persists]', async ({ page }) => {
       await page.goto('/')
       await expect(page.locator('#login-email')).toHaveCount(0)
       await page.reload()
@@ -49,7 +52,7 @@ test.describe
       await expect(page.locator('#login-email')).toHaveCount(0)
     })
 
-    test('bad credentials are rejected', async ({ page, context }) => {
+    test('bad credentials are rejected [spec: auth/reject-bad-credentials]', async ({ page, context }) => {
       await context.clearCookies()
       await page.goto('/login')
       await page.fill('#login-email', ADMIN.email)
