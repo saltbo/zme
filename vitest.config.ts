@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import react from '@vitejs/plugin-react-swc'
 import { defineConfig } from 'vitest/config'
 
 const alias = {
@@ -18,13 +19,26 @@ export default defineConfig({
       reporter: ['text', 'text-summary'],
     },
     projects: [
-      // Fast suite: pure domain rules, usecases over fake ports, adapters over
-      // stubbed fetch, http wiring. Runs in node.
+      // Server fast suite: pure domain rules, usecases over fake ports, adapters
+      // over stubbed fetch, http wiring. Runs in node.
       {
         test: {
           name: 'unit',
-          include: ['server/**/*.test.ts', 'shared/**/*.test.ts', 'src/**/*.test.{ts,tsx}'],
+          environment: 'node',
+          include: ['server/**/*.test.ts', 'shared/**/*.test.ts'],
           exclude: ['server/api-tests/**'],
+        },
+        resolve: { alias },
+      },
+      // Frontend suite: pure lib helpers, the api client, and component/hook
+      // tests with the API mocked at the network boundary (MSW). Runs in jsdom.
+      {
+        plugins: [react()],
+        test: {
+          name: 'web',
+          environment: 'jsdom',
+          include: ['src/**/*.test.{ts,tsx}'],
+          setupFiles: ['./src/test/setup.ts'],
         },
         resolve: { alias },
       },
