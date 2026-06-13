@@ -1,5 +1,5 @@
+import type { Env } from '@server/env'
 import { drizzle } from 'drizzle-orm/d1'
-import type { Env } from '../env'
 import * as schema from './schema'
 
 export function createDb(env: Env) {

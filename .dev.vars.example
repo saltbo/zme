@@ -1,0 +1,12 @@
+# Copy to .dev.vars for local development. Also the source of binding/var names
+# for `wrangler types` (pnpm cf-typegen), so keep the keys here in sync.
+
+# Required: Better Auth signing secret (>= 32 characters).
+BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
+
+# Optional, only for local browser/E2E verification (see AGENTS.md):
+# LOCAL_TEST_EMAIL=admin@example.com
+# LOCAL_TEST_PASSWORD=replace-me
+#
+# TMDB and Prowlarr are configured inside the app (Admin -> Media sources / Indexers),
+# not via environment variables.
