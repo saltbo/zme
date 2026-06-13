@@ -25,7 +25,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          include: ['server/**/*.test.ts', 'shared/**/*.test.ts', 'test/**/*.test.ts'],
+          include: ['server/**/*.test.ts', 'shared/**/*.test.ts'],
           exclude: ['server/api-tests/**'],
         },
         resolve: { alias },

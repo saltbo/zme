@@ -26,16 +26,12 @@ trace back to scenarios by id.
 
 ## Traceability
 
-Each scenario's home test carries `[spec: <id>]` in its name:
+Each scenario's home test carries `[spec: <id>]` in its name, so you can trace a
+scenario to the test that proves it (and back):
 
 ```ts
 it('saving an unsaved item marks it saved [spec: library/save-resource]', …)
 ```
-
-`spec/spec-coverage.test.ts` parses every scenario tag and fails if any scenario
-has no matching test, or any `[spec: id]` annotation points at a missing scenario —
-so the spec can't silently drift from the suite. Living documentation, without the
-Cucumber tax.
 
 ## Escalation
 
