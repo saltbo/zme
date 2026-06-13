@@ -1,0 +1,138 @@
+import { zValidator } from '@hono/zod-validator'
+import type { Hono } from 'hono'
+import { z } from 'zod'
+import { createDb } from '../db/client'
+import {
+  checkIndexerHealth,
+  createIndexer,
+  deleteIndexer,
+  getIndexer,
+  listIndexers,
+  searchDownloadIndexers,
+  searchIndexers,
+  updateIndexer,
+} from '../services/indexers'
+import type { AppEnv } from './context'
+import { idParamsSchema } from './schemas'
+
+const indexerSearchQuerySchema = z.object({
+  q: z.string().trim().min(1),
+  target: z.enum(['movie', 'tv', 'music', 'ebook', 'audiobook']).optional(),
+  title: z.string().trim().min(1).optional(),
+  aliases: z.string().trim().optional(),
+  creators: z.string().trim().optional(),
+  formats: z.string().trim().optional(),
+  narrator: z.string().trim().min(1).optional(),
+  year: z
+    .string()
+    .trim()
+    .regex(/^(19|20)\d{2}$/)
+    .optional(),
+  kind: z.enum(['movie', 'tv']).optional(),
+  imdbId: z
+    .string()
+    .trim()
+    .regex(/^tt\d+$/i)
+    .optional(),
+  tmdbId: z.coerce.number().int().positive().optional(),
+  tvdbId: z.coerce.number().int().positive().optional(),
+})
+
+const indexerSchema = z.object({
+  description: z.string().trim().optional(),
+  kind: z.enum(['prowlarr']),
+  endpoint: z.string().trim().url(),
+  credentials: z.record(z.string(), z.string()),
+  options: z.record(z.string(), z.string()),
+  enabled: z.boolean(),
+})
+
+export function registerIndexerRoutes(routes: Hono<AppEnv>) {
+  // /indexers/search must be registered before /indexers/:id.
+  routes.get('/indexers/search', zValidator('query', indexerSearchQuerySchema), async (c) => {
+    const { q, target, title, aliases, creators, formats, narrator, year, kind, imdbId, tmdbId, tvdbId } =
+      c.req.valid('query')
+    try {
+      const db = createDb(c.env)
+      const results =
+        target === 'music' || target === 'ebook' || target === 'audiobook'
+          ? await searchDownloadIndexers(db, {
+              target,
+              query: q,
+              title,
+              aliases: parseDelimitedList(aliases),
+              creators: parseDelimitedList(creators),
+              year,
+              formats: parseDelimitedList(formats),
+              narrator,
+            })
+          : await searchIndexers(db, {
+              query: q,
+              title,
+              aliases: parseDelimitedList(aliases),
+              year,
+              kind: target === 'movie' || target === 'tv' ? target : kind,
+              imdbId,
+              tmdbId,
+              tvdbId,
+            })
+      return c.json({ results })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Indexer search failed.'
+      const notConfigured = message.includes('No enabled indexers')
+      return c.json(
+        {
+          code: notConfigured ? 'INDEXER_NOT_CONFIGURED' : 'INDEXER_SEARCH_FAILED',
+          error: message,
+        },
+        notConfigured ? 503 : 502,
+      )
+    }
+  })
+
+  routes.get('/indexers', async (c) => {
+    const items = await listIndexers(createDb(c.env))
+    return c.json({ items })
+  })
+
+  routes.get('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const item = await getIndexer(createDb(c.env), id)
+    if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ item })
+  })
+
+  routes.post('/indexers', zValidator('json', indexerSchema), async (c) => {
+    const item = await createIndexer(createDb(c.env), c.req.valid('json'))
+    return c.json({ item }, 201)
+  })
+
+  routes.patch('/indexers/:id', zValidator('param', idParamsSchema), zValidator('json', indexerSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const item = await updateIndexer(createDb(c.env), id, c.req.valid('json'))
+    if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ item })
+  })
+
+  routes.delete('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const deleted = await deleteIndexer(createDb(c.env), id)
+    if (!deleted) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ id })
+  })
+
+  routes.post('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
+    const { id } = c.req.valid('param')
+    const health = await checkIndexerHealth(createDb(c.env), id)
+    if (!health) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ health })
+  })
+}
+
+function parseDelimitedList(value: string | undefined): string[] {
+  if (!value) return []
+  return value
+    .split('|')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
