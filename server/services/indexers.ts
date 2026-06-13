@@ -1,15 +1,13 @@
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
 import { and, eq } from 'drizzle-orm'
+import { indexerGateways } from '../adapters/gateways/indexers'
 import type { createDb } from '../db/client'
 import { type Indexer, indexers } from '../db/schema'
+import type { IndexerSearchInput } from '../usecases/ports'
+import { toConnectorConfig } from './connectors'
 import { type ResourceDownloadSearchInput, searchResourceDownloads } from './download-search'
-import { type ProwlarrSearchInput, searchProwlarr } from './prowlarr'
 
 type Db = ReturnType<typeof createDb>
-
-interface ProwlarrCredentials {
-  apiKey?: string
-}
 
 export async function listIndexers(db: Db): Promise<IndexerSummary[]> {
   const rows = await db.select().from(indexers).orderBy(indexers.createdAt)
@@ -66,7 +64,7 @@ export async function deleteIndexer(db: Db, id: string): Promise<boolean> {
   return rows.length > 0
 }
 
-export async function searchIndexers(db: Db, input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
+export async function searchIndexers(db: Db, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
   const rows = await db
     .select()
     .from(indexers)
@@ -95,8 +93,10 @@ export async function searchDownloadIndexers(db: Db, input: ResourceDownloadSear
   return searchResourceDownloads(rows, input)
 }
 
-async function searchEnabledIndexers(rows: Indexer[], input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
-  const results = await Promise.allSettled(rows.map((row) => searchConfiguredIndexer(row, input)))
+async function searchEnabledIndexers(rows: Indexer[], input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
+  const results = await Promise.allSettled(
+    rows.map((row) => indexerGateways[row.kind].search(toConnectorConfig(row), input)),
+  )
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
   if (items.length > 0) return items
 
@@ -110,7 +110,7 @@ async function searchEnabledIndexers(rows: Indexer[], input: ProwlarrSearchInput
   throw new Error('Indexer search failed.')
 }
 
-function filterExactMediaMatches(items: IndexerSearchItem[], input: ProwlarrSearchInput): IndexerSearchItem[] {
+function filterExactMediaMatches(items: IndexerSearchItem[], input: IndexerSearchInput): IndexerSearchItem[] {
   const imdbId = parseImdbNumber(input.imdbId)
   return items.filter((item) => {
     if (imdbId && item.imdbId === imdbId) return true
@@ -121,7 +121,7 @@ function filterExactMediaMatches(items: IndexerSearchItem[], input: ProwlarrSear
   })
 }
 
-function getSearchInputs(input: ProwlarrSearchInput): ProwlarrSearchInput[] {
+function getSearchInputs(input: IndexerSearchInput): IndexerSearchInput[] {
   const titles = uniqueStrings([input.title, ...(input.aliases ?? [])]).slice(0, 3)
   if (titles.length === 0) return [input]
 
@@ -164,7 +164,7 @@ function parseImdbNumber(value: string | undefined): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
-function matchesExpectedTitle(item: IndexerSearchItem, input: ProwlarrSearchInput): boolean {
+function matchesExpectedTitle(item: IndexerSearchItem, input: IndexerSearchInput): boolean {
   if (input.kind === 'movie' && looksLikeMovieCollection(item.title)) return false
 
   const expectedTitles = uniqueStrings([input.title, ...(input.aliases ?? []), stripYear(input.query)])
@@ -241,29 +241,14 @@ function toSummary(row: Indexer): IndexerSummary {
 function toDetails(row: Indexer): IndexerDetails {
   return {
     ...toSummary(row),
-    credentials: readJson<Record<string, string>>(row.credentialsJson),
-    options: readJson<Record<string, string>>(row.optionsJson),
+    credentials: JSON.parse(row.credentialsJson) as Record<string, string>,
+    options: JSON.parse(row.optionsJson) as Record<string, string>,
   }
-}
-
-async function searchConfiguredIndexer(indexer: Indexer, input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
-  const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
-  if (!credentials.apiKey) throw new Error('Prowlarr API key is missing.')
-  return searchProwlarr(indexer.endpoint, credentials.apiKey, input)
 }
 
 async function probeIndexer(indexer: Indexer): Promise<{ status: 'online' | 'offline'; message: string }> {
   try {
-    const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
-    if (!credentials.apiKey) throw new Error('Prowlarr API key is missing.')
-
-    const response = await fetch(new URL('/api/v1/system/status', normalizeBaseUrl(indexer.endpoint)), {
-      headers: {
-        'X-Api-Key': credentials.apiKey,
-        Accept: 'application/json',
-      },
-    })
-    await assertOk(response, 'Prowlarr')
+    await indexerGateways[indexer.kind].probe(toConnectorConfig(indexer))
     return { status: 'online', message: 'Connection check succeeded.' }
   } catch (error) {
     return {
@@ -271,18 +256,4 @@ async function probeIndexer(indexer: Indexer): Promise<{ status: 'online' | 'off
       message: error instanceof Error ? error.message : 'Connection check failed.',
     }
   }
-}
-
-function readJson<T>(value: string): T {
-  return JSON.parse(value) as T
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-}
-
-async function assertOk(response: Response, target: string) {
-  if (response.ok) return
-  const text = await response.text()
-  throw new Error(`${target} request failed: ${response.status}${text ? ` ${text}` : ''}`)
 }

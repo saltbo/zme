@@ -8,10 +8,10 @@ import type {
 import { and, eq } from 'drizzle-orm'
 import type { createDb } from '../db/client'
 import { type LibrarySource, librarySources } from '../db/schema'
-import { type DoubanMediaEntry, fetchDoubanProfileEntries } from './importers/douban'
+import { type DoubanMediaEntry, fetchDoubanProfileEntries } from '../adapters/providers/douban'
 import { saveLibraryState, setWatchedState } from './library'
 import type { ActiveTmdbSource } from './media-sources'
-import { searchMedia } from './tmdb'
+import { searchMedia } from '../adapters/providers/tmdb'
 
 type Db = ReturnType<typeof createDb>
 

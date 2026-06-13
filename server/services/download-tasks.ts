@@ -1,25 +1,14 @@
-import type { DownloaderKind, DownloadTaskPage, DownloadTaskStatus, DownloadTaskSummary } from '@shared/types'
+import type { DownloadTaskPage, DownloadTaskSummary } from '@shared/types'
 import { and, eq } from 'drizzle-orm'
+import { downloadTaskGateways } from '../adapters/gateways/downloaders'
 import type { createDb } from '../db/client'
 import { type Downloader, downloaders } from '../db/schema'
-import { ZpanClient, type ZpanDownloadTask, type ZpanDownloadTaskPage } from './zpan-client'
+import type { DownloadTaskEvent, DownloadTaskGateway, DownloadTaskOwner, ListDownloadTasksInput } from '../usecases/ports'
+import { toConnectorConfig } from './connectors'
 
 type Db = ReturnType<typeof createDb>
-type DownloadTaskSnapshot = { items: DownloadTaskSummary[] }
-type DownloadTaskEvent =
-  | { event: 'snapshot'; data: DownloadTaskSnapshot }
-  | { event: 'error'; data: { message: string } }
-type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']
 
-interface ZpanCredentials {
-  apiKey?: string
-}
-
-export interface ListDownloadTasksInput {
-  status?: DownloadTaskStatus
-  page: number
-  pageSize: number
-}
+export type { ListDownloadTasksInput }
 
 export async function listDownloadTasks(
   db: Db,
@@ -28,7 +17,11 @@ export async function listDownloadTasks(
 ): Promise<DownloadTaskPage> {
   const rows = await listEnabledDownloaders(db, userId)
 
-  const results = await Promise.all(rows.map((downloader) => listZpanTasks(downloader, input)))
+  const results = await Promise.all(
+    rows.map(({ downloader, gateway }) =>
+      gateway.list(toConnectorConfig(downloader), toOwner(downloader), input),
+    ),
+  )
   return {
     items: results.flatMap((result) => result.items),
     total: results.reduce((sum, result) => sum + result.total, 0),
@@ -78,15 +71,16 @@ export async function streamDownloadTaskEvents(db: Db, userId: string, signal: A
         if (activeStreams <= 0) close()
       }
 
-      for (const downloader of rows) {
-        void streamZpanTasks(downloader, abortController.signal, (event) => {
-          if (event.event === 'snapshot') {
-            latestByDownloader.set(downloader.id, event.data.items)
-            sendSnapshot()
-            return
-          }
-          send('error', { message: `${getDownloaderName(downloader)}: ${event.data.message}` })
-        })
+      for (const { downloader, gateway } of rows) {
+        void gateway
+          .stream(toConnectorConfig(downloader), toOwner(downloader), abortController.signal, (event) => {
+            if (event.event === 'snapshot') {
+              latestByDownloader.set(downloader.id, event.data.items)
+              sendSnapshot()
+              return
+            }
+            send('error', { message: `${getDownloaderName(downloader)}: ${event.data.message}` })
+          })
           .catch((error) => {
             if (!abortController?.signal.aborted) {
               send('error', { message: `${getDownloaderName(downloader)}: ${getErrorMessage(error)}` })
@@ -108,93 +102,31 @@ export async function streamDownloadTaskEvents(db: Db, userId: string, signal: A
   })
 }
 
-async function listEnabledDownloaders(db: Db, userId: string): Promise<Downloader[]> {
-  return db
+async function listEnabledDownloaders(
+  db: Db,
+  userId: string,
+): Promise<Array<{ downloader: Downloader; gateway: DownloadTaskGateway }>> {
+  const rows = await db
     .select()
     .from(downloaders)
-    .where(and(eq(downloaders.userId, userId), eq(downloaders.enabled, true), eq(downloaders.kind, 'zpan')))
-}
+    .where(and(eq(downloaders.userId, userId), eq(downloaders.enabled, true)))
 
-async function listZpanTasks(downloader: Downloader, input: ListDownloadTasksInput): Promise<DownloadTaskPage> {
-  const payload = await getZpanClient(downloader).listDownloadTasks({
-    page: input.page,
-    pageSize: input.pageSize,
-    status: input.status ? toZpanStatus(input.status) : undefined,
-  })
-  return {
-    items: payload.items.map((task) => toTaskSummary(downloader, task)),
-    total: payload.total,
-    page: payload.page,
-    pageSize: payload.pageSize,
-  }
-}
-
-async function streamZpanTasks(
-  downloader: Downloader,
-  signal: AbortSignal,
-  emit: (event: DownloadTaskEvent) => void,
-): Promise<void> {
-  await getZpanClient(downloader).streamDownloadTaskEvents({ page: 1, pageSize: 50 }, signal, (event) => {
-    if (event.event === 'snapshot') {
-      const payload = event.data as ZpanDownloadTaskPage
-      emit({ event: 'snapshot', data: { items: payload.items.map((task) => toTaskSummary(downloader, task)) } })
-      return
-    }
-    if (event.event === 'error') {
-      const payload = event.data as { message?: string }
-      emit({ event: 'error', data: { message: payload.message || 'ZPan event stream failed' } })
-    }
+  return rows.flatMap((downloader) => {
+    const gateway = downloadTaskGateways[downloader.kind]
+    return gateway ? [{ downloader, gateway }] : []
   })
 }
 
-function toTaskSummary(downloader: Downloader, task: ZpanDownloadTask): DownloadTaskSummary {
-  const progress = task.status.runtime?.progress ?? task.status.progress
-  const name = task.spec.destination.name || task.status.runtime?.torrent?.name || task.spec.source.uri
-
+function toOwner(downloader: Downloader): DownloadTaskOwner {
   return {
-    id: task.id,
     downloaderId: downloader.id,
     downloaderName: getDownloaderName(downloader),
-    downloaderKind: downloader.kind as DownloaderKind,
-    sourceType: task.spec.source.type,
-    sourceUri: task.spec.source.uri,
-    name,
-    targetFolder: task.spec.destination.folder,
-    category: task.spec.labels.category,
-    tags: task.spec.labels.tags,
-    status: fromZpanStatus(task.status.state),
-    downloadedBytes: progress.download.bytes,
-    storageUploadedBytes: progress.upload.bytes,
-    totalBytes: progress.download.totalBytes ?? null,
-    downloadBps: progress.download.bytesPerSecond,
-    storageUploadBps: progress.upload.bytesPerSecond,
-    errorMessage: task.status.error?.message ?? null,
+    downloaderKind: downloader.kind,
   }
-}
-
-function toZpanStatus(status: DownloadTaskStatus): ZpanDownloadTaskState {
-  if (status === 'running') return 'downloading'
-  if (status === 'billing_paused') return 'suspended'
-  return status
-}
-
-function fromZpanStatus(status: ZpanDownloadTaskState): DownloadTaskStatus {
-  if (status === 'downloading' || status === 'interrupted') return 'running'
-  if (status === 'suspended') return 'billing_paused'
-  return status
-}
-
-function getZpanClient(downloader: Downloader) {
-  const credentials = readJson<ZpanCredentials>(downloader.credentialsJson)
-  return new ZpanClient(downloader.endpoint, credentials.apiKey)
 }
 
 function getDownloaderName(downloader: Downloader) {
   return downloader.description || 'ZPan'
-}
-
-function readJson<T>(value: string): T {
-  return JSON.parse(value) as T
 }
 
 function getErrorMessage(error: unknown) {

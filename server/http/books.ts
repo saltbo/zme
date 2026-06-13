@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
-import { discoverBooks, getBookDetails, OpenLibraryError, searchBooks } from '../services/books'
+import { discoverBooks, getBookDetails, OpenLibraryError, searchBooks } from '../adapters/providers/books'
 import type { AppEnv } from './context'
 
 const bookSearchQuerySchema = z.object({

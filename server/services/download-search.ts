@@ -1,10 +1,8 @@
 import type { DownloadSearchTarget, IndexerSearchItem } from '@shared/types'
+import { indexerGateways } from '../adapters/gateways/indexers'
 import type { Indexer } from '../db/schema'
-import { type ProwlarrSearchInput, searchProwlarr } from './prowlarr'
-
-interface ProwlarrCredentials {
-  apiKey?: string
-}
+import type { IndexerSearchInput } from '../usecases/ports'
+import { toConnectorConfig } from './connectors'
 
 export interface ResourceDownloadSearchInput {
   target: DownloadSearchTarget
@@ -18,7 +16,7 @@ export interface ResourceDownloadSearchInput {
 }
 
 interface TargetConfig {
-  searchType: NonNullable<ProwlarrSearchInput['searchType']>
+  searchType: NonNullable<IndexerSearchInput['searchType']>
   categories: number[]
   categoryTerms: string[]
   formatTerms: string[]
@@ -76,7 +74,7 @@ export async function searchResourceDownloads(
   return []
 }
 
-async function searchEnabledIndexers(indexers: Indexer[], input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
+async function searchEnabledIndexers(indexers: Indexer[], input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
   const results = await Promise.allSettled(indexers.map((indexer) => searchConfiguredIndexer(indexer, input)))
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
   if (items.length > 0) return items
@@ -91,16 +89,14 @@ async function searchEnabledIndexers(indexers: Indexer[], input: ProwlarrSearchI
   throw new Error('Indexer search failed.')
 }
 
-async function searchConfiguredIndexer(indexer: Indexer, input: ProwlarrSearchInput): Promise<IndexerSearchItem[]> {
-  const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
-  if (!credentials.apiKey) throw new Error('Prowlarr API key is missing.')
-  return searchProwlarr(indexer.endpoint, credentials.apiKey, input)
+function searchConfiguredIndexer(indexer: Indexer, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
+  return indexerGateways[indexer.kind].search(toConnectorConfig(indexer), input)
 }
 
 function getResourceSearchInputs(
   input: ResourceDownloadSearchInput,
   includeCategories: boolean,
-): ProwlarrSearchInput[] {
+): IndexerSearchInput[] {
   const config = targetConfigs[input.target]
   return buildResourceQueries(input).map((query) => ({
     query,
@@ -231,8 +227,4 @@ function normalizeSearchText(value: string): string {
     .replace(/[^a-z0-9\u4e00-\u9fff]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ')
-}
-
-function readJson<T>(value: string): T {
-  return JSON.parse(value) as T
 }

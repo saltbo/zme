@@ -1,5 +1,12 @@
 import type { IndexerSearchItem } from '@shared/types'
-import { applyProwlarrBaseUrl, isProwlarrProxyDownloadUrl, stripProwlarrApiKey } from './download-source'
+import type { IndexerGateway, IndexerSearchInput } from '../../usecases/ports'
+import {
+  applyProwlarrBaseUrl,
+  isProwlarrProxyDownloadUrl,
+  resolveProwlarrProxyDownloadUrl,
+  stripProwlarrApiKey,
+  withProwlarrApiKey,
+} from './download-source'
 
 interface ProwlarrSearchItem {
   guid?: string
@@ -23,23 +30,44 @@ interface ProwlarrSearchItem {
   tvdbId?: number | string
 }
 
-export interface ProwlarrSearchInput {
-  query: string
-  searchType?: 'search' | 'audiosearch' | 'booksearch'
-  categories?: number[]
-  title?: string
-  year?: string
-  aliases?: string[]
-  kind?: 'movie' | 'tv'
-  imdbId?: string
-  tmdbId?: number
-  tvdbId?: number
+export const prowlarrIndexerGateway: IndexerGateway = {
+  async search(config, input) {
+    const apiKey = config.credentials.apiKey
+    if (!apiKey) throw new Error('Prowlarr API key is missing.')
+    return searchProwlarr(config.endpoint, apiKey, input)
+  },
+
+  async probe(config) {
+    const apiKey = config.credentials.apiKey
+    if (!apiKey) throw new Error('Prowlarr API key is missing.')
+
+    const response = await fetch(new URL('/api/v1/system/status', normalizeBaseUrl(config.endpoint)), {
+      headers: {
+        'X-Api-Key': apiKey,
+        Accept: 'application/json',
+      },
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(`Prowlarr request failed: ${response.status}${text ? ` ${text}` : ''}`)
+    }
+  },
+
+  matchesDownloadUrl(config, uri) {
+    return isProwlarrProxyDownloadUrl(uri) && getUrlHost(config.endpoint) === getUrlHost(uri)
+  },
+
+  async resolveDownloadSource(config, uri) {
+    const apiKey = config.credentials.apiKey
+    if (!apiKey) return null
+    return resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, apiKey)).catch(() => null)
+  },
 }
 
 export async function searchProwlarr(
   baseUrl: string,
   apiKey: string,
-  input: ProwlarrSearchInput,
+  input: IndexerSearchInput,
 ): Promise<IndexerSearchItem[]> {
   const url = new URL('/api/v1/search', normalizeBaseUrl(baseUrl))
   url.searchParams.set('query', input.query)
@@ -133,4 +161,12 @@ function normalizeBaseUrl(baseUrl: string): string {
 function parsePositiveNumber(value: number | string | undefined): number | null {
   const parsed = typeof value === 'string' ? Number(value) : value
   return typeof parsed === 'number' && Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function getUrlHost(value: string) {
+  try {
+    return new URL(value).host
+  } catch {
+    return null
+  }
 }

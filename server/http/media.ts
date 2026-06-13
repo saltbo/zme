@@ -13,7 +13,7 @@ import {
   getWatchClickouts,
   listMediaGenres,
   searchMedia,
-} from '../services/tmdb'
+} from '../adapters/providers/tmdb'
 import type { AppEnv } from './context'
 
 const searchQuerySchema = z.object({

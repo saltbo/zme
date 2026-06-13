@@ -1,7 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
-import { discoverMusicAlbums, getMusicAlbumDetails, MusicProviderError, searchMusicAlbums } from '../services/music'
+import { discoverMusicAlbums, getMusicAlbumDetails, MusicProviderError, searchMusicAlbums } from '../adapters/providers/music'
 import type { AppEnv } from './context'
 
 const musicSearchQuerySchema = z

@@ -1,11 +1,11 @@
-import { type Client, createClient } from '../clients/zpan/client'
-import { getApiDownloadTasks, getApiDownloadTasksEvents, postApiDownloadTasks } from '../clients/zpan/sdk.gen'
+import { type Client, createClient } from '../../clients/zpan/client'
+import { getApiDownloadTasks, getApiDownloadTasksEvents, postApiDownloadTasks } from '../../clients/zpan/sdk.gen'
 import type {
   GetApiDownloadTasksData,
   GetApiDownloadTasksResponse,
   PostApiDownloadTasksData,
   PostApiDownloadTasksResponse,
-} from '../clients/zpan/types.gen'
+} from '../../clients/zpan/types.gen'
 
 export type ZpanListDownloadTasksParams = NonNullable<GetApiDownloadTasksData['query']>
 export type ZpanDownloadTaskPage = GetApiDownloadTasksResponse

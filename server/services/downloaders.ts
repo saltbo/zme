@@ -1,4 +1,3 @@
-import { getZmeDownloadResourceDirectory, normalizeZmeDownloadCategory } from '@shared/download-metadata'
 import type {
   CreateDownloadInput,
   CreateDownloadResult,
@@ -8,51 +7,13 @@ import type {
   DownloaderSummary,
 } from '@shared/types'
 import { and, eq } from 'drizzle-orm'
+import { downloaderGateways } from '../adapters/gateways/downloaders'
+import { indexerGateways } from '../adapters/gateways/indexers'
 import type { createDb } from '../db/client'
-import { type Downloader, downloaders, type Indexer, indexers } from '../db/schema'
-import { isProwlarrProxyDownloadUrl, resolveProwlarrProxyDownloadUrl, withProwlarrApiKey } from './download-source'
-import { ZpanClient } from './zpan-client'
+import { type Downloader, downloaders, indexers } from '../db/schema'
+import { toConnectorConfig } from './connectors'
 
 type Db = ReturnType<typeof createDb>
-
-interface QbittorrentCredentials {
-  username?: string
-  password?: string
-}
-
-interface QbittorrentOptions {
-  category?: string
-  savePath?: string
-}
-
-interface TransmissionCredentials {
-  username?: string
-  password?: string
-}
-
-interface TransmissionOptions {
-  downloadDir?: string
-}
-
-interface Aria2Credentials {
-  secret?: string
-}
-
-interface Aria2Options {
-  dir?: string
-}
-
-interface ZpanCredentials {
-  apiKey?: string
-}
-
-interface ZpanOptions {
-  targetFolder?: string
-}
-
-interface ProwlarrCredentials {
-  apiKey?: string
-}
 
 export async function listDownloaders(db: Db, userId: string): Promise<DownloaderSummary[]> {
   const rows = await db.select().from(downloaders).where(eq(downloaders.userId, userId)).orderBy(downloaders.createdAt)
@@ -136,15 +97,7 @@ export async function submitDownload(
   if (!downloader) throw new Error('Downloader is not available.')
   const resolvedInput = await resolveDownloadInput(db, input)
 
-  if (downloader.kind === 'zpan') {
-    await submitToZpan(downloader, resolvedInput)
-  } else if (downloader.kind === 'qbittorrent') {
-    await submitToQbittorrent(downloader, resolvedInput)
-  } else if (downloader.kind === 'transmission') {
-    await submitToTransmission(downloader, resolvedInput)
-  } else {
-    await submitToAria2(downloader, resolvedInput)
-  }
+  await downloaderGateways[downloader.kind].submit(toConnectorConfig(downloader), resolvedInput)
 
   return {
     downloaderId: downloader.id,
@@ -159,40 +112,17 @@ async function resolveDownloadInput(db: Db, input: CreateDownloadInput): Promise
     .select()
     .from(indexers)
     .where(and(eq(indexers.enabled, true), eq(indexers.kind, 'prowlarr')))
-  const matchingIndexers = rows.filter((indexer) => indexerMatchesUrl(indexer, input.uri))
+  const matchingIndexers = rows.filter((indexer) =>
+    indexerGateways[indexer.kind].matchesDownloadUrl(toConnectorConfig(indexer), input.uri),
+  )
   if (matchingIndexers.length === 0) return input
 
-  const source = await resolveProwlarrSource(matchingIndexers, input.uri)
-  if (!source) throw new Error('Prowlarr download URL could not be resolved.')
-  return { ...input, ...source }
-}
-
-async function resolveProwlarrSource(
-  rows: Indexer[],
-  uri: string,
-): Promise<Pick<CreateDownloadInput, 'uri' | 'sourceType'> | null> {
-  for (const indexer of rows) {
-    const credentials = readJson<ProwlarrCredentials>(indexer.credentialsJson)
-    if (!credentials.apiKey) continue
-    const resolved = await resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, credentials.apiKey)).catch(
-      () => null,
-    )
-    if (resolved) return resolved
+  for (const indexer of matchingIndexers) {
+    const resolved = await indexerGateways[indexer.kind].resolveDownloadSource(toConnectorConfig(indexer), input.uri)
+    if (resolved) return { ...input, ...resolved }
   }
 
-  return null
-}
-
-function indexerMatchesUrl(indexer: Indexer, uri: string) {
-  return isProwlarrProxyDownloadUrl(uri) && getUrlHost(indexer.endpoint) === getUrlHost(uri)
-}
-
-function getUrlHost(value: string) {
-  try {
-    return new URL(value).host
-  } catch {
-    return null
-  }
+  throw new Error('Prowlarr download URL could not be resolved.')
 }
 
 export async function checkDownloaderHealth(db: Db, userId: string, id: string): Promise<DownloaderHealth | null> {
@@ -226,6 +156,18 @@ export async function checkDownloaderHealth(db: Db, userId: string, id: string):
   }
 }
 
+async function probeDownloader(downloader: Downloader): Promise<{ status: 'online' | 'offline'; message: string }> {
+  try {
+    await downloaderGateways[downloader.kind].probe(toConnectorConfig(downloader))
+    return { status: 'online', message: 'Connection check succeeded.' }
+  } catch (error) {
+    return {
+      status: 'offline',
+      message: error instanceof Error ? error.message : 'Connection check failed.',
+    }
+  }
+}
+
 function toSummary(row: Downloader): DownloaderSummary {
   return {
     id: row.id,
@@ -244,212 +186,7 @@ function toSummary(row: Downloader): DownloaderSummary {
 function toDetails(row: Downloader): DownloaderDetails {
   return {
     ...toSummary(row),
-    credentials: readJson<Record<string, string>>(row.credentialsJson),
-    options: readJson<Record<string, string>>(row.optionsJson),
+    credentials: JSON.parse(row.credentialsJson) as Record<string, string>,
+    options: JSON.parse(row.optionsJson) as Record<string, string>,
   }
-}
-
-async function probeDownloader(downloader: Downloader): Promise<{ status: 'online' | 'offline'; message: string }> {
-  try {
-    if (downloader.kind === 'zpan') {
-      await probeZpan(downloader)
-    } else if (downloader.kind === 'qbittorrent') {
-      await probeQbittorrent(downloader)
-    } else if (downloader.kind === 'transmission') {
-      await probeTransmission(downloader)
-    } else {
-      await probeAria2(downloader)
-    }
-    return { status: 'online', message: 'Connection check succeeded.' }
-  } catch (error) {
-    return {
-      status: 'offline',
-      message: error instanceof Error ? error.message : 'Connection check failed.',
-    }
-  }
-}
-
-async function probeZpan(downloader: Downloader) {
-  const response = await fetch(new URL('/api/health', normalizeBaseUrl(downloader.endpoint)))
-  await assertOk(response, 'ZPan')
-}
-
-async function probeQbittorrent(downloader: Downloader) {
-  const credentials = readJson<QbittorrentCredentials>(downloader.credentialsJson)
-  await qbittorrentLogin(normalizeBaseUrl(downloader.endpoint), credentials)
-}
-
-async function probeTransmission(downloader: Downloader) {
-  const credentials = readJson<TransmissionCredentials>(downloader.credentialsJson)
-  let response = await transmissionRequest(
-    new URL('/transmission/rpc', normalizeBaseUrl(downloader.endpoint)),
-    credentials,
-    {
-      method: 'session-get',
-    },
-  )
-  if (response.status === 409) {
-    const session = response.headers.get('x-transmission-session-id')
-    if (!session) throw new Error('Transmission did not return a session id.')
-    response = await transmissionRequest(
-      new URL('/transmission/rpc', normalizeBaseUrl(downloader.endpoint)),
-      credentials,
-      { method: 'session-get' },
-      session,
-    )
-  }
-  await assertOk(response, 'Transmission')
-}
-
-async function probeAria2(downloader: Downloader) {
-  const credentials = readJson<Aria2Credentials>(downloader.credentialsJson)
-  const params: unknown[] = []
-  if (credentials.secret) params.push(`token:${credentials.secret}`)
-  const response = await fetch(downloader.endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: crypto.randomUUID(),
-      method: 'aria2.getVersion',
-      params,
-    }),
-  })
-  await assertOk(response, 'aria2')
-}
-
-async function submitToZpan(downloader: Downloader, input: CreateDownloadInput) {
-  const credentials = readJson<ZpanCredentials>(downloader.credentialsJson)
-  const options = readJson<ZpanOptions>(downloader.optionsJson)
-  await new ZpanClient(downloader.endpoint, credentials.apiKey).createDownloadTask({
-    source: { type: input.sourceType, uri: input.uri },
-    targetFolder: getTypedDownloadDirectory(options.targetFolder, input.category),
-    name: input.title,
-    category: normalizeZmeDownloadCategory(input.category),
-    tags: input.tags,
-  })
-}
-
-async function submitToQbittorrent(downloader: Downloader, input: CreateDownloadInput) {
-  const credentials = readJson<QbittorrentCredentials>(downloader.credentialsJson)
-  const options = readJson<QbittorrentOptions>(downloader.optionsJson)
-  const baseUrl = normalizeBaseUrl(downloader.endpoint)
-  const cookie = await qbittorrentLogin(baseUrl, credentials)
-  const form = new FormData()
-  form.set('urls', input.uri)
-  const savePath = getTypedDownloadDirectory(options.savePath || options.category, input.category)
-  if (savePath) form.set('savepath', savePath)
-
-  const response = await fetch(new URL('/api/v2/torrents/add', baseUrl), {
-    method: 'POST',
-    headers: { cookie },
-    body: form,
-  })
-
-  await assertOk(response, 'qBittorrent')
-}
-
-async function qbittorrentLogin(baseUrl: string, credentials: QbittorrentCredentials) {
-  const form = new URLSearchParams()
-  form.set('username', credentials.username || '')
-  form.set('password', credentials.password || '')
-  const response = await fetch(new URL('/api/v2/auth/login', baseUrl), {
-    method: 'POST',
-    body: form,
-  })
-
-  await assertOk(response, 'qBittorrent')
-  const cookie = response.headers.get('set-cookie')
-  if (!cookie) throw new Error('qBittorrent did not return a session cookie.')
-  return cookie
-}
-
-async function submitToTransmission(downloader: Downloader, input: CreateDownloadInput) {
-  const credentials = readJson<TransmissionCredentials>(downloader.credentialsJson)
-  const options = readJson<TransmissionOptions>(downloader.optionsJson)
-  const endpoint = new URL('/transmission/rpc', normalizeBaseUrl(downloader.endpoint))
-  const downloadDir = getTypedDownloadDirectory(options.downloadDir, input.category)
-  const body = {
-    method: 'torrent-add',
-    arguments: {
-      filename: input.uri,
-      ...(downloadDir ? { 'download-dir': downloadDir } : {}),
-    },
-  }
-
-  let response = await transmissionRequest(endpoint, credentials, body)
-  if (response.status === 409) {
-    const session = response.headers.get('x-transmission-session-id')
-    if (!session) throw new Error('Transmission did not return a session id.')
-    response = await transmissionRequest(endpoint, credentials, body, session)
-  }
-
-  await assertOk(response, 'Transmission')
-  const payload = (await response.json()) as { result?: string }
-  if (payload.result && payload.result !== 'success') {
-    throw new Error(`Transmission rejected download: ${payload.result}`)
-  }
-}
-
-function transmissionRequest(endpoint: URL, credentials: TransmissionCredentials, body: unknown, session?: string) {
-  const headers = new Headers({ 'content-type': 'application/json' })
-  if (session) headers.set('x-transmission-session-id', session)
-  const authorization = basicAuthHeader(credentials.username, credentials.password)
-  if (authorization) headers.set('authorization', authorization)
-
-  return fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  })
-}
-
-async function submitToAria2(downloader: Downloader, input: CreateDownloadInput) {
-  const credentials = readJson<Aria2Credentials>(downloader.credentialsJson)
-  const options = readJson<Aria2Options>(downloader.optionsJson)
-  const params: unknown[] = [[input.uri]]
-  if (credentials.secret) params.unshift(`token:${credentials.secret}`)
-  const dir = getTypedDownloadDirectory(options.dir, input.category)
-  if (dir) params.push({ dir })
-
-  const response = await fetch(downloader.endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: crypto.randomUUID(),
-      method: 'aria2.addUri',
-      params,
-    }),
-  })
-
-  await assertOk(response, 'aria2')
-  const payload = (await response.json()) as { error?: { message?: string } }
-  if (payload.error) throw new Error(`aria2 rejected download: ${payload.error.message || 'unknown error'}`)
-}
-
-function readJson<T>(value: string): T {
-  return JSON.parse(value) as T
-}
-
-function basicAuthHeader(username?: string, password?: string) {
-  if (!username && !password) return null
-  return `Basic ${btoa(`${username || ''}:${password || ''}`)}`
-}
-
-function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-}
-
-function getTypedDownloadDirectory(rootDirectory: string | undefined, category: string | undefined) {
-  const resourceDirectory = getZmeDownloadResourceDirectory(category)
-  if (!resourceDirectory) return rootDirectory || ''
-  if (!rootDirectory) return resourceDirectory
-  return `${rootDirectory.replace(/[\\/]+$/, '')}/${resourceDirectory}`
-}
-
-async function assertOk(response: Response, target: string) {
-  if (response.ok) return
-  const text = await response.text()
-  throw new Error(`${target} request failed: ${response.status}${text ? ` ${text}` : ''}`)
 }

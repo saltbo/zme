@@ -14,7 +14,7 @@ import { and, count, desc, eq, inArray, isNotNull, isNull, type SQL } from 'driz
 import type { createDb } from '../db/client'
 import { type LibraryItem, library } from '../db/schema'
 import type { ActiveTmdbSource } from './media-sources'
-import { getMediaSummary } from './tmdb'
+import { getMediaSummary } from '../adapters/providers/tmdb'
 
 type Db = ReturnType<typeof createDb>
 
