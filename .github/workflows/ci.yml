@@ -29,8 +29,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
+      - name: Test (unit + api)
         run: pnpm test
+
+      - name: Coverage report
+        run: pnpm test:coverage
 
       - name: Build
         run: pnpm build
