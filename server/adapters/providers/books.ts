@@ -73,7 +73,6 @@ type BookMediaKey =
   | { provider: 'isbn'; resourceType: 'book'; id: string }
   | { provider: 'openlibrary'; resourceType: 'work' | 'edition'; id: string }
 
-
 const OPEN_LIBRARY_BASE = 'https://openlibrary.org'
 const OPEN_LIBRARY_COVER_BASE = 'https://covers.openlibrary.org/b'
 

@@ -59,9 +59,7 @@ async function searchEnabledIndexers(
   rows: IndexerRecord[],
   input: IndexerSearchInput,
 ): Promise<IndexerSearchItem[]> {
-  const results = await Promise.allSettled(
-    rows.map((row) => deps.indexerGateways[row.kind].search(row.config, input)),
-  )
+  const results = await Promise.allSettled(rows.map((row) => deps.indexerGateways[row.kind].search(row.config, input)))
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
   if (items.length > 0) return items
 
@@ -114,7 +112,10 @@ function toDetails(record: IndexerRecord): IndexerDetails {
   }
 }
 
-async function probeIndexer(deps: Deps, indexer: IndexerRecord): Promise<{ status: 'online' | 'offline'; message: string }> {
+async function probeIndexer(
+  deps: Deps,
+  indexer: IndexerRecord,
+): Promise<{ status: 'online' | 'offline'; message: string }> {
   try {
     await deps.indexerGateways[indexer.kind].probe(indexer.config)
     return { status: 'online', message: 'Connection check succeeded.' }

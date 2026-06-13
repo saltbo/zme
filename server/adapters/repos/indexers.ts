@@ -1,5 +1,5 @@
 import type { IndexerInput } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { createDb } from '../../db/client'
 import { type Indexer, indexers } from '../../db/schema'
 import type { ConnectorHealthPatch, IndexerRecord, IndexersRepo } from '../../usecases/ports'

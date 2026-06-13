@@ -1,6 +1,12 @@
 import type { DownloadTaskPage, DownloadTaskSummary } from '@shared/types'
 import type { Deps } from './deps'
-import type { DownloaderRecord, DownloadTaskEvent, DownloadTaskGateway, DownloadTaskOwner, ListDownloadTasksInput } from './ports'
+import type {
+  DownloaderRecord,
+  DownloadTaskEvent,
+  DownloadTaskGateway,
+  DownloadTaskOwner,
+  ListDownloadTasksInput,
+} from './ports'
 
 export type { DownloadTaskEvent, ListDownloadTasksInput }
 

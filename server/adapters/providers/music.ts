@@ -124,7 +124,6 @@ interface ListenBrainzTopRecording {
   listen_count?: number
 }
 
-
 const MUSICBRAINZ_API_BASE = 'https://musicbrainz.org/ws/2'
 const LISTENBRAINZ_API_BASE = 'https://api.listenbrainz.org/1'
 const COVER_ART_ARCHIVE_BASE = 'https://coverartarchive.org'
