@@ -9,7 +9,7 @@ import {
   searchBooks,
   searchIndexers,
   searchMusicAlbums,
-} from './api'
+} from '.'
 
 describe('resource api client', () => {
   afterEach(() => {
