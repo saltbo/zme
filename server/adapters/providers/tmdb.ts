@@ -192,6 +192,8 @@ interface TmdbGenreResponse {
 }
 
 const TMDB_API_BASE = 'https://api.themoviedb.org/3'
+const SUMMARY_EDGE_CACHE_TTL_SECONDS = 3600
+const GENRES_EDGE_CACHE_TTL_SECONDS = 86400
 const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 const TMDB_WEB_BASE = 'https://www.themoviedb.org'
 const DEFAULT_WATCH_REGION = 'US'
@@ -252,7 +254,10 @@ export async function getMediaSummary(
   const url = new URL(`${TMDB_API_BASE}/${endpoint}/${id}`)
   url.searchParams.set('language', language)
 
-  const [response, genres] = await Promise.all([fetchTmdb(apiKey, url), listGenreMap(apiKey, kind, language)])
+  const [response, genres] = await Promise.all([
+    fetchTmdb(apiKey, url, SUMMARY_EDGE_CACHE_TTL_SECONDS),
+    listGenreMap(apiKey, kind, language),
+  ])
   const payload = (await response.json()) as TmdbDetailsResponse
   const item = toMediaSearchItem({ ...payload, media_type: kind }, genres)
   if (!item) throw new Error('TMDB summary response is missing required media fields.')
@@ -295,7 +300,7 @@ export async function listMediaGenres(apiKey: string, kind: MediaKind, language:
   const url = new URL(`${TMDB_API_BASE}/genre/${endpoint}/list`)
   url.searchParams.set('language', language)
 
-  const response = await fetchTmdb(apiKey, url)
+  const response = await fetchTmdb(apiKey, url, GENRES_EDGE_CACHE_TTL_SECONDS)
   const payload = (await response.json()) as TmdbGenreResponse
   return (payload.genres ?? [])
     .filter((genre): genre is { id: number; name: string } => Boolean(genre.id && genre.name))
@@ -413,12 +418,16 @@ export async function getWatchClickouts(kind: MediaKind, id: number, region: str
   }
 }
 
-async function fetchTmdb(apiKey: string, url: URL): Promise<Response> {
+async function fetchTmdb(apiKey: string, url: URL, edgeCacheTtl?: number): Promise<Response> {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: 'application/json',
     },
+    // TMDB metadata is public and changes rarely; edge-caching the per-item
+    // summary and genre lookups absorbs the N-requests-per-library-page fan-out.
+    // The cf options are ignored outside the Workers runtime.
+    ...(edgeCacheTtl ? { cf: { cacheTtl: edgeCacheTtl, cacheEverything: true } } : {}),
   })
 
   if (!response.ok) {
