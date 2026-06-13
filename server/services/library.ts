@@ -1,4 +1,3 @@
-import { buildTmdbMediaKey, getMediaKeyLibraryKind, parseTmdbMediaKey } from '@shared/media-key'
 import type {
   LibraryMediaInput,
   LibraryMediaItem,
@@ -6,11 +5,12 @@ import type {
   LibraryPageInput,
   LibraryResourceInput,
   LibraryStateItem,
-  MediaKind,
 } from '@shared/types'
 import { getMediaSummary } from '../adapters/providers/tmdb'
 import { createLibraryRepo } from '../adapters/repos/library'
 import type { createDb } from '../db/client'
+import { toLibraryResource } from '../domain/library-resource'
+import { planSaveTransition, planWatchedTransition } from '../domain/library-state'
 import type { LibraryRecord } from '../usecases/ports'
 import type { ActiveTmdbSource } from './media-sources'
 
@@ -69,17 +69,19 @@ export async function saveLibraryState(
 ): Promise<LibraryRecord> {
   const repo = createLibraryRepo(db)
   const now = new Date().toISOString()
-  const nextSavedAt = savedAt ?? now
   const resource = toLibraryResource(input)
   const key = resource.mediaKey
   const existing = await repo.get(userId, key)
-  if (existing) {
+  const plan = planSaveTransition(existing, savedAt ?? now)
+
+  if (plan.action === 'update') {
     const updated = await repo.setStates(userId, key, {
-      savedAt: existing.savedAt ?? nextSavedAt,
-      watchedAt: existing.watchedAt,
+      savedAt: plan.savedAt,
+      watchedAt: plan.watchedAt,
       updatedAt: now,
     })
-    return updated ?? existing
+    if (!updated && !existing) throw new Error(`Library item disappeared during update: ${key}`)
+    return updated ?? (existing as LibraryRecord)
   }
 
   const record: LibraryRecord = {
@@ -88,8 +90,8 @@ export async function saveLibraryState(
     mediaKey: key,
     kind: resource.kind,
     tmdbId: resource.tmdbId,
-    savedAt: nextSavedAt,
-    watchedAt: null,
+    savedAt: plan.savedAt,
+    watchedAt: plan.watchedAt,
     createdAt: now,
     updatedAt: now,
   }
@@ -112,25 +114,25 @@ export async function setWatchedState(
 ): Promise<LibraryRecord | null> {
   const repo = createLibraryRepo(db)
   const now = new Date().toISOString()
-  const nextWatchedAt = watchedAt ?? now
   const resource = toLibraryResource(input)
   const key = resource.mediaKey
   const existing = await repo.get(userId, key)
+  const plan = planWatchedTransition(existing, watched, watchedAt ?? now)
 
-  if (existing) {
-    if (!watched && !existing.savedAt) {
-      await repo.delete(userId, key)
-      return null
-    }
+  if (plan.action === 'none') return null
 
+  if (plan.action === 'delete') {
+    await repo.delete(userId, key)
+    return null
+  }
+
+  if (plan.action === 'update') {
     return repo.setStates(userId, key, {
-      savedAt: watched ? (existing.savedAt ?? nextWatchedAt) : existing.savedAt,
-      watchedAt: watched ? (existing.watchedAt ?? nextWatchedAt) : null,
+      savedAt: plan.savedAt,
+      watchedAt: plan.watchedAt,
       updatedAt: now,
     })
   }
-
-  if (!watched) return null
 
   const record: LibraryRecord = {
     id: crypto.randomUUID(),
@@ -138,8 +140,8 @@ export async function setWatchedState(
     mediaKey: key,
     kind: resource.kind,
     tmdbId: resource.tmdbId,
-    savedAt: nextWatchedAt,
-    watchedAt: nextWatchedAt,
+    savedAt: plan.savedAt,
+    watchedAt: plan.watchedAt,
     createdAt: now,
     updatedAt: now,
   }
@@ -160,38 +162,5 @@ async function toLibraryMediaItem(row: LibraryRecord, tmdb: ActiveTmdbSource): P
     watchedAt: row.watchedAt,
     updatedAt: row.updatedAt,
     ...item,
-  }
-}
-
-function toLibraryResource(input: LibraryMediaInput | LibraryResourceInput): {
-  mediaKey: string
-  kind: LibraryRecord['kind']
-  tmdbId: number | null
-} {
-  if ('mediaKey' in input) {
-    const kind = getMediaKeyLibraryKind(input.mediaKey)
-    if (!kind) throw new Error(`Invalid library media key: ${input.mediaKey}`)
-    if (kind !== input.kind) throw new Error(`Library kind does not match media key: ${input.mediaKey}`)
-
-    const tmdb = parseTmdbMediaKey(input.mediaKey)
-    return {
-      mediaKey: input.mediaKey,
-      kind: input.kind,
-      tmdbId: tmdb?.kind === input.kind ? tmdb.tmdbId : null,
-    }
-  }
-
-  return toTmdbLibraryResource(input)
-}
-
-function toTmdbLibraryResource(input: LibraryMediaInput): {
-  mediaKey: string
-  kind: MediaKind
-  tmdbId: number
-} {
-  return {
-    mediaKey: buildTmdbMediaKey(input.kind, input.id),
-    kind: input.kind,
-    tmdbId: input.id,
   }
 }
