@@ -1,42 +1,44 @@
 # Product specs
 
-Behaviour-first product specs in Gherkin prose. This directory is the source of
-truth for **what the product does**, independent of implementation. It is plain
-Markdown — there is no Cucumber runner; tests trace back to scenarios by ID.
+Behaviour-first product specs in Gherkin `.feature` files. This directory is the
+source of truth for **what the product does**, independent of implementation.
+There is **no Cucumber runner** — the `.feature` files are documentation, and tests
+trace back to scenarios by id.
 
 ## Convention
 
-- One file per capability (`onboarding.md`, `auth.md`, `library.md`, …).
-- Each scenario is a heading with a stable backtick-wrapped ID:
+- One `.feature` file per capability (`onboarding.feature`, `auth.feature`, …).
+- Each scenario carries two tags: the **id** `@<capability>/<slug>` and the **layer**
+  that proves it (`@domain` / `@usecase` / `@web` / `@api` / `@e2e`):
 
-  ```
-  ### `library/save-resource`
-  One-line behaviour summary.
-
-  - **Given** …
-  - **When** …
-  - **Then** …
-
-  _Verified at: web_
+  ```gherkin
+  @library/save-resource @web
+  Scenario: Saving an unsaved item marks it as saved
+    Given an authenticated user and an item not in their library
+    When they save the item
+    Then the item is listed as saved
   ```
 
-- The ID is `<capability>/<slug>` and never changes once written (rename = new ID).
-- `_Verified at:_` names the cheapest layer that proves it: `domain`, `usecase`,
-  `web`, `api`, or `e2e`. A product scenario is verified at the cheapest layer that
-  can — NOT everything becomes a slow E2E.
+- The id never changes once written (rename = new id).
+- Verify each scenario at the **cheapest layer that can prove it** — most land in
+  usecase/web/api; reserve `@e2e` for genuinely cross-stack, hermetic journeys.
+  BDD-lite must not turn every scenario into a slow E2E.
 
 ## Traceability
 
-Every scenario's home test carries `[spec: <id>]` in its name, e.g.
+Each scenario's home test carries `[spec: <id>]` in its name:
 
 ```ts
 it('saving an unsaved item marks it saved [spec: library/save-resource]', …)
 ```
 
-`spec/spec-coverage.test.ts` parses every scenario ID here and fails if any has no
-matching test — so the spec can't silently drift from the suite (the "living
-documentation" guarantee, without the Cucumber tax).
+`spec/spec-coverage.test.ts` parses every scenario tag and fails if any scenario
+has no matching test, or any `[spec: id]` annotation points at a missing scenario —
+so the spec can't silently drift from the suite. Living documentation, without the
+Cucumber tax.
 
-If a non-technical audience ever needs to *run* the Gherkin, the escalation path is
-`playwright-bdd` (compiles `.feature` → Playwright, keeps the native runner) — these
-prose specs already use Gherkin wording, so the migration is mechanical.
+## Escalation
+
+If a non-technical audience ever needs to *run* the Gherkin, wire `playwright-bdd`
+(compiles `.feature` → Playwright, keeps the native runner). These are already real
+`.feature` files, so that step is drop-in — no rewrite.

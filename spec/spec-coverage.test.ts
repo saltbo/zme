@@ -18,10 +18,11 @@ function walk(dir: string, matches: (file: string) => boolean): string[] {
   return out
 }
 
+// The scenario id is the `@<capability>/<slug>` Gherkin tag on each scenario.
 function specIds(): Set<string> {
   const ids = new Set<string>()
-  for (const file of walk(path.join(ROOT, 'spec'), (f) => f.endsWith('.md'))) {
-    for (const match of readFileSync(file, 'utf-8').matchAll(/^###\s+`([^`]+)`/gm)) {
+  for (const file of walk(path.join(ROOT, 'spec'), (f) => f.endsWith('.feature'))) {
+    for (const match of readFileSync(file, 'utf-8').matchAll(/@([a-z0-9-]+\/[a-z0-9-]+)\b/g)) {
       ids.add(match[1])
     }
   }
