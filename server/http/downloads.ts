@@ -43,7 +43,10 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloads/events', (c) => {
     const deps = c.get('deps')
     const userId = c.get('user').id
-    const signal = c.req.raw.signal
+    // Owns stream teardown: aborts upstream downloader streams both when the
+    // request is aborted and when the response body consumer cancels.
+    const aborter = new AbortController()
+    c.req.raw.signal.addEventListener('abort', () => aborter.abort(), { once: true })
     const encoder = new TextEncoder()
     let closed = false
 
@@ -54,7 +57,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
           controller.enqueue(encoder.encode(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`))
         }
 
-        streamDownloadTaskEvents(deps, userId, signal, send)
+        streamDownloadTaskEvents(deps, userId, aborter.signal, send)
           .catch((error) => {
             send({
               event: 'error',
@@ -69,6 +72,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
       },
       cancel() {
         closed = true
+        aborter.abort()
       },
     })
 
