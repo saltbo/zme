@@ -40,7 +40,7 @@ export function AppSidebar() {
               <Clapperboard className="size-5" />
             </span>
             <div>
-              <div className="font-semibold text-xl">ZME</div>
+              <div className="font-semibold text-xl">Curarr</div>
               <div className="text-muted-foreground text-xs">{t('privateDesk')}</div>
             </div>
           </Link>
