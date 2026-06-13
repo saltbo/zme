@@ -21,7 +21,7 @@ export async function createInitialAdmin<User extends { id: string }>(
   input: SetupAdminInput,
 ): Promise<User> {
   if (await deps.usersRepo.isInitialized()) {
-    throw new Error('Curarr has already been initialized.')
+    throw new Error('ZME has already been initialized.')
   }
 
   const user = await createAdminUser({ ...input, role: 'admin' })

@@ -25,7 +25,7 @@ describe('http wiring', () => {
   it('serves the health check without authentication', async () => {
     const response = await request('/api/health')
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ ok: true, name: 'curarr' })
+    expect(await response.json()).toEqual({ ok: true, name: 'zme' })
   })
 
   it('rejects unauthenticated requests to protected routes', async () => {

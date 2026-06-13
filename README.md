@@ -1,6 +1,6 @@
 <div align="center">
 
-# Curarr
+# ZME
 
 **A private media desk — discover movies, series, anime, music, and books, then push a release straight to your downloader.**
 
@@ -14,9 +14,9 @@
 
 </div>
 
-## What is Curarr?
+## What is ZME?
 
-Curarr is a self-hosted, single-page web app that unifies media **discovery** and
+ZME is a self-hosted, single-page web app that unifies media **discovery** and
 **acquisition** in one surface. Browse trending and popular titles pulled from
 TMDB (movies / series / anime), Open Library (books), and ListenBrainz (music);
 open a title for rich detail; then search your indexers for a release and hand it
@@ -31,10 +31,10 @@ server to babysit.
 
 Self-hosted media stacks are powerful but fragmented: you discover something in one
 app, search for a release in another (Prowlarr), and queue it in a third
-(qBittorrent / Transmission / …). Curarr collapses that loop into a single private desk:
+(qBittorrent / Transmission / …). ZME collapses that loop into a single private desk:
 
 - **One place to discover** across movies, series, anime, music, and books.
-- **One step from a title to a release** — Curarr queries your configured indexers
+- **One step from a title to a release** — ZME queries your configured indexers
   (via Prowlarr) for you.
 - **One step from a release to a download** — push it straight to your
   **download client**, no copy-pasting magnet links.
@@ -79,9 +79,9 @@ Then start the dev server:
 pnpm dev          # → http://localhost:7171
 ```
 
-On first launch Curarr opens an **onboarding flow** to create the first administrator.
+On first launch ZME opens an **onboarding flow** to create the first administrator.
 After signing in, connect your **media sources**, **indexers**, and **downloaders**
-from the Admin area — Curarr doesn't run indexers or downloaders itself, it talks to
+from the Admin area — ZME doesn't run indexers or downloaders itself, it talks to
 the services you point it at.
 
 ### Deploy to Cloudflare
@@ -115,7 +115,7 @@ tiers, and database/codegen conventions are documented in
 
 ## Disclaimer
 
-Curarr is intended for **self-hosted, personal or household use only**. It is a
+ZME is intended for **self-hosted, personal or household use only**. It is a
 discovery and download-orchestration interface — it hosts and distributes no
 media itself, and only talks to the third-party services (metadata providers,
 indexers, and download clients) that *you* configure. You are solely responsible

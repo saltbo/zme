@@ -1,6 +1,6 @@
-# Contributing to Curarr
+# Contributing to ZME
 
-Thanks for your interest in improving Curarr. This guide covers everything you need to
+Thanks for your interest in improving ZME. This guide covers everything you need to
 develop, test, and submit changes. For a high-level "what and why", see the
 [README](README.md).
 

@@ -73,7 +73,7 @@ describe('music provider', () => {
       }),
       expect.objectContaining({
         headers: expect.objectContaining({
-          'User-Agent': expect.stringContaining('curarr/'),
+          'User-Agent': expect.stringContaining('zme/'),
         }),
       }),
     )

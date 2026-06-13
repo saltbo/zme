@@ -34,7 +34,7 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
             <Clapperboard className="size-5" />
           </span>
           <div>
-            <h1 className="font-semibold text-xl">Curarr</h1>
+            <h1 className="font-semibold text-xl">ZME</h1>
             <p className="text-muted-foreground text-sm">Sign in with email and password.</p>
           </div>
         </div>

@@ -22,7 +22,7 @@ describe('createInitialAdmin', () => {
 
     await expect(
       createInitialAdmin(deps, createAdminUser, { name: 'A', email: 'a@b.c', password: 'pw' }),
-    ).rejects.toThrow('Curarr has already been initialized.')
+    ).rejects.toThrow('ZME has already been initialized.')
     expect(createAdminUser).not.toHaveBeenCalled()
   })
 

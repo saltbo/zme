@@ -127,7 +127,7 @@ interface ListenBrainzTopRecording {
 const MUSICBRAINZ_API_BASE = 'https://musicbrainz.org/ws/2'
 const LISTENBRAINZ_API_BASE = 'https://api.listenbrainz.org/1'
 const COVER_ART_ARCHIVE_BASE = 'https://coverartarchive.org'
-const MUSICBRAINZ_USER_AGENT = 'curarr/0.0.1 (https://github.com/saltbo/zme)'
+const MUSICBRAINZ_USER_AGENT = 'zme/0.0.1 (https://github.com/saltbo/zme)'
 const MUSICBRAINZ_REQUEST_INTERVAL_MS = 1000
 const MBID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
