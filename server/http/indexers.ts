@@ -11,6 +11,7 @@ import {
   searchIndexers,
   updateIndexer,
 } from '../usecases/indexers'
+import { IndexerNotConfiguredError } from '../usecases/ports'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 
@@ -77,14 +78,15 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
             })
       return c.json({ results })
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Indexer search failed.'
-      const notConfigured = message.includes('No enabled indexers')
+      if (error instanceof IndexerNotConfiguredError) {
+        return c.json({ code: 'INDEXER_NOT_CONFIGURED', error: error.message }, 503)
+      }
       return c.json(
         {
-          code: notConfigured ? 'INDEXER_NOT_CONFIGURED' : 'INDEXER_SEARCH_FAILED',
-          error: message,
+          code: 'INDEXER_SEARCH_FAILED',
+          error: error instanceof Error ? error.message : 'Indexer search failed.',
         },
-        notConfigured ? 503 : 502,
+        502,
       )
     }
   })

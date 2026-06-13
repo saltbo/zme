@@ -97,6 +97,13 @@ export interface IndexerGateway {
   resolveDownloadSource(config: ConnectorConfig, uri: string): Promise<ResolvedDownloadSource | null>
 }
 
+export class IndexerNotConfiguredError extends Error {
+  constructor() {
+    super('No enabled indexers are configured.')
+    this.name = 'IndexerNotConfiguredError'
+  }
+}
+
 export type ConnectorHealthStatus = 'unknown' | 'online' | 'offline'
 
 export interface ConnectorHealthPatch {

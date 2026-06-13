@@ -3,7 +3,7 @@ import { buildTitleSearches, filterExactMediaMatches, uniqueById } from '../doma
 import type { ResourceDownloadSearchInput } from '../domain/resource-download-matching'
 import type { Deps } from './deps'
 import { searchResourceDownloads } from './download-search'
-import type { IndexerRecord, IndexerSearchInput } from './ports'
+import { IndexerNotConfiguredError, type IndexerRecord, type IndexerSearchInput } from './ports'
 
 export async function listIndexers(deps: Deps): Promise<IndexerSummary[]> {
   const records = await deps.indexersRepo.list()
@@ -30,7 +30,7 @@ export async function deleteIndexer(deps: Deps, id: string): Promise<boolean> {
 
 export async function searchIndexers(deps: Deps, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {
   const rows = await deps.indexersRepo.listEnabled()
-  if (rows.length === 0) throw new Error('No enabled indexers are configured.')
+  if (rows.length === 0) throw new IndexerNotConfiguredError()
 
   const searches = buildTitleSearches(input)
   const results = await Promise.allSettled(searches.map((search) => searchEnabledIndexers(deps, rows, search)))
@@ -49,7 +49,7 @@ export async function searchDownloadIndexers(
   input: ResourceDownloadSearchInput,
 ): Promise<IndexerSearchItem[]> {
   const rows = await deps.indexersRepo.listEnabled()
-  if (rows.length === 0) throw new Error('No enabled indexers are configured.')
+  if (rows.length === 0) throw new IndexerNotConfiguredError()
 
   return searchResourceDownloads(deps, rows, input)
 }
