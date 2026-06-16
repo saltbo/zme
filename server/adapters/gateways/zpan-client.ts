@@ -1,17 +1,19 @@
 import { type Client, createClient } from '@server/clients/zpan/client'
-import { getApiDownloadTasks, getApiDownloadTasksEvents, postApiDownloadTasks } from '@server/clients/zpan/sdk.gen'
+import { getApiDownloadsTasks, getApiEvents, postApiDownloadsTasks } from '@server/clients/zpan/sdk.gen'
 import type {
-  GetApiDownloadTasksData,
-  GetApiDownloadTasksResponse,
-  PostApiDownloadTasksData,
-  PostApiDownloadTasksResponse,
+  GetApiDownloadsTasksData,
+  GetApiDownloadsTasksResponse,
+  GetApiEventsData,
+  PostApiDownloadsTasksData,
+  PostApiDownloadsTasksResponse,
 } from '@server/clients/zpan/types.gen'
 
-export type ZpanListDownloadTasksParams = NonNullable<GetApiDownloadTasksData['query']>
-export type ZpanDownloadTaskPage = GetApiDownloadTasksResponse
+export type ZpanListDownloadTasksParams = NonNullable<GetApiDownloadsTasksData['query']>
+export type ZpanStreamDownloadTasksParams = NonNullable<GetApiEventsData['query']>
+export type ZpanDownloadTaskPage = GetApiDownloadsTasksResponse
 export type ZpanDownloadTask = ZpanDownloadTaskPage['items'][number]
 export type ZpanDownloadTaskStatus = ZpanDownloadTask['status']
-export type ZpanCreateDownloadTaskInput = PostApiDownloadTasksData['body']
+export type ZpanCreateDownloadTaskInput = PostApiDownloadsTasksData['body']
 export type ZpanDownloadTaskEvent = {
   event: string
   data: unknown
@@ -28,24 +30,24 @@ export class ZpanClient {
   }
 
   async listDownloadTasks(params: ZpanListDownloadTasksParams): Promise<ZpanDownloadTaskPage> {
-    const result = await getApiDownloadTasks({ client: this.client, query: params })
+    const result = await getApiDownloadsTasks({ client: this.client, query: params })
     return expectData(result, 'ZPan list download tasks failed')
   }
 
-  async createDownloadTask(input: ZpanCreateDownloadTaskInput): Promise<PostApiDownloadTasksResponse> {
-    const result = await postApiDownloadTasks({ client: this.client, body: input })
+  async createDownloadTask(input: ZpanCreateDownloadTaskInput): Promise<PostApiDownloadsTasksResponse> {
+    const result = await postApiDownloadsTasks({ client: this.client, body: input })
     return expectData(result, 'ZPan create download task failed')
   }
 
   async streamDownloadTaskEvents(
-    params: ZpanListDownloadTasksParams,
+    params: ZpanStreamDownloadTasksParams,
     signal: AbortSignal,
     onEvent: (event: ZpanDownloadTaskEvent) => void,
   ): Promise<void> {
     let streamError: unknown
-    const result = await getApiDownloadTasksEvents({
+    const result = await getApiEvents({
       client: this.client,
-      query: params,
+      query: { ...params, downloadTasks: '1' },
       signal,
       sseMaxRetryAttempts: 1,
       onSseError: (error) => {

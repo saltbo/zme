@@ -34,7 +34,7 @@ describe('zpanDownloaderGateway', () => {
     await zpanDownloaderGateway.submit(config, input)
 
     expect(calls).toHaveLength(1)
-    expect(`${calls[0].method} ${calls[0].url.href}`).toBe('POST http://zpan.local/api/download-tasks')
+    expect(`${calls[0].method} ${calls[0].url.href}`).toBe('POST http://zpan.local/api/downloads/tasks')
     expect(calls[0].headers.get('authorization')).toBe('Bearer zpan-key')
     expect(JSON.parse(calls[0].body ?? '')).toEqual({
       source: { type: 'magnet', uri: 'magnet:?xt=urn:btih:abc' },
@@ -84,7 +84,7 @@ describe('zpanDownloadTaskGateway', () => {
 
     const page = await zpanDownloadTaskGateway.list(config, owner, { status: 'running', page: 1, pageSize: 20 })
 
-    expect(calls[0].url.pathname).toBe('/api/download-tasks')
+    expect(calls[0].url.pathname).toBe('/api/downloads/tasks')
     expect(calls[0].url.searchParams.get('status')).toBe('downloading')
 
     expect(page.total).toBe(1)

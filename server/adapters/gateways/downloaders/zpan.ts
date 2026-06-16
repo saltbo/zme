@@ -45,8 +45,8 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
   },
 
   async stream(config, owner, signal, emit) {
-    await getClient(config).streamDownloadTaskEvents({ page: 1, pageSize: 50 }, signal, (event) => {
-      if (event.event === 'snapshot') {
+    await getClient(config).streamDownloadTaskEvents({}, signal, (event) => {
+      if (event.event === 'download-tasks') {
         const payload = event.data as ZpanDownloadTaskPage
         emit({ event: 'snapshot', data: { items: payload.items.map((task) => toTaskSummary(owner, task)) } })
         return
