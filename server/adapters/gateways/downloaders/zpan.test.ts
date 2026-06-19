@@ -45,12 +45,14 @@ describe('zpanDownloaderGateway', () => {
     })
   })
 
-  it('probes the health endpoint', async () => {
-    const calls = stubFetch(() => jsonResponse({ ok: true }))
+  it('probes by listing a single download task with credentials', async () => {
+    const calls = stubFetch(() => jsonResponse({ items: [], total: 0, page: 1, pageSize: 1 }))
 
     await zpanDownloaderGateway.probe(config)
 
-    expect(calls[0].url.href).toBe('http://zpan.local/api/health')
+    expect(calls[0].url.pathname).toBe('/api/downloads/tasks')
+    expect(calls[0].url.searchParams.get('pageSize')).toBe('1')
+    expect(calls[0].headers.get('authorization')).toBe('Bearer zpan-key')
   })
 })
 
