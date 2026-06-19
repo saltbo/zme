@@ -8,7 +8,7 @@ import type {
 } from '@server/usecases/ports'
 import { normalizeZmeDownloadCategory } from '@shared/download-metadata'
 import type { DownloaderKind, DownloadTaskPage, DownloadTaskStatus, DownloadTaskSummary } from '@shared/types'
-import { assertOk, getTypedDownloadDirectory, normalizeBaseUrl } from './shared'
+import { getTypedDownloadDirectory } from './shared'
 
 type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']
 
@@ -24,8 +24,8 @@ export const zpanDownloaderGateway: DownloaderGateway = {
   },
 
   async probe(config) {
-    const response = await fetch(new URL('/api/health', normalizeBaseUrl(config.endpoint)))
-    await assertOk(response, 'ZPan')
+    // ZPan dropped /api/health; listing one task verifies both reachability and the API key.
+    await getClient(config).listDownloadTasks({ page: 1, pageSize: 1 })
   },
 }
 

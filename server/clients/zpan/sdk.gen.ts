@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { DeleteApiDownloadsTasksByIdData, DeleteApiDownloadsTasksByIdErrors, DeleteApiDownloadsTasksByIdResponses, GetApiDownloadsTasksByIdData, GetApiDownloadsTasksByIdErrors, GetApiDownloadsTasksByIdResponses, GetApiDownloadsTasksData, GetApiDownloadsTasksErrors, GetApiDownloadsTasksResponses, GetApiEventsData, GetApiEventsErrors, GetApiEventsResponse, GetApiEventsResponses, PatchApiDownloadsTasksByIdData, PatchApiDownloadsTasksByIdErrors, PatchApiDownloadsTasksByIdResponses, PostApiDownloadsTasksByIdAttemptsData, PostApiDownloadsTasksByIdAttemptsErrors, PostApiDownloadsTasksByIdAttemptsResponses, PostApiDownloadsTasksData, PostApiDownloadsTasksErrors, PostApiDownloadsTasksResponses, PutApiDownloadsTasksByIdStatusData, PutApiDownloadsTasksByIdStatusErrors, PutApiDownloadsTasksByIdStatusResponses } from './types.gen';
+import type { CreateDownloadTaskData, CreateDownloadTaskErrors, CreateDownloadTaskResponses, DeleteDownloadTaskData, DeleteDownloadTaskErrors, DeleteDownloadTaskResponses, GetDownloadTaskData, GetDownloadTaskErrors, GetDownloadTaskResponses, ListDownloadTasksData, ListDownloadTasksErrors, ListDownloadTasksResponses, RetryDownloadTaskData, RetryDownloadTaskErrors, RetryDownloadTaskResponses, SetDownloadTaskStatusData, SetDownloadTaskStatusErrors, SetDownloadTaskStatusResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponse, StreamEventsResponses, UpdateDownloadTaskData, UpdateDownloadTaskErrors, UpdateDownloadTaskResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -18,9 +18,15 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
     meta?: Record<string, unknown>;
 };
 
-export const getApiDownloadsTasks = <ThrowOnError extends boolean = false>(options?: Options<GetApiDownloadsTasksData, ThrowOnError>): RequestResult<GetApiDownloadsTasksResponses, GetApiDownloadsTasksErrors, ThrowOnError> => (options?.client ?? client).get<GetApiDownloadsTasksResponses, GetApiDownloadsTasksErrors, ThrowOnError>({ url: '/api/downloads/tasks', ...options });
+/**
+ * List download tasks
+ */
+export const listDownloadTasks = <ThrowOnError extends boolean = false>(options?: Options<ListDownloadTasksData, ThrowOnError>): RequestResult<ListDownloadTasksResponses, ListDownloadTasksErrors, ThrowOnError> => (options?.client ?? client).get<ListDownloadTasksResponses, ListDownloadTasksErrors, ThrowOnError>({ url: '/api/downloads/tasks', ...options });
 
-export const postApiDownloadsTasks = <ThrowOnError extends boolean = false>(options: Options<PostApiDownloadsTasksData, ThrowOnError>): RequestResult<PostApiDownloadsTasksResponses, PostApiDownloadsTasksErrors, ThrowOnError> => (options.client ?? client).post<PostApiDownloadsTasksResponses, PostApiDownloadsTasksErrors, ThrowOnError>({
+/**
+ * Create download task
+ */
+export const createDownloadTask = <ThrowOnError extends boolean = false>(options: Options<CreateDownloadTaskData, ThrowOnError>): RequestResult<CreateDownloadTaskResponses, CreateDownloadTaskErrors, ThrowOnError> => (options.client ?? client).post<CreateDownloadTaskResponses, CreateDownloadTaskErrors, ThrowOnError>({
     url: '/api/downloads/tasks',
     ...options,
     headers: {
@@ -29,11 +35,20 @@ export const postApiDownloadsTasks = <ThrowOnError extends boolean = false>(opti
     }
 });
 
-export const deleteApiDownloadsTasksById = <ThrowOnError extends boolean = false>(options: Options<DeleteApiDownloadsTasksByIdData, ThrowOnError>): RequestResult<DeleteApiDownloadsTasksByIdResponses, DeleteApiDownloadsTasksByIdErrors, ThrowOnError> => (options.client ?? client).delete<DeleteApiDownloadsTasksByIdResponses, DeleteApiDownloadsTasksByIdErrors, ThrowOnError>({ url: '/api/downloads/tasks/{id}', ...options });
+/**
+ * Delete download task
+ */
+export const deleteDownloadTask = <ThrowOnError extends boolean = false>(options: Options<DeleteDownloadTaskData, ThrowOnError>): RequestResult<DeleteDownloadTaskResponses, DeleteDownloadTaskErrors, ThrowOnError> => (options.client ?? client).delete<DeleteDownloadTaskResponses, DeleteDownloadTaskErrors, ThrowOnError>({ url: '/api/downloads/tasks/{id}', ...options });
 
-export const getApiDownloadsTasksById = <ThrowOnError extends boolean = false>(options: Options<GetApiDownloadsTasksByIdData, ThrowOnError>): RequestResult<GetApiDownloadsTasksByIdResponses, GetApiDownloadsTasksByIdErrors, ThrowOnError> => (options.client ?? client).get<GetApiDownloadsTasksByIdResponses, GetApiDownloadsTasksByIdErrors, ThrowOnError>({ url: '/api/downloads/tasks/{id}', ...options });
+/**
+ * Get download task
+ */
+export const getDownloadTask = <ThrowOnError extends boolean = false>(options: Options<GetDownloadTaskData, ThrowOnError>): RequestResult<GetDownloadTaskResponses, GetDownloadTaskErrors, ThrowOnError> => (options.client ?? client).get<GetDownloadTaskResponses, GetDownloadTaskErrors, ThrowOnError>({ url: '/api/downloads/tasks/{id}', ...options });
 
-export const patchApiDownloadsTasksById = <ThrowOnError extends boolean = false>(options: Options<PatchApiDownloadsTasksByIdData, ThrowOnError>): RequestResult<PatchApiDownloadsTasksByIdResponses, PatchApiDownloadsTasksByIdErrors, ThrowOnError> => (options.client ?? client).patch<PatchApiDownloadsTasksByIdResponses, PatchApiDownloadsTasksByIdErrors, ThrowOnError>({
+/**
+ * Update download task
+ */
+export const updateDownloadTask = <ThrowOnError extends boolean = false>(options: Options<UpdateDownloadTaskData, ThrowOnError>): RequestResult<UpdateDownloadTaskResponses, UpdateDownloadTaskErrors, ThrowOnError> => (options.client ?? client).patch<UpdateDownloadTaskResponses, UpdateDownloadTaskErrors, ThrowOnError>({
     url: '/api/downloads/tasks/{id}',
     ...options,
     headers: {
@@ -42,7 +57,10 @@ export const patchApiDownloadsTasksById = <ThrowOnError extends boolean = false>
     }
 });
 
-export const putApiDownloadsTasksByIdStatus = <ThrowOnError extends boolean = false>(options: Options<PutApiDownloadsTasksByIdStatusData, ThrowOnError>): RequestResult<PutApiDownloadsTasksByIdStatusResponses, PutApiDownloadsTasksByIdStatusErrors, ThrowOnError> => (options.client ?? client).put<PutApiDownloadsTasksByIdStatusResponses, PutApiDownloadsTasksByIdStatusErrors, ThrowOnError>({
+/**
+ * Pause, resume, or cancel a task
+ */
+export const setDownloadTaskStatus = <ThrowOnError extends boolean = false>(options: Options<SetDownloadTaskStatusData, ThrowOnError>): RequestResult<SetDownloadTaskStatusResponses, SetDownloadTaskStatusErrors, ThrowOnError> => (options.client ?? client).put<SetDownloadTaskStatusResponses, SetDownloadTaskStatusErrors, ThrowOnError>({
     url: '/api/downloads/tasks/{id}/status',
     ...options,
     headers: {
@@ -51,7 +69,10 @@ export const putApiDownloadsTasksByIdStatus = <ThrowOnError extends boolean = fa
     }
 });
 
-export const postApiDownloadsTasksByIdAttempts = <ThrowOnError extends boolean = false>(options: Options<PostApiDownloadsTasksByIdAttemptsData, ThrowOnError>): RequestResult<PostApiDownloadsTasksByIdAttemptsResponses, PostApiDownloadsTasksByIdAttemptsErrors, ThrowOnError> => (options.client ?? client).post<PostApiDownloadsTasksByIdAttemptsResponses, PostApiDownloadsTasksByIdAttemptsErrors, ThrowOnError>({
+/**
+ * Retry or restart a task
+ */
+export const retryDownloadTask = <ThrowOnError extends boolean = false>(options: Options<RetryDownloadTaskData, ThrowOnError>): RequestResult<RetryDownloadTaskResponses, RetryDownloadTaskErrors, ThrowOnError> => (options.client ?? client).post<RetryDownloadTaskResponses, RetryDownloadTaskErrors, ThrowOnError>({
     url: '/api/downloads/tasks/{id}/attempts',
     ...options,
     headers: {
@@ -71,4 +92,4 @@ export const postApiDownloadsTasksByIdAttempts = <ThrowOnError extends boolean =
  * - `heartbeat` → `{ at }` — keep-alive emitted when nothing changed for a while
  * - `error` → `{ message }` — a domain query failed this tick
  */
-export const getApiEvents = <ThrowOnError extends boolean = false>(options?: Options<GetApiEventsData, ThrowOnError, GetApiEventsResponse>): Promise<ServerSentEventsResult<GetApiEventsResponses, GetApiEventsErrors | void, ThrowOnError>> => (options?.client ?? client).sse.get<GetApiEventsResponses, GetApiEventsErrors, ThrowOnError>({ url: '/api/events', ...options });
+export const streamEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamEventsData, ThrowOnError, StreamEventsResponse>): Promise<ServerSentEventsResult<StreamEventsResponses, StreamEventsErrors | void, ThrowOnError>> => (options?.client ?? client).sse.get<StreamEventsResponses, StreamEventsErrors, ThrowOnError>({ url: '/api/events', ...options });
