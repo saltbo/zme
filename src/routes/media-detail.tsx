@@ -7,7 +7,6 @@ import type {
   MediaVideo,
   MediaWatchProviderGroupType,
 } from '@shared/types'
-import { useMutation } from '@tanstack/react-query'
 import {
   CalendarDays,
   CircleCheck,
@@ -32,6 +31,7 @@ import Lightbox from 'yet-another-react-lightbox'
 import FullscreenPlugin from 'yet-another-react-lightbox/plugins/fullscreen'
 import ZoomPlugin from 'yet-another-react-lightbox/plugins/zoom'
 import 'yet-another-react-lightbox/styles.css'
+import { uniqueStrings } from '@shared/indexer-search'
 import type { AppOutletContext } from '@/components/app-shell/types'
 import { MediaRail } from '@/components/media/media-components'
 import { ReleaseSearchDialog, type ReleaseSearchError } from '@/components/release-search-dialog'
@@ -45,11 +45,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useMediaDetails, useMediaWatchClickouts } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
-import { ApiError, searchIndexers } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import { type ReleaseSearchProgress, searchMediaReleasesInSteps } from '@/lib/release-search'
 import { cn } from '@/lib/utils'
 
 function getReleaseSearchInput(media: MediaDetails) {
-  const title = media.originalTitle || media.title
+  const title = media.title
+  const aliases = uniqueStrings([media.originalTitle, ...media.aliases])
   const query = [title, media.releaseYear].filter(Boolean).join(' ')
   const tmdbId = Number(media.ids.tmdb)
   const tvdbId = Number(media.ids.tvdb)
@@ -68,7 +70,7 @@ function getReleaseSearchInput(media: MediaDetails) {
   return {
     query,
     title,
-    aliases: media.aliases,
+    aliases,
     year: media.releaseYear,
     kind: media.kind,
     tmdbId: hasTmdbId ? tmdbId : undefined,
@@ -134,19 +136,10 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   const [releaseDialogOpen, setReleaseDialogOpen] = useState(false)
   const [releaseQuery, setReleaseQuery] = useState('')
   const [releaseError, setReleaseError] = useState<ReleaseSearchError | null>(null)
+  const [releaseSearchLoading, setReleaseSearchLoading] = useState(false)
+  const [releaseSearchProgress, setReleaseSearchProgress] = useState<ReleaseSearchProgress | null>(null)
   const [selectedVideo, setSelectedVideo] = useState<MediaVideo | null>(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(-1)
-  const releaseSearch = useMutation({
-    mutationFn: searchIndexers,
-    onSuccess: (payload) => {
-      setReleases(payload.results)
-      setReleaseError(null)
-    },
-    onError: (error) => {
-      setReleases([])
-      setReleaseError(getReleaseSearchError(error, t))
-    },
-  })
 
   useEffect(() => {
     if (!media) return
@@ -168,7 +161,22 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
     setReleaseDialogOpen(true)
     setReleaseError(null)
     setReleases([])
-    releaseSearch.mutate(searchInput)
+    setReleaseSearchLoading(true)
+    setReleaseSearchProgress(null)
+    try {
+      const results = await searchMediaReleasesInSteps(searchInput, (progress, partialResults) => {
+        setReleaseSearchProgress(progress)
+        setReleases(partialResults)
+      })
+      setReleases(results)
+      setReleaseError(null)
+    } catch (error) {
+      setReleases([])
+      setReleaseError(getReleaseSearchError(error, t))
+    } finally {
+      setReleaseSearchLoading(false)
+      setReleaseSearchProgress(null)
+    }
   }
 
   async function handleMediaStatusChange(status: MediaStatus) {
@@ -507,8 +515,9 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
           media={media}
           query={releaseQuery}
           items={releases}
-          loading={releaseSearch.isPending}
+          loading={releaseSearchLoading}
           error={releaseError}
+          progress={releaseSearchProgress}
           onClose={() => setReleaseDialogOpen(false)}
           onSearch={() => void handleFindReleases()}
         />

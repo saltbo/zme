@@ -17,7 +17,6 @@ import type {
   MusicGenre,
   MusicReleaseType,
 } from '@shared/types'
-import { useMutation } from '@tanstack/react-query'
 import {
   BookOpen,
   CalendarDays,
@@ -53,7 +52,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useBookDetails, useBookSearch, useMusicAlbumDetails, useMusicSearch } from '@/hooks/use-resource-queries'
-import { ApiError, searchIndexers } from '@/lib/api'
+import { ApiError } from '@/lib/api'
+import {
+  type ReleaseSearchProgress,
+  type ReleaseSearchProgressHandler,
+  searchResourceReleasesInSteps,
+} from '@/lib/release-search'
 import {
   compareResourceTitle,
   getResourceSearchSort,
@@ -1106,6 +1110,7 @@ export function MusicDetailPage() {
           <ResourceReleaseDialog
             state={releaseDialog}
             loading={releaseSearch.isPending}
+            progress={releaseSearch.progress}
             onClose={() => setReleaseDialog(null)}
             onSearch={() => releaseSearch.mutate(releaseDialog?.input)}
           />
@@ -1228,6 +1233,7 @@ export function BookDetailPage() {
           <ResourceReleaseDialog
             state={releaseDialog}
             loading={releaseSearch.isPending}
+            progress={releaseSearch.progress}
             onClose={() => setReleaseDialog(null)}
             onSearch={() => releaseSearch.mutate(releaseDialog?.input)}
           />
@@ -1635,23 +1641,16 @@ interface ResourceReleaseSearchInput {
 
 function useResourceReleaseSearch(setReleaseDialog: (state: ReleaseDialogState | null) => void) {
   const { t } = useTranslation()
+  const [isPending, setIsPending] = useState(false)
+  const [progress, setProgress] = useState<ReleaseSearchProgress | null>(null)
 
-  return useMutation({
-    mutationFn: async (input: ResourceReleaseSearchInput | undefined) => {
-      if (!input) throw new Error('Release search input is missing.')
-      const payload = await searchIndexers({
-        query: input.query,
-        target: input.target,
-        title: input.title,
-        aliases: input.aliases,
-        creators: input.creators,
-        year: input.year,
-        formats: input.formats,
-        narrator: input.narrator,
-      })
-      return { input, results: payload.results }
-    },
-    onSuccess: ({ input, results }) => {
+  async function mutate(input: ResourceReleaseSearchInput | undefined) {
+    if (!input) return
+
+    setIsPending(true)
+    setProgress(null)
+    const onProgress: ReleaseSearchProgressHandler = (nextProgress, results) => {
+      setProgress(nextProgress)
       setReleaseDialog({
         item: input.item,
         label: input.target,
@@ -1660,9 +1659,19 @@ function useResourceReleaseSearch(setReleaseDialog: (state: ReleaseDialogState |
         error: null,
         input,
       })
-    },
-    onError: (error, input) => {
-      if (!input) return
+    }
+
+    try {
+      const results = await searchResourceReleasesInSteps(input, onProgress)
+      setReleaseDialog({
+        item: input.item,
+        label: input.target,
+        query: input.query,
+        releases: results,
+        error: null,
+        input,
+      })
+    } catch (error) {
       setReleaseDialog({
         item: input.item,
         label: input.target,
@@ -1671,8 +1680,13 @@ function useResourceReleaseSearch(setReleaseDialog: (state: ReleaseDialogState |
         error: getReleaseSearchError(error, t),
         input,
       })
-    },
-  })
+    } finally {
+      setIsPending(false)
+      setProgress(null)
+    }
+  }
+
+  return { isPending, progress, mutate }
 }
 
 function openResourceReleaseSearch({
@@ -1693,11 +1707,13 @@ function openResourceReleaseSearch({
 function ResourceReleaseDialog({
   state,
   loading,
+  progress,
   onClose,
   onSearch,
 }: {
   state: ReleaseDialogState | null
   loading: boolean
+  progress: ReleaseSearchProgress | null
   onClose: () => void
   onSearch: () => void
 }) {
@@ -1710,6 +1726,7 @@ function ResourceReleaseDialog({
       items={state.releases}
       loading={loading}
       error={state.error}
+      progress={progress}
       onClose={onClose}
       onSearch={onSearch}
     />

@@ -7,7 +7,7 @@ import {
   removeLibraryResource,
   saveLibraryResource,
   searchBooks,
-  searchIndexers,
+  searchIndexerOnce,
   searchMusicAlbums,
 } from '.'
 
@@ -152,22 +152,17 @@ describe('resource api client', () => {
     )
   })
 
-  it('sends target-aware resource indexer search parameters', async () => {
+  it('sends atomic indexer search parameters', async () => {
     const fetch = stubJsonFetch({ results: [] })
 
-    await searchIndexers({
-      query: 'Matilda Roald Dahl audiobook',
-      target: 'audiobook',
-      title: 'Matilda',
-      aliases: ['Matilda, or, The Child Genius'],
-      creators: ['Roald Dahl'],
-      year: '1988',
-      formats: ['audiobook', 'm4b', 'mp3'],
-      narrator: 'Kate Winslet',
+    await searchIndexerOnce({
+      query: 'Dune 2021',
+      searchType: 'search',
+      categories: [2000, 2040],
     })
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/indexers/search?q=Matilda+Roald+Dahl+audiobook&target=audiobook&title=Matilda&aliases=Matilda%2C+or%2C+The+Child+Genius&creators=Roald+Dahl&year=1988&formats=audiobook%7Cm4b%7Cmp3&narrator=Kate+Winslet',
+      '/api/indexers/search?q=Dune+2021&searchType=search&categories=2000%7C2040',
       expect.objectContaining({ credentials: 'include' }),
     )
   })

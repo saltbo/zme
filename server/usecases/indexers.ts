@@ -1,8 +1,5 @@
-import { buildTitleSearches, filterExactMediaMatches, uniqueById } from '@server/domain/release-matching'
-import type { ResourceDownloadSearchInput } from '@server/domain/resource-download-matching'
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
 import type { Deps } from './deps'
-import { searchResourceDownloads } from './download-search'
 import { IndexerNotConfiguredError, type IndexerRecord, type IndexerSearchInput } from './ports'
 
 export async function listIndexers(deps: Deps): Promise<IndexerSummary[]> {
@@ -32,26 +29,7 @@ export async function searchIndexers(deps: Deps, input: IndexerSearchInput): Pro
   const rows = await deps.indexersRepo.listEnabled()
   if (rows.length === 0) throw new IndexerNotConfiguredError()
 
-  const searches = buildTitleSearches(input)
-  const results = await Promise.allSettled(searches.map((search) => searchEnabledIndexers(deps, rows, search)))
-  const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
-  if (items.length > 0) return uniqueById(filterExactMediaMatches(items, input))
-
-  const firstError = results.find((result) => result.status === 'rejected')
-  if (firstError?.status === 'rejected' && firstError.reason instanceof Error) {
-    throw firstError.reason
-  }
-  return []
-}
-
-export async function searchDownloadIndexers(
-  deps: Deps,
-  input: ResourceDownloadSearchInput,
-): Promise<IndexerSearchItem[]> {
-  const rows = await deps.indexersRepo.listEnabled()
-  if (rows.length === 0) throw new IndexerNotConfiguredError()
-
-  return searchResourceDownloads(deps, rows, input)
+  return searchEnabledIndexers(deps, rows, input)
 }
 
 async function searchEnabledIndexers(

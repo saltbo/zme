@@ -35,6 +35,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
 import { createDownload } from '@/lib/api'
+import type { ReleaseSearchProgress } from '@/lib/release-search'
 import { cn, formatBytes } from '@/lib/utils'
 
 const releaseSkeletonKeys = ['release-skeleton-1', 'release-skeleton-2', 'release-skeleton-3', 'release-skeleton-4']
@@ -60,6 +61,7 @@ export function ReleaseSearchDialog({
   items,
   loading,
   error,
+  progress,
   onClose,
   onSearch,
 }: {
@@ -68,6 +70,7 @@ export function ReleaseSearchDialog({
   items: IndexerSearchItem[]
   loading: boolean
   error: ReleaseSearchError | null
+  progress?: ReleaseSearchProgress | null
   onClose: () => void
   onSearch: () => void
 }) {
@@ -79,6 +82,7 @@ export function ReleaseSearchDialog({
       items={items}
       loading={loading}
       error={error}
+      progress={progress}
       onSearch={onSearch}
     />
   )
@@ -111,6 +115,7 @@ function ReleaseSearchContent({
   items,
   loading,
   error,
+  progress,
   onSearch,
 }: {
   media: ReleaseSearchMedia
@@ -118,6 +123,7 @@ function ReleaseSearchContent({
   items: IndexerSearchItem[]
   loading: boolean
   error: ReleaseSearchError | null
+  progress?: ReleaseSearchProgress | null
   onSearch: () => void
 }) {
   const { t } = useTranslation()
@@ -146,7 +152,7 @@ function ReleaseSearchContent({
     { label: t('sortBySmallest'), value: 'size-asc' },
   ]
   const visibleItems = filterReleases({ items, keyword, indexer, quality, sort })
-  const status = getReleaseStatus({ loading, error, resultCount: visibleItems.length, t })
+  const status = getReleaseStatus({ loading, error, progress, resultCount: visibleItems.length, t })
   const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all'
   const enabledDownloaders = (downloaders.data ?? []).filter((item) => item.enabled)
 
@@ -252,6 +258,18 @@ function ReleaseSearchContent({
             {error ? t('retrySearch') : t('searchAgain')}
           </Button>
         </div>
+        {loading && progress ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            <span>
+              {t(progress.phase === 'fallback' ? 'fallbackSearchProgress' : 'releaseSearchProgress', {
+                current: progress.current,
+                total: progress.total,
+                query: progress.query,
+              })}
+            </span>
+          </div>
+        ) : null}
         {!loading && !error ? (
           <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
             <SlidersHorizontal className="size-3.5" />
@@ -339,18 +357,20 @@ function useIsDesktop() {
 function getReleaseStatus({
   loading,
   error,
+  progress,
   resultCount,
   t,
 }: {
   loading: boolean
   error: ReleaseSearchError | null
+  progress?: ReleaseSearchProgress | null
   resultCount: number
   t: (key: string) => string
 }) {
   if (loading) {
     return {
       icon: <LoaderCircle className="size-4 animate-spin" />,
-      label: t('searchingIndexers'),
+      label: progress ? `${progress.current}/${progress.total}` : t('searchingIndexers'),
       className: 'bg-primary/10 text-primary',
     }
   }

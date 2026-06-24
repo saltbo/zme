@@ -1,42 +1,16 @@
-import type {
-  DownloadSearchTarget,
-  IndexerDetails,
-  IndexerHealth,
-  IndexerInput,
-  IndexerSearchItem,
-  IndexerSummary,
-  MediaKind,
-} from '@shared/types'
+import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
 import { apiRequest, jsonBody, query } from './client'
 
-export async function searchIndexers(input: {
+export async function searchIndexerOnce(input: {
   query: string
-  target?: MediaKind | DownloadSearchTarget
-  title?: string
-  aliases?: string[]
-  creators?: string[]
-  year?: string | null
-  formats?: string[]
-  narrator?: string | null
-  kind?: MediaKind
-  imdbId?: string | null
-  tmdbId?: number | null
-  tvdbId?: number | null
+  searchType?: 'search' | 'audiosearch' | 'booksearch'
+  categories?: number[]
 }) {
   return apiRequest<{ results: IndexerSearchItem[] }>(
     `/api/indexers/search${query({
       q: input.query,
-      target: input.target,
-      title: input.title,
-      aliases: input.aliases?.join('|'),
-      creators: input.creators?.join('|'),
-      year: input.year ?? undefined,
-      formats: input.formats?.join('|'),
-      narrator: input.narrator ?? undefined,
-      kind: input.kind,
-      imdbId: input.imdbId ?? undefined,
-      tmdbId: input.tmdbId ?? undefined,
-      tvdbId: input.tvdbId ?? undefined,
+      searchType: input.searchType,
+      categories: input.categories?.join('|'),
     })}`,
     'Failed to search indexers.',
   )

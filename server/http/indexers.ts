@@ -5,7 +5,6 @@ import {
   deleteIndexer,
   getIndexer,
   listIndexers,
-  searchDownloadIndexers,
   searchIndexers,
   updateIndexer,
 } from '@server/usecases/indexers'
@@ -17,25 +16,8 @@ import { idParamsSchema } from './schemas'
 
 const indexerSearchQuerySchema = z.object({
   q: z.string().trim().min(1),
-  target: z.enum(['movie', 'tv', 'music', 'ebook', 'audiobook']).optional(),
-  title: z.string().trim().min(1).optional(),
-  aliases: z.string().trim().optional(),
-  creators: z.string().trim().optional(),
-  formats: z.string().trim().optional(),
-  narrator: z.string().trim().min(1).optional(),
-  year: z
-    .string()
-    .trim()
-    .regex(/^(19|20)\d{2}$/)
-    .optional(),
-  kind: z.enum(['movie', 'tv']).optional(),
-  imdbId: z
-    .string()
-    .trim()
-    .regex(/^tt\d+$/i)
-    .optional(),
-  tmdbId: z.coerce.number().int().positive().optional(),
-  tvdbId: z.coerce.number().int().positive().optional(),
+  searchType: z.enum(['search', 'audiosearch', 'booksearch']).optional(),
+  categories: z.string().trim().optional(),
 })
 
 const indexerSchema = z.object({
@@ -50,32 +32,14 @@ const indexerSchema = z.object({
 export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   // /indexers/search must be registered before /indexers/:id.
   routes.get('/indexers/search', zValidator('query', indexerSearchQuerySchema), async (c) => {
-    const { q, target, title, aliases, creators, formats, narrator, year, kind, imdbId, tmdbId, tvdbId } =
-      c.req.valid('query')
+    const { q, searchType, categories } = c.req.valid('query')
     try {
       const deps = c.get('deps')
-      const results =
-        target === 'music' || target === 'ebook' || target === 'audiobook'
-          ? await searchDownloadIndexers(deps, {
-              target,
-              query: q,
-              title,
-              aliases: parseDelimitedList(aliases),
-              creators: parseDelimitedList(creators),
-              year,
-              formats: parseDelimitedList(formats),
-              narrator,
-            })
-          : await searchIndexers(deps, {
-              query: q,
-              title,
-              aliases: parseDelimitedList(aliases),
-              year,
-              kind: target === 'movie' || target === 'tv' ? target : kind,
-              imdbId,
-              tmdbId,
-              tvdbId,
-            })
+      const results = await searchIndexers(deps, {
+        query: q,
+        searchType,
+        categories: parseNumberList(categories),
+      })
       return c.json({ results })
     } catch (error) {
       if (error instanceof IndexerNotConfiguredError) {
@@ -130,10 +94,10 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   })
 }
 
-function parseDelimitedList(value: string | undefined): string[] {
+function parseNumberList(value: string | undefined): number[] {
   if (!value) return []
   return value
-    .split('|')
-    .map((item) => item.trim())
-    .filter(Boolean)
+    .split(/[|,]/)
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isInteger(item) && item > 0)
 }
