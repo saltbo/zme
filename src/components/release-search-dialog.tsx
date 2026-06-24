@@ -3,6 +3,7 @@ import type { DownloaderSummary, IndexerSearchItem, MediaSearchItem } from '@sha
 import dayjs from 'dayjs'
 import {
   AlertTriangle,
+  CircleCheck,
   Database,
   Download,
   HardDriveDownload,
@@ -32,13 +33,10 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Skeleton } from '@/components/ui/skeleton'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
 import { createDownload } from '@/lib/api'
 import type { ReleaseSearchProgress } from '@/lib/release-search'
 import { cn, formatBytes } from '@/lib/utils'
-
-const releaseSkeletonKeys = ['release-skeleton-1', 'release-skeleton-2', 'release-skeleton-3', 'release-skeleton-4']
 
 export interface ReleaseSearchMedia extends MediaSearchItem {
   downloadCategory?: string
@@ -264,9 +262,9 @@ function ReleaseSearchContent({
             <LoaderCircle className="size-3.5 animate-spin" />
             <span>
               {t(progress.phase === 'fallback' ? 'fallbackSearchProgress' : 'releaseSearchProgress', {
-                current: progress.current,
+                completed: progress.completed,
                 total: progress.total,
-                query: progress.query,
+                active: progress.active,
               })}
             </span>
           </div>
@@ -299,6 +297,7 @@ function ReleaseSearchContent({
           media={media}
           items={visibleItems}
           loading={loading}
+          progress={progress}
           error={error}
           onRetry={onSearch}
           filtered={hasFilters}
@@ -371,7 +370,7 @@ function getReleaseStatus({
   if (loading) {
     return {
       icon: <LoaderCircle className="size-4 animate-spin" />,
-      label: progress ? `${progress.current}/${progress.total}` : t('searchingIndexers'),
+      label: progress ? `${progress.completed}/${progress.total}` : t('searchingIndexers'),
       className: 'bg-primary/10 text-primary',
     }
   }
@@ -418,6 +417,7 @@ function ReleasePanel({
   media,
   items,
   loading,
+  progress,
   loadingDownloaders,
   error,
   onRetry,
@@ -427,6 +427,7 @@ function ReleasePanel({
   media: ReleaseSearchMedia
   items: IndexerSearchItem[]
   loading: boolean
+  progress?: ReleaseSearchProgress | null
   loadingDownloaders: boolean
   error: ReleaseSearchError | null
   onRetry: () => void
@@ -435,23 +436,7 @@ function ReleasePanel({
   const { t } = useTranslation()
 
   if (loading) {
-    return (
-      <div className="flex flex-col gap-3 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-        {releaseSkeletonKeys.map((key) => (
-          <Card key={key} className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
-            <CardContent className="px-0">
-              <Skeleton className="h-4 w-5/6" />
-              <Skeleton className="mt-3 h-3 w-1/2" />
-              <div className="mt-4 flex gap-2">
-                <Skeleton className="h-5 w-20 rounded-full" />
-                <Skeleton className="h-5 w-24 rounded-full" />
-              </div>
-            </CardContent>
-            <Skeleton className="h-11 rounded-lg" />
-          </Card>
-        ))}
-      </div>
-    )
+    return <ReleaseSearchProgressPanel progress={progress} />
   }
 
   if (error) {
@@ -506,6 +491,73 @@ function ReleasePanel({
       ))}
     </div>
   )
+}
+
+function ReleaseSearchProgressPanel({ progress }: { progress?: ReleaseSearchProgress | null }) {
+  const { t } = useTranslation()
+
+  if (!progress) {
+    return (
+      <Card className="flex min-h-64 items-center justify-center p-6 text-center animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+        <CardContent className="flex max-w-md flex-col items-center px-0">
+          <LoaderCircle className="size-8 animate-spin text-primary" />
+          <h3 className="mt-4 font-semibold">{t('searchingIndexers')}</h3>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="flex min-h-64 items-center justify-center p-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 sm:p-6">
+      <CardContent className="w-full max-w-3xl px-0">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold">{t('releaseSearchInProgress')}</h3>
+            <p className="mt-1 text-muted-foreground text-sm">
+              {t(progress.phase === 'fallback' ? 'fallbackSearchProgress' : 'releaseSearchProgress', {
+                completed: progress.completed,
+                total: progress.total,
+                active: progress.active,
+              })}
+            </p>
+          </div>
+          <Badge variant="secondary">{t('concurrentSearches', { count: progress.active })}</Badge>
+        </div>
+        <div className="grid gap-2">
+          {progress.steps.map((step) => (
+            <div
+              key={step.id}
+              className="grid min-h-12 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-background px-3 py-2"
+            >
+              <ReleaseSearchStepIcon status={step.status} />
+              <div className="min-w-0">
+                <div className="truncate font-medium text-sm">{step.query}</div>
+                <div className="text-muted-foreground text-xs">
+                  {t(step.phase === 'fallback' ? 'fallbackSearchPhase' : 'primarySearchPhase')}
+                </div>
+              </div>
+              <div className="shrink-0 text-right text-muted-foreground text-xs">
+                {step.status === 'completed'
+                  ? t('releaseSearchStepFound', { count: step.resultCount ?? 0 })
+                  : step.status === 'failed'
+                    ? t('releaseSearchStepFailed')
+                    : step.status === 'running'
+                      ? t('releaseSearchStepRunning')
+                      : t('releaseSearchStepPending')}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ReleaseSearchStepIcon({ status }: { status: ReleaseSearchProgress['steps'][number]['status'] }) {
+  if (status === 'completed') return <CircleCheck className="size-4 text-primary" />
+  if (status === 'failed') return <AlertTriangle className="size-4 text-destructive" />
+  if (status === 'running') return <LoaderCircle className="size-4 animate-spin text-primary" />
+  return <Search className="size-4 text-muted-foreground" />
 }
 
 function ReleaseRow({

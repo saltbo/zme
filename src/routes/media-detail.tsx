@@ -164,9 +164,8 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
     setReleaseSearchLoading(true)
     setReleaseSearchProgress(null)
     try {
-      const results = await searchMediaReleasesInSteps(searchInput, (progress, partialResults) => {
+      const results = await searchMediaReleasesInSteps(searchInput, (progress) => {
         setReleaseSearchProgress(progress)
-        setReleases(partialResults)
       })
       setReleases(results)
       setReleaseError(null)

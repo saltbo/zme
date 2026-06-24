@@ -12,13 +12,24 @@ import type { IndexerSearchItem } from '@shared/types'
 import { searchIndexerOnce } from '@/lib/api'
 
 export interface ReleaseSearchProgress {
-  current: number
+  completed: number
   total: number
-  query: string
+  active: number
   phase: 'primary' | 'fallback'
+  steps: ReleaseSearchStepProgress[]
+}
+
+export interface ReleaseSearchStepProgress {
+  id: string
+  query: string
+  phase: ReleaseSearchProgress['phase']
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  resultCount: number | null
 }
 
 export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: IndexerSearchItem[]) => void
+
+const releaseSearchConcurrency = 3
 
 export async function searchMediaReleasesInSteps(
   input: ReleaseMatchCriteria,
@@ -68,22 +79,63 @@ async function runSearches<T extends ResourceSearchQuery | ReleaseMatchCriteria>
   getResults: (items: IndexerSearchItem[]) => IndexerSearchItem[],
 ): Promise<Error | null> {
   let firstError: Error | null = null
+  let nextIndex = 0
+  let active = 0
+  let completed = 0
+  const steps: ReleaseSearchStepProgress[] = searches.map((search, index) => ({
+    id: `${phase}-${index}-${search.query}`,
+    query: search.query,
+    phase,
+    status: 'pending',
+    resultCount: null,
+  }))
 
-  for (const [index, search] of searches.entries()) {
-    const progress = { current: index + 1, total: searches.length, query: search.query, phase }
-    onProgress(progress, getResults(collected))
-    try {
-      const payload = await searchIndexerOnce({
-        query: search.query,
-        searchType: 'searchType' in search ? search.searchType : undefined,
-        categories: 'categories' in search ? search.categories : undefined,
-      })
-      collected.push(...payload.results)
-    } catch (error) {
-      firstError ??= error instanceof Error ? error : new Error('Indexer search failed.')
+  if (searches.length === 0) return null
+
+  await new Promise<void>((resolve) => {
+    const emit = () => {
+      onProgress(
+        { completed, total: searches.length, active, phase, steps: steps.map((step) => ({ ...step })) },
+        getResults(collected),
+      )
     }
-    onProgress(progress, getResults(collected))
-  }
+
+    const startNext = () => {
+      while (active < releaseSearchConcurrency && nextIndex < searches.length) {
+        const index = nextIndex
+        nextIndex += 1
+        active += 1
+        steps[index] = { ...steps[index], status: 'running' }
+        emit()
+
+        void searchIndexerOnce({
+          query: searches[index].query,
+          searchType: 'searchType' in searches[index] ? searches[index].searchType : undefined,
+          categories: 'categories' in searches[index] ? searches[index].categories : undefined,
+        })
+          .then((payload) => {
+            collected.push(...payload.results)
+            steps[index] = { ...steps[index], status: 'completed', resultCount: payload.results.length }
+          })
+          .catch((error) => {
+            firstError ??= error instanceof Error ? error : new Error('Indexer search failed.')
+            steps[index] = { ...steps[index], status: 'failed', resultCount: 0 }
+          })
+          .finally(() => {
+            active -= 1
+            completed += 1
+            emit()
+            if (completed === searches.length) {
+              resolve()
+              return
+            }
+            startNext()
+          })
+      }
+    }
+
+    startNext()
+  })
 
   return firstError
 }

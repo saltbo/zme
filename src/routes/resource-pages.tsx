@@ -1649,13 +1649,13 @@ function useResourceReleaseSearch(setReleaseDialog: (state: ReleaseDialogState |
 
     setIsPending(true)
     setProgress(null)
-    const onProgress: ReleaseSearchProgressHandler = (nextProgress, results) => {
+    const onProgress: ReleaseSearchProgressHandler = (nextProgress) => {
       setProgress(nextProgress)
       setReleaseDialog({
         item: input.item,
         label: input.target,
         query: input.query,
-        releases: results,
+        releases: [],
         error: null,
         input,
       })
