@@ -249,6 +249,7 @@ function ReleaseSearchContent({
             onClick={onSearch}
             variant={error ? 'default' : 'outline'}
             className="lg:justify-self-end"
+            disabled={loading}
           >
             {loading ? (
               <LoaderCircle data-icon="inline-start" className="animate-spin" />

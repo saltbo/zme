@@ -1645,7 +1645,7 @@ function useResourceReleaseSearch(setReleaseDialog: (state: ReleaseDialogState |
   const [progress, setProgress] = useState<ReleaseSearchProgress | null>(null)
 
   async function mutate(input: ResourceReleaseSearchInput | undefined) {
-    if (!input) return
+    if (!input || isPending) return
 
     setIsPending(true)
     setProgress(null)

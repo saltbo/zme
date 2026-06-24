@@ -154,7 +154,7 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   }, [location.pathname, media, setTopbarOverride, t])
 
   async function handleFindReleases() {
-    if (!media) return
+    if (!media || releaseSearchLoading) return
 
     const searchInput = getReleaseSearchInput(media)
     setReleaseQuery(searchInput.label)
