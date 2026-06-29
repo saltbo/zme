@@ -1,6 +1,13 @@
 import { toZmeDownloadCategory } from '@shared/download-metadata'
+import {
+  analyzeIndexerRelease,
+  compareIndexerReleasesByRecommendation,
+  type IndexerReleaseAnalysis,
+  type ReleaseSourceTier,
+} from '@shared/release-analysis'
 import type { DownloaderSummary, IndexerSearchItem, MediaSearchItem } from '@shared/types'
 import dayjs from 'dayjs'
+import type { TFunction } from 'i18next'
 import {
   AlertTriangle,
   CircleCheck,
@@ -33,6 +40,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
 import { createDownload } from '@/lib/api'
 import type { ReleaseSearchProgress } from '@/lib/release-search'
@@ -50,8 +58,9 @@ export interface ReleaseSearchError {
   tone: 'configuration' | 'connection' | 'generic'
 }
 
-type ReleaseSort = 'seeders' | 'date' | 'size-desc' | 'size-asc'
+type ReleaseSort = 'best' | 'seeders' | 'date' | 'size-desc' | 'size-asc'
 type ReleaseQuality = 'all' | '2160p' | '1080p' | '720p' | 'other'
+type ReleaseSourceFilter = 'all' | 'high' | 'watchable' | 'low' | 'unknown'
 
 export function ReleaseSearchDialog({
   media,
@@ -129,7 +138,8 @@ function ReleaseSearchContent({
   const [keyword, setKeyword] = useState('')
   const [indexer, setIndexer] = useState('all')
   const [quality, setQuality] = useState<ReleaseQuality>('all')
-  const [sort, setSort] = useState<ReleaseSort>('seeders')
+  const [sourceFilter, setSourceFilter] = useState<ReleaseSourceFilter>('all')
+  const [sort, setSort] = useState<ReleaseSort>('best')
   const downloaders = useDownloaders()
   const indexers = getReleaseIndexers(items)
   const indexerItems = [
@@ -143,15 +153,23 @@ function ReleaseSearchContent({
     { label: '720p', value: '720p' },
     { label: t('otherQuality'), value: 'other' },
   ]
+  const sourceItems = [
+    { label: t('allSources'), value: 'all' },
+    { label: t('highQualitySources'), value: 'high' },
+    { label: t('watchableSources'), value: 'watchable' },
+    { label: t('lowQualitySources'), value: 'low' },
+    { label: t('unknownSources'), value: 'unknown' },
+  ]
   const sortItems = [
+    { label: t('sortByBest'), value: 'best' },
     { label: t('sortBySeeders'), value: 'seeders' },
     { label: t('sortByDate'), value: 'date' },
     { label: t('sortByLargest'), value: 'size-desc' },
     { label: t('sortBySmallest'), value: 'size-asc' },
   ]
-  const visibleItems = filterReleases({ items, keyword, indexer, quality, sort })
+  const visibleItems = filterReleases({ items, keyword, indexer, quality, sourceFilter, sort })
   const status = getReleaseStatus({ loading, error, progress, resultCount: visibleItems.length, t })
-  const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all'
+  const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all' || sourceFilter !== 'all'
   const enabledDownloaders = (downloaders.data ?? []).filter((item) => item.enabled)
 
   useEffect(() => {
@@ -178,7 +196,7 @@ function ReleaseSearchContent({
       </div>
 
       <div className="border-b bg-muted/30 px-4 py-3 sm:px-5">
-        <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_150px_130px_160px_auto] lg:items-center">
+        <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_150px_130px_150px_160px_auto] lg:items-center">
           <div className="relative min-w-0">
             <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-4 text-muted-foreground" />
             <Input
@@ -224,20 +242,36 @@ function ReleaseSearchContent({
             </SelectContent>
           </Select>
 
-          <Select
-            items={sortItems}
-            value={sort}
-            onValueChange={(value) => setSort((value || 'seeders') as ReleaseSort)}
-          >
+          <Select items={sortItems} value={sort} onValueChange={(value) => setSort((value || 'best') as ReleaseSort)}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder={t('sortReleases')} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
+                <SelectItem value="best">{t('sortByBest')}</SelectItem>
                 <SelectItem value="seeders">{t('sortBySeeders')}</SelectItem>
                 <SelectItem value="date">{t('sortByDate')}</SelectItem>
                 <SelectItem value="size-desc">{t('sortByLargest')}</SelectItem>
                 <SelectItem value="size-asc">{t('sortBySmallest')}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Select
+            items={sourceItems}
+            value={sourceFilter}
+            onValueChange={(value) => setSourceFilter((value || 'all') as ReleaseSourceFilter)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder={t('allSources')} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">{t('allSources')}</SelectItem>
+                <SelectItem value="high">{t('highQualitySources')}</SelectItem>
+                <SelectItem value="watchable">{t('watchableSources')}</SelectItem>
+                <SelectItem value="low">{t('lowQualitySources')}</SelectItem>
+                <SelectItem value="unknown">{t('unknownSources')}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -283,6 +317,7 @@ function ReleaseSearchContent({
                   setKeyword('')
                   setIndexer('all')
                   setQuality('all')
+                  setSourceFilter('all')
                 }}
               >
                 {t('clearFilters')}
@@ -603,71 +638,286 @@ function ReleaseRow({
   const submitting = Boolean(submittingDownloaderId)
   const hasSource = Boolean(getDownloadSource(item))
   const disabled = !hasSource || loadingDownloaders || downloaders.length === 0 || submitting
+  const downloadLabel = loadingDownloaders
+    ? t('loadingDownloaders')
+    : downloaders.length === 0
+      ? t('noDownloadersAvailable')
+      : t('downloadTo')
+  const analysis = analyzeIndexerRelease(item)
 
   return (
-    <Card className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
-      <CardContent className="min-w-0 px-0">
-        <div className="mb-2 flex flex-wrap gap-2">
-          <Badge variant="secondary">{item.indexer}</Badge>
-          <Badge variant="outline">
-            {item.seeders ?? 0} {t('seeders')}
-          </Badge>
-          <Badge variant="outline">
-            {item.leechers ?? 0} {t('leechers')}
-          </Badge>
-          {item.protocol ? <Badge variant="outline">{item.protocol}</Badge> : null}
-          {item.indexerFlags.map((flag) => (
-            <Badge key={flag} variant="secondary">
-              {flag}
-            </Badge>
-          ))}
-        </div>
-        <h3 className="line-clamp-2 font-semibold text-sm leading-5">{title}</h3>
-        <div className="mt-2 flex flex-wrap gap-3 text-muted-foreground text-xs">
-          <span>{formatBytes(item.size)}</span>
-          <span>{item.files !== null ? t('filesCount', { count: item.files }) : t('unknownFiles')}</span>
-          <span>{formatReleaseDate(item.publishDate, i18n.language, t)}</span>
-          {item.categories.length > 0 ? <span>{item.categories.slice(0, 2).join(' / ')}</span> : null}
-          <span>{item.infoHash ? t('magnetReady') : t('torrentUrl')}</span>
-          {item.infoUrl ? (
-            <a
-              className="font-medium text-primary hover:underline"
-              href={item.infoUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t('sourcePage')}
-            </a>
-          ) : null}
+    <Card size="sm" className="grid grid-cols-[minmax(0,1fr)_72px] gap-0 p-0">
+      <CardContent className="min-w-0 px-4 py-3">
+        <div className="min-w-0 space-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <ReleaseQualityTags analysis={analysis} />
+            <ReleaseSpecTags analysis={analysis} />
+          </div>
+
+          <h3 className="line-clamp-2 font-semibold text-sm leading-5">{title}</h3>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <span className="font-medium text-foreground">{item.indexer}</span>
+            <span className="font-medium text-foreground">
+              {item.seeders ?? 0} {t('seeders')}
+            </span>
+            <span className="text-muted-foreground">
+              {item.leechers ?? 0} {t('leechers')}
+            </span>
+            <span className="text-muted-foreground">{formatBytes(item.size)}</span>
+            <span className="text-muted-foreground">
+              {item.files !== null ? t('filesCount', { count: item.files }) : t('unknownFiles')}
+            </span>
+            <span className="text-muted-foreground">{formatReleaseDate(item.publishDate, i18n.language, t)}</span>
+            {item.categories.length > 0 ? (
+              <span className="text-muted-foreground">{item.categories.slice(0, 2).join(' / ')}</span>
+            ) : null}
+            <span className="text-muted-foreground">{item.infoHash ? t('magnetReady') : t('torrentUrl')}</span>
+            {item.infoUrl ? (
+              <a
+                className="font-medium text-primary hover:underline"
+                href={item.infoUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('sourcePage')}
+              </a>
+            ) : null}
+          </div>
         </div>
       </CardContent>
-      <DropdownMenu>
-        <DropdownMenuTrigger render={<Button type="button" size="lg" className="h-11" disabled={disabled} />}>
-          {submitting ? (
-            <LoaderCircle data-icon="inline-start" className="animate-spin" />
-          ) : (
-            <Download data-icon="inline-start" />
-          )}
-          {loadingDownloaders
-            ? t('loadingDownloaders')
-            : downloaders.length === 0
-              ? t('noDownloadersAvailable')
-              : t('downloadTo')}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
-            {downloaders.map((downloader) => (
-              <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader)}>
-                <HardDriveDownload />
-                <span className="truncate">{getDownloaderLabel(downloader)}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <div className="flex items-center justify-center border-l px-4 py-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                size="icon-lg"
+                disabled={disabled}
+                aria-label={downloadLabel}
+                title={downloadLabel}
+              />
+            }
+          >
+            {submitting ? <LoaderCircle className="animate-spin" /> : <Download />}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
+              {downloaders.map((downloader) => (
+                <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader)}>
+                  <HardDriveDownload />
+                  <span className="truncate">{getDownloaderLabel(downloader)}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </Card>
   )
+}
+
+function ReleaseQualityTags({ analysis }: { analysis: IndexerReleaseAnalysis }) {
+  const { t } = useTranslation()
+  const label =
+    analysis.source.tier === 'excellent' || analysis.source.tier === 'good'
+      ? t('recommendedRelease')
+      : analysis.source.tier === 'poor'
+        ? t('lowQualityRelease')
+        : null
+  const hasResolution = analysis.resolution.id !== 'other'
+  const hasKnownSource = analysis.source.id !== 'unknown'
+  const warningTooltip = getReleaseWarningTooltip(analysis, t)
+  const sourceTooltip = joinTooltips([getReleaseSourceTooltip(analysis.source.id, t), warningTooltip])
+
+  return (
+    <>
+      {label ? (
+        <ReleaseTag
+          className={cn('font-semibold', getQualityBadgeClassName(analysis.source.tier))}
+          tooltip={getReleaseQualityTooltip(analysis.source.tier, t)}
+        >
+          {label}
+        </ReleaseTag>
+      ) : null}
+      {hasResolution ? (
+        <ReleaseTag
+          className="border-sky-500/30 bg-sky-500/10 font-semibold text-sky-700 dark:text-sky-300"
+          tooltip={getReleaseResolutionTooltip(analysis.resolution.id, t)}
+        >
+          {analysis.resolution.label}
+        </ReleaseTag>
+      ) : null}
+      {hasKnownSource ? (
+        <ReleaseTag className={getSourceBadgeClassName(analysis.source.tier)} tooltip={sourceTooltip}>
+          {analysis.source.label}
+        </ReleaseTag>
+      ) : null}
+    </>
+  )
+}
+
+function ReleaseTag({
+  children,
+  className,
+  tooltip,
+}: {
+  children: ReactNode
+  className?: string
+  tooltip?: string | null
+}) {
+  const badge = (
+    <Badge variant="outline" className={className} tabIndex={tooltip ? 0 : undefined}>
+      {children}
+    </Badge>
+  )
+
+  if (!tooltip) return badge
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={badge} />
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ReleaseSpecTags({ analysis }: { analysis: IndexerReleaseAnalysis }) {
+  const { t } = useTranslation()
+  const markers = [
+    analysis.codec ? { label: analysis.codec, tooltip: getCodecTooltip(analysis.codec, t) } : null,
+    analysis.hdr ? { label: analysis.hdr, tooltip: getHdrTooltip(analysis.hdr, t) } : null,
+    analysis.audio ? { label: analysis.audio, tooltip: getAudioTooltip(analysis.audio, t) } : null,
+    ...analysis.subtitles.slice(0, 2).map((label) => ({ label, tooltip: getSubtitleTooltip(label, t) })),
+    ...analysis.editions.slice(0, 2).map((label) => ({ label, tooltip: getEditionTooltip(label, t) })),
+  ].filter((marker): marker is { label: string; tooltip: string } => Boolean(marker))
+
+  if (markers.length === 0) return null
+
+  return (
+    <>
+      {markers.slice(0, 6).map((marker) => (
+        <ReleaseTag key={marker.label} className="bg-muted/40 text-foreground" tooltip={marker.tooltip}>
+          {marker.label}
+        </ReleaseTag>
+      ))}
+    </>
+  )
+}
+
+function getQualityBadgeClassName(tier: ReleaseSourceTier) {
+  if (tier === 'poor') return 'border-destructive/30 bg-destructive/10 text-destructive'
+  if (tier === 'watchable') return 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+  if (tier === 'excellent' || tier === 'good')
+    return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+  return 'border-slate-400/30 bg-slate-500/10 text-slate-600 dark:text-slate-300'
+}
+
+function getSourceBadgeClassName(tier: ReleaseSourceTier) {
+  if (tier === 'poor') return 'border-destructive/25 bg-destructive/5 text-destructive'
+  if (tier === 'watchable') return 'border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300'
+  if (tier === 'excellent' || tier === 'good')
+    return 'border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+  return 'border-border bg-muted/50 text-muted-foreground'
+}
+
+function getReleaseWarningTooltip(analysis: IndexerReleaseAnalysis, t: TFunction) {
+  if (analysis.warnings.length === 0) return null
+
+  return analysis.warnings
+    .map((warning) => t(warning === 'lowQualitySource' ? 'lowQualitySourceWarning' : 'screenerSourceWarning'))
+    .join(' / ')
+}
+
+function joinTooltips(values: Array<string | null>) {
+  return Array.from(new Set(values.filter((value): value is string => Boolean(value)))).join(' / ') || null
+}
+
+function getReleaseQualityTooltip(tier: ReleaseSourceTier, t: TFunction) {
+  if (tier === 'excellent' || tier === 'good') return t('releaseQualityRecommendedTooltip')
+  if (tier === 'watchable') return t('releaseQualityWatchableTooltip')
+  if (tier === 'poor') return t('releaseQualityLowTooltip')
+  return t('releaseQualityUnknownTooltip')
+}
+
+function getReleaseResolutionTooltip(id: IndexerReleaseAnalysis['resolution']['id'], t: TFunction) {
+  if (id === '2160p') return t('releaseResolution2160pTooltip')
+  if (id === '1080p') return t('releaseResolution1080pTooltip')
+  if (id === '720p') return t('releaseResolution720pTooltip')
+  if (id === '480p') return t('releaseResolution480pTooltip')
+  if (id === '360p') return t('releaseResolution360pTooltip')
+  return t('releaseResolutionOtherTooltip')
+}
+
+function getReleaseSourceTooltip(id: string, t: TFunction) {
+  if (id === 'remux') return t('releaseSourceRemuxTooltip')
+  if (id === 'bdmv') return t('releaseSourceBdmvTooltip')
+  if (id === 'uhd-bluray') return t('releaseSourceUhdBlurayTooltip')
+  if (id === 'bluray') return t('releaseSourceBlurayTooltip')
+  if (id === 'dcprip') return t('releaseSourceDcpRipTooltip')
+  if (id === 'webdl') return t('releaseSourceWebDlTooltip')
+  if (id === 'webrip') return t('releaseSourceWebRipTooltip')
+  if (id === 'hdtv') return t('releaseSourceHdtvTooltip')
+  if (id === 'hdrip') return t('releaseSourceHdRipTooltip')
+  if (id === 'dvdrip') return t('releaseSourceDvdRipTooltip')
+  if (id === 'screener') return t('releaseSourceScreenerTooltip')
+  if (id === 'r5') return t('releaseSourceR5Tooltip')
+  if (id === 'telecine') return t('releaseSourceTelecineTooltip')
+  if (id === 'telesync') return t('releaseSourceTelesyncTooltip')
+  if (id === 'hdcam') return t('releaseSourceHdcamTooltip')
+  if (id === 'cam') return t('releaseSourceCamTooltip')
+  return t('releaseSourceUnknownTooltip')
+}
+
+function getCodecTooltip(label: string, t: TFunction) {
+  if (label === 'AV1') return t('releaseCodecAv1Tooltip')
+  if (label === 'x265') return t('releaseCodecX265Tooltip')
+  if (label === 'x264') return t('releaseCodecX264Tooltip')
+  if (label === 'VP9') return t('releaseCodecVp9Tooltip')
+  if (label === 'MPEG-2') return t('releaseCodecMpeg2Tooltip')
+  return t('releaseCodecTooltip')
+}
+
+function getHdrTooltip(label: string, t: TFunction) {
+  if (label === 'Dolby Vision') return t('releaseHdrDolbyVisionTooltip')
+  if (label === 'HDR10+') return t('releaseHdrHdr10PlusTooltip')
+  if (label === 'HDR10') return t('releaseHdrHdr10Tooltip')
+  if (label === 'HDR') return t('releaseHdrHdrTooltip')
+  if (label === 'SDR') return t('releaseHdrSdrTooltip')
+  return t('releaseHdrTooltip')
+}
+
+function getAudioTooltip(label: string, t: TFunction) {
+  if (label === 'TrueHD Atmos') return t('releaseAudioTrueHdAtmosTooltip')
+  if (label === 'Atmos') return t('releaseAudioAtmosTooltip')
+  if (label === 'DTS-HD MA') return t('releaseAudioDtsHdMaTooltip')
+  if (label === 'DTS') return t('releaseAudioDtsTooltip')
+  if (label === 'EAC3') return t('releaseAudioEac3Tooltip')
+  if (label === 'AC3') return t('releaseAudioAc3Tooltip')
+  if (label === 'AAC') return t('releaseAudioAacTooltip')
+  if (label === 'FLAC') return t('releaseAudioFlacTooltip')
+  if (label === 'MP3') return t('releaseAudioMp3Tooltip')
+  return t('releaseAudioTooltip')
+}
+
+function getSubtitleTooltip(label: string, t: TFunction) {
+  if (label === 'Hardcoded subs') return t('releaseSubtitleHardcodedTooltip')
+  if (label === 'CHS') return t('releaseSubtitleChsTooltip')
+  if (label === 'CHT') return t('releaseSubtitleChtTooltip')
+  if (label === 'ENG subs') return t('releaseSubtitleEngTooltip')
+  if (label === 'MULTi subs') return t('releaseSubtitleMultiTooltip')
+  return t('releaseSubtitleTooltip')
+}
+
+function getEditionTooltip(label: string, t: TFunction) {
+  if (label === 'IMAX') return t('releaseEditionImaxTooltip')
+  if (label === 'Extended') return t('releaseEditionExtendedTooltip')
+  if (label === "Director's Cut") return t('releaseEditionDirectorsCutTooltip')
+  if (label === 'Theatrical') return t('releaseEditionTheatricalTooltip')
+  if (label === 'Unrated') return t('releaseEditionUnratedTooltip')
+  if (label === 'Criterion') return t('releaseEditionCriterionTooltip')
+  return t('releaseEditionTooltip')
 }
 
 function getMediaTags(media: ReleaseSearchMedia, item: IndexerSearchItem) {
@@ -692,21 +942,16 @@ function getDownloadSource(item: IndexerSearchItem) {
   return null
 }
 
-function getReleaseQuality(item: IndexerSearchItem): ReleaseQuality {
-  const title = item.title.toLowerCase()
-
-  if (title.includes('2160p') || title.includes('4k') || title.includes('uhd')) return '2160p'
-  if (title.includes('1080p')) return '1080p'
-  if (title.includes('720p')) return '720p'
-  return 'other'
-}
-
 function getReleaseIndexers(items: IndexerSearchItem[]) {
   return Array.from(new Set(items.map((item) => item.indexer))).sort((left, right) => left.localeCompare(right))
 }
 
 function sortReleases(items: IndexerSearchItem[], sort: ReleaseSort) {
   return [...items].sort((left, right) => {
+    if (sort === 'best') {
+      return compareIndexerReleasesByRecommendation(left, right)
+    }
+
     if (sort === 'date') {
       return new Date(right.publishDate || 0).getTime() - new Date(left.publishDate || 0).getTime()
     }
@@ -728,27 +973,45 @@ function filterReleases({
   keyword,
   indexer,
   quality,
+  sourceFilter,
   sort,
 }: {
   items: IndexerSearchItem[]
   keyword: string
   indexer: string
   quality: ReleaseQuality
+  sourceFilter: ReleaseSourceFilter
   sort: ReleaseSort
 }) {
   const normalizedKeyword = keyword.trim().toLowerCase()
   const filtered = items.filter((item) => {
+    const analysis = analyzeIndexerRelease(item)
     const matchesKeyword =
       normalizedKeyword.length === 0 ||
       item.title.toLowerCase().includes(normalizedKeyword) ||
       item.indexer.toLowerCase().includes(normalizedKeyword)
     const matchesIndexer = indexer === 'all' || item.indexer === indexer
-    const matchesQuality = quality === 'all' || getReleaseQuality(item) === quality
+    const matchesQuality = quality === 'all' || getReleaseQualityFromAnalysis(analysis) === quality
+    const matchesSource = matchesReleaseSourceFilter(analysis.source.tier, sourceFilter)
 
-    return matchesKeyword && matchesIndexer && matchesQuality
+    return matchesKeyword && matchesIndexer && matchesQuality && matchesSource
   })
 
   return sortReleases(filtered, sort)
+}
+
+function getReleaseQualityFromAnalysis(analysis: IndexerReleaseAnalysis): ReleaseQuality {
+  const resolution = analysis.resolution.id
+  if (resolution === '2160p' || resolution === '1080p' || resolution === '720p') return resolution
+  return 'other'
+}
+
+function matchesReleaseSourceFilter(tier: ReleaseSourceTier, filter: ReleaseSourceFilter) {
+  if (filter === 'all') return true
+  if (filter === 'high') return tier === 'excellent' || tier === 'good'
+  if (filter === 'watchable') return tier === 'watchable'
+  if (filter === 'low') return tier === 'poor'
+  return tier === 'unknown'
 }
 
 function formatReleaseDate(value: string | null, language: string, t: (key: string) => string) {
