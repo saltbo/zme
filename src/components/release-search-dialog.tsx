@@ -82,6 +82,8 @@ export function ReleaseSearchDialog({
   onSearch: () => void
 }) {
   const isDesktop = useIsDesktop()
+  useFixedBodyScrollLock(!isDesktop)
+
   const content = (
     <ReleaseSearchContent
       media={media}
@@ -108,7 +110,7 @@ export function ReleaseSearchDialog({
     <Sheet open onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <SheetContent
         side="bottom"
-        className="mx-auto max-h-[calc(100vh-1rem)] w-full gap-0 overflow-hidden rounded-t-xl border bg-background p-0 data-[side=bottom]:h-[calc(100vh-1rem)]"
+        className="mx-auto max-h-[calc(100vh-1rem)] w-full touch-pan-y gap-0 overflow-hidden overscroll-contain rounded-t-xl border bg-background p-0 data-[side=bottom]:h-[calc(100vh-1rem)]"
       >
         {content}
       </SheetContent>
@@ -327,7 +329,7 @@ function ReleaseSearchContent({
         ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4 sm:p-5">
         <ReleasePanel
           media={media}
           items={visibleItems}
@@ -387,6 +389,38 @@ function useIsDesktop() {
   }, [])
 
   return isDesktop
+}
+
+function useFixedBodyScrollLock(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return
+
+    const { body } = document
+    const scrollX = window.scrollX
+    const scrollY = window.scrollY
+    const previous = {
+      left: body.style.left,
+      position: body.style.position,
+      right: body.style.right,
+      top: body.style.top,
+      width: body.style.width,
+    }
+
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = `-${scrollX}px`
+    body.style.right = '0'
+    body.style.width = '100%'
+
+    return () => {
+      body.style.position = previous.position
+      body.style.top = previous.top
+      body.style.left = previous.left
+      body.style.right = previous.right
+      body.style.width = previous.width
+      window.scrollTo(scrollX, scrollY)
+    }
+  }, [enabled])
 }
 
 function getReleaseStatus({
