@@ -21,7 +21,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -61,6 +61,25 @@ export interface ReleaseSearchError {
 type ReleaseSort = 'best' | 'seeders' | 'date' | 'size-desc' | 'size-asc'
 type ReleaseQuality = 'all' | '2160p' | '1080p' | '720p' | 'other'
 type ReleaseSourceFilter = 'all' | 'high' | 'watchable' | 'low' | 'unknown'
+type ReleaseSearchSurfaceKind = 'dialog' | 'page'
+
+interface ReleaseSearchSurfaceProps {
+  media: ReleaseSearchMedia
+  query: string
+  items: IndexerSearchItem[]
+  loading: boolean
+  error: ReleaseSearchError | null
+  progress?: ReleaseSearchProgress | null
+  onSearch: () => void
+  className?: string
+  mobileFiltersOpen?: boolean
+  onMobileFiltersOpenChange?: (open: boolean) => void
+  showMobileFilterButton?: boolean
+}
+
+export function ReleaseSearchSurface(props: ReleaseSearchSurfaceProps) {
+  return <ReleaseSearchContent {...props} surface="page" />
+}
 
 export function ReleaseSearchDialog({
   media,
@@ -93,6 +112,7 @@ export function ReleaseSearchDialog({
       error={error}
       progress={progress}
       onSearch={onSearch}
+      surface="dialog"
     />
   )
 
@@ -126,24 +146,235 @@ function ReleaseSearchContent({
   error,
   progress,
   onSearch,
-}: {
-  media: ReleaseSearchMedia
-  query: string
-  items: IndexerSearchItem[]
-  loading: boolean
-  error: ReleaseSearchError | null
-  progress?: ReleaseSearchProgress | null
-  onSearch: () => void
+  className,
+  mobileFiltersOpen,
+  onMobileFiltersOpenChange,
+  showMobileFilterButton = true,
+  surface,
+}: ReleaseSearchSurfaceProps & {
+  surface: ReleaseSearchSurfaceKind
 }) {
   const { t } = useTranslation()
-  const contentRef = useRef<HTMLDivElement>(null)
   const [keyword, setKeyword] = useState('')
   const [indexer, setIndexer] = useState('all')
   const [quality, setQuality] = useState<ReleaseQuality>('all')
   const [sourceFilter, setSourceFilter] = useState<ReleaseSourceFilter>('all')
   const [sort, setSort] = useState<ReleaseSort>('best')
+  const [localMobileFiltersOpen, setLocalMobileFiltersOpen] = useState(false)
   const downloaders = useDownloaders()
+  const filtersOpen = mobileFiltersOpen ?? localMobileFiltersOpen
+  const setFiltersOpen = onMobileFiltersOpenChange ?? setLocalMobileFiltersOpen
   const indexers = getReleaseIndexers(items)
+  const visibleItems = filterReleases({ items, keyword, indexer, quality, sourceFilter, sort })
+  const status = getReleaseStatus({ loading, error, progress, resultCount: visibleItems.length, t })
+  const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all' || sourceFilter !== 'all'
+  const enabledDownloaders = (downloaders.data ?? []).filter((item) => item.enabled)
+
+  function clearFilters() {
+    setKeyword('')
+    setIndexer('all')
+    setQuality('all')
+    setSourceFilter('all')
+  }
+
+  useEffect(() => {
+    if (downloaders.error) {
+      toast.error(downloaders.error instanceof Error ? downloaders.error.message : t('downloadersLoadFailed'))
+    }
+  }, [downloaders.error, t])
+
+  return (
+    <div
+      tabIndex={-1}
+      className={cn(
+        'flex h-full min-h-0 flex-col overflow-hidden bg-background outline-none',
+        surface === 'page' && 'rounded-xl border shadow-sm',
+        className,
+      )}
+    >
+      <ReleaseSearchHeader
+        media={media}
+        query={query}
+        status={status}
+        surface={surface}
+        showMobileFilterButton={showMobileFilterButton}
+        onOpenFilters={() => setFiltersOpen(true)}
+      />
+
+      <div className="hidden border-b bg-muted/30 px-4 py-3 md:block sm:px-5">
+        <ReleaseFilterControls
+          keyword={keyword}
+          indexer={indexer}
+          quality={quality}
+          sourceFilter={sourceFilter}
+          sort={sort}
+          indexers={indexers}
+          loading={loading}
+          error={error}
+          onKeywordChange={setKeyword}
+          onIndexerChange={setIndexer}
+          onQualityChange={setQuality}
+          onSourceFilterChange={setSourceFilter}
+          onSortChange={setSort}
+          onSearch={onSearch}
+        />
+        <ReleaseSearchSummary
+          loading={loading}
+          progress={progress}
+          error={error}
+          shown={visibleItems.length}
+          total={items.length}
+          hasFilters={hasFilters}
+          onClearFilters={clearFilters}
+        />
+      </div>
+
+      <div className="border-b bg-muted/30 px-4 py-2 md:hidden">
+        <ReleaseSearchSummary
+          loading={loading}
+          progress={progress}
+          error={error}
+          shown={visibleItems.length}
+          total={items.length}
+          hasFilters={hasFilters}
+          onClearFilters={clearFilters}
+        />
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4 sm:p-5">
+        <ReleasePanel
+          media={media}
+          items={visibleItems}
+          loading={loading}
+          progress={progress}
+          error={error}
+          onRetry={onSearch}
+          filtered={hasFilters}
+          downloaders={enabledDownloaders}
+          loadingDownloaders={downloaders.isLoading}
+        />
+      </div>
+
+      <ReleaseMobileFilterSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        keyword={keyword}
+        indexer={indexer}
+        quality={quality}
+        sourceFilter={sourceFilter}
+        sort={sort}
+        indexers={indexers}
+        hasFilters={hasFilters}
+        loading={loading}
+        error={error}
+        onKeywordChange={setKeyword}
+        onIndexerChange={setIndexer}
+        onQualityChange={setQuality}
+        onSourceFilterChange={setSourceFilter}
+        onSortChange={setSort}
+        onSearch={onSearch}
+        onClearFilters={clearFilters}
+      />
+    </div>
+  )
+}
+
+function ReleaseSearchHeader({
+  media,
+  query,
+  status,
+  surface,
+  showMobileFilterButton,
+  onOpenFilters,
+}: {
+  media: ReleaseSearchMedia
+  query: string
+  status: {
+    icon: ReactNode
+    label: string
+    className: string
+  }
+  surface: ReleaseSearchSurfaceKind
+  showMobileFilterButton: boolean
+  onOpenFilters: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className={cn('border-b bg-card py-3 pl-4 sm:pl-5', surface === 'dialog' ? 'pr-14 sm:pr-16' : 'pr-4 sm:pr-5')}>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {surface === 'dialog' ? (
+            <DialogHeader className="hidden md:block">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <ReleaseTitle media={media} query={query} titleKind="dialog" />
+                <ReleaseStatusPill status={status} />
+              </div>
+            </DialogHeader>
+          ) : (
+            <div className="hidden md:flex md:items-center md:justify-between md:gap-3">
+              <ReleaseTitle media={media} query={query} titleKind="page" />
+              <ReleaseStatusPill status={status} />
+            </div>
+          )}
+          <SheetHeader className="flex flex-col gap-3 p-0 md:hidden">
+            <ReleaseTitle media={media} query={query} titleKind={surface === 'dialog' ? 'sheet' : 'page'} mobile />
+            <ReleaseStatusPill status={status} />
+          </SheetHeader>
+        </div>
+        {showMobileFilterButton ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            className="shrink-0 md:hidden"
+            onClick={onOpenFilters}
+            aria-label={t('filters')}
+            title={t('filters')}
+          >
+            <SlidersHorizontal />
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function ReleaseFilterControls({
+  keyword,
+  indexer,
+  quality,
+  sourceFilter,
+  sort,
+  indexers,
+  loading,
+  error,
+  stacked,
+  onKeywordChange,
+  onIndexerChange,
+  onQualityChange,
+  onSourceFilterChange,
+  onSortChange,
+  onSearch,
+}: {
+  keyword: string
+  indexer: string
+  quality: ReleaseQuality
+  sourceFilter: ReleaseSourceFilter
+  sort: ReleaseSort
+  indexers: string[]
+  loading: boolean
+  error: ReleaseSearchError | null
+  stacked?: boolean
+  onKeywordChange: (value: string) => void
+  onIndexerChange: (value: string) => void
+  onQualityChange: (value: ReleaseQuality) => void
+  onSourceFilterChange: (value: ReleaseSourceFilter) => void
+  onSortChange: (value: ReleaseSort) => void
+  onSearch: () => void
+}) {
+  const { t } = useTranslation()
+  const keywordId = useId()
   const indexerItems = [
     { label: t('allIndexers'), value: 'all' },
     ...indexers.map((item) => ({ label: item, value: item })),
@@ -169,185 +400,289 @@ function ReleaseSearchContent({
     { label: t('sortByLargest'), value: 'size-desc' },
     { label: t('sortBySmallest'), value: 'size-asc' },
   ]
-  const visibleItems = filterReleases({ items, keyword, indexer, quality, sourceFilter, sort })
-  const status = getReleaseStatus({ loading, error, progress, resultCount: visibleItems.length, t })
-  const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all' || sourceFilter !== 'all'
-  const enabledDownloaders = (downloaders.data ?? []).filter((item) => item.enabled)
-
-  useEffect(() => {
-    if (downloaders.error) {
-      toast.error(downloaders.error instanceof Error ? downloaders.error.message : t('downloadersLoadFailed'))
-    }
-  }, [downloaders.error, t])
 
   return (
-    <div ref={contentRef} tabIndex={-1} className="flex h-full min-h-0 flex-col outline-none">
-      <div className="border-b bg-card py-3 pr-14 pl-4 sm:pr-16 sm:pl-5">
-        <DialogHeader className="hidden md:block">
-          <div className="flex flex-row items-center justify-between gap-3">
-            <ReleaseTitle media={media} query={query} />
-            <ReleaseStatusPill status={status} />
-          </div>
-        </DialogHeader>
-        <SheetHeader className="p-0 md:hidden">
-          <div className="flex flex-col gap-3">
-            <ReleaseTitle media={media} query={query} mobile />
-            <ReleaseStatusPill status={status} />
-          </div>
-        </SheetHeader>
-      </div>
-
-      <div className="border-b bg-muted/30 px-4 py-3 sm:px-5">
-        <div className="grid gap-2 lg:grid-cols-[minmax(220px,1fr)_150px_130px_150px_160px_auto] lg:items-center">
-          <div className="relative min-w-0">
-            <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-4 text-muted-foreground" />
-            <Input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder={t('filterReleases')}
-              className="pl-8"
-            />
-          </div>
-
-          <Select items={indexerItems} value={indexer} onValueChange={(value) => setIndexer(value || 'all')}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t('allIndexers')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{t('allIndexers')}</SelectItem>
-                {indexers.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          <Select
-            items={qualityItems}
-            value={quality}
-            onValueChange={(value) => setQuality((value || 'all') as ReleaseQuality)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t('allQualities')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{t('allQualities')}</SelectItem>
-                <SelectItem value="2160p">2160p / 4K</SelectItem>
-                <SelectItem value="1080p">1080p</SelectItem>
-                <SelectItem value="720p">720p</SelectItem>
-                <SelectItem value="other">{t('otherQuality')}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          <Select items={sortItems} value={sort} onValueChange={(value) => setSort((value || 'best') as ReleaseSort)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t('sortReleases')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="best">{t('sortByBest')}</SelectItem>
-                <SelectItem value="seeders">{t('sortBySeeders')}</SelectItem>
-                <SelectItem value="date">{t('sortByDate')}</SelectItem>
-                <SelectItem value="size-desc">{t('sortByLargest')}</SelectItem>
-                <SelectItem value="size-asc">{t('sortBySmallest')}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          <Select
-            items={sourceItems}
-            value={sourceFilter}
-            onValueChange={(value) => setSourceFilter((value || 'all') as ReleaseSourceFilter)}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder={t('allSources')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="all">{t('allSources')}</SelectItem>
-                <SelectItem value="high">{t('highQualitySources')}</SelectItem>
-                <SelectItem value="watchable">{t('watchableSources')}</SelectItem>
-                <SelectItem value="low">{t('lowQualitySources')}</SelectItem>
-                <SelectItem value="unknown">{t('unknownSources')}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-
-          <Button
-            type="button"
-            onClick={onSearch}
-            variant={error ? 'default' : 'outline'}
-            className="lg:justify-self-end"
-            disabled={loading}
-          >
-            {loading ? (
-              <LoaderCircle data-icon="inline-start" className="animate-spin" />
-            ) : (
-              <RefreshCw data-icon="inline-start" />
-            )}
-            {error ? t('retrySearch') : t('searchAgain')}
-          </Button>
+    <div
+      className={cn(
+        'grid gap-2 lg:grid-cols-[minmax(220px,1fr)_150px_130px_150px_160px_auto] lg:items-center',
+        stacked && 'flex flex-col gap-3',
+      )}
+    >
+      <div className="min-w-0">
+        <label
+          htmlFor={keywordId}
+          className={cn('mb-1 block font-medium text-muted-foreground text-xs', !stacked && 'sr-only')}
+        >
+          {t('filterReleases')}
+        </label>
+        <div className="relative min-w-0">
+          <Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-4 text-muted-foreground" />
+          <Input
+            id={keywordId}
+            type="search"
+            value={keyword}
+            onChange={(event) => onKeywordChange(event.target.value)}
+            placeholder={t('filterReleases')}
+            className="pl-8"
+          />
         </div>
-        {loading && progress ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-            <LoaderCircle className="size-3.5 animate-spin" />
-            <span>
-              {t(progress.phase === 'fallback' ? 'fallbackSearchProgress' : 'releaseSearchProgress', {
-                completed: progress.completed,
-                total: progress.total,
-                active: progress.active,
-              })}
-            </span>
-          </div>
-        ) : null}
-        {!loading && !error ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-            <SlidersHorizontal className="size-3.5" />
-            <span>{t('showingReleases', { shown: visibleItems.length, total: items.length })}</span>
-            {hasFilters ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={() => {
-                  setKeyword('')
-                  setIndexer('all')
-                  setQuality('all')
-                  setSourceFilter('all')
-                }}
-              >
-                {t('clearFilters')}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4 sm:p-5">
-        <ReleasePanel
-          media={media}
-          items={visibleItems}
-          loading={loading}
-          progress={progress}
-          error={error}
-          onRetry={onSearch}
-          filtered={hasFilters}
-          downloaders={enabledDownloaders}
-          loadingDownloaders={downloaders.isLoading}
-        />
-      </div>
+      <ReleaseSelectField label={t('allIndexers')} stacked={stacked}>
+        <Select items={indexerItems} value={indexer} onValueChange={(value) => onIndexerChange(value || 'all')}>
+          <SelectTrigger className="w-full" aria-label={t('allIndexers')}>
+            <SelectValue placeholder={t('allIndexers')} />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value="all">{t('allIndexers')}</SelectItem>
+              {indexers.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {item}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </ReleaseSelectField>
+
+      <ReleaseSelectField label={t('allQualities')} stacked={stacked}>
+        <Select
+          items={qualityItems}
+          value={quality}
+          onValueChange={(value) => onQualityChange((value || 'all') as ReleaseQuality)}
+        >
+          <SelectTrigger className="w-full" aria-label={t('allQualities')}>
+            <SelectValue placeholder={t('allQualities')} />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value="all">{t('allQualities')}</SelectItem>
+              <SelectItem value="2160p">2160p / 4K</SelectItem>
+              <SelectItem value="1080p">1080p</SelectItem>
+              <SelectItem value="720p">720p</SelectItem>
+              <SelectItem value="other">{t('otherQuality')}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </ReleaseSelectField>
+
+      <ReleaseSelectField label={t('sortReleases')} stacked={stacked}>
+        <Select
+          items={sortItems}
+          value={sort}
+          onValueChange={(value) => onSortChange((value || 'best') as ReleaseSort)}
+        >
+          <SelectTrigger className="w-full" aria-label={t('sortReleases')}>
+            <SelectValue placeholder={t('sortReleases')} />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value="best">{t('sortByBest')}</SelectItem>
+              <SelectItem value="seeders">{t('sortBySeeders')}</SelectItem>
+              <SelectItem value="date">{t('sortByDate')}</SelectItem>
+              <SelectItem value="size-desc">{t('sortByLargest')}</SelectItem>
+              <SelectItem value="size-asc">{t('sortBySmallest')}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </ReleaseSelectField>
+
+      <ReleaseSelectField label={t('allSources')} stacked={stacked}>
+        <Select
+          items={sourceItems}
+          value={sourceFilter}
+          onValueChange={(value) => onSourceFilterChange((value || 'all') as ReleaseSourceFilter)}
+        >
+          <SelectTrigger className="w-full" aria-label={t('allSources')}>
+            <SelectValue placeholder={t('allSources')} />
+          </SelectTrigger>
+          <SelectContent align="start" alignItemWithTrigger={false}>
+            <SelectGroup>
+              <SelectItem value="all">{t('allSources')}</SelectItem>
+              <SelectItem value="high">{t('highQualitySources')}</SelectItem>
+              <SelectItem value="watchable">{t('watchableSources')}</SelectItem>
+              <SelectItem value="low">{t('lowQualitySources')}</SelectItem>
+              <SelectItem value="unknown">{t('unknownSources')}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </ReleaseSelectField>
+
+      <Button
+        type="button"
+        onClick={onSearch}
+        variant={error ? 'default' : 'outline'}
+        className={cn('w-full', !stacked && 'lg:justify-self-end')}
+        disabled={loading}
+      >
+        {loading ? (
+          <LoaderCircle data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <RefreshCw data-icon="inline-start" />
+        )}
+        {error ? t('retrySearch') : t('searchAgain')}
+      </Button>
     </div>
   )
 }
 
-function ReleaseTitle({ media, query, mobile }: { media: ReleaseSearchMedia; query: string; mobile?: boolean }) {
+function ReleaseSelectField({ children, label, stacked }: { children: ReactNode; label: string; stacked?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <span className={cn('mb-1 block font-medium text-muted-foreground text-xs', !stacked && 'sr-only')}>{label}</span>
+      {children}
+    </div>
+  )
+}
+
+function ReleaseSearchSummary({
+  loading,
+  progress,
+  error,
+  shown,
+  total,
+  hasFilters,
+  onClearFilters,
+}: {
+  loading: boolean
+  progress?: ReleaseSearchProgress | null
+  error: ReleaseSearchError | null
+  shown: number
+  total: number
+  hasFilters: boolean
+  onClearFilters: () => void
+}) {
   const { t } = useTranslation()
+
+  if (loading && progress) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+        <LoaderCircle className="size-3.5 animate-spin" />
+        <span>
+          {t(progress.phase === 'fallback' ? 'fallbackSearchProgress' : 'releaseSearchProgress', {
+            completed: progress.completed,
+            total: progress.total,
+            active: progress.active,
+          })}
+        </span>
+      </div>
+    )
+  }
+
+  if (loading || error) return null
+
+  return (
+    <div className="flex min-h-7 flex-wrap items-center gap-2 text-muted-foreground text-xs md:mt-2">
+      <SlidersHorizontal className="size-3.5" />
+      <span>{t('showingReleases', { shown, total })}</span>
+      {hasFilters ? (
+        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onClearFilters}>
+          {t('clearFilters')}
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
+function ReleaseMobileFilterSheet({
+  open,
+  onOpenChange,
+  keyword,
+  indexer,
+  quality,
+  sourceFilter,
+  sort,
+  indexers,
+  hasFilters,
+  loading,
+  error,
+  onKeywordChange,
+  onIndexerChange,
+  onQualityChange,
+  onSourceFilterChange,
+  onSortChange,
+  onSearch,
+  onClearFilters,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  keyword: string
+  indexer: string
+  quality: ReleaseQuality
+  sourceFilter: ReleaseSourceFilter
+  sort: ReleaseSort
+  indexers: string[]
+  hasFilters: boolean
+  loading: boolean
+  error: ReleaseSearchError | null
+  onKeywordChange: (value: string) => void
+  onIndexerChange: (value: string) => void
+  onQualityChange: (value: ReleaseQuality) => void
+  onSourceFilterChange: (value: ReleaseSourceFilter) => void
+  onSortChange: (value: ReleaseSort) => void
+  onSearch: () => void
+  onClearFilters: () => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[86dvh] overflow-y-auto rounded-t-xl">
+        <SheetHeader>
+          <SheetTitle>{t('filters')}</SheetTitle>
+          <SheetDescription>{t('filterReleases')}</SheetDescription>
+        </SheetHeader>
+        <div className="px-4 pb-4">
+          <ReleaseFilterControls
+            keyword={keyword}
+            indexer={indexer}
+            quality={quality}
+            sourceFilter={sourceFilter}
+            sort={sort}
+            indexers={indexers}
+            loading={loading}
+            error={error}
+            stacked
+            onKeywordChange={onKeywordChange}
+            onIndexerChange={onIndexerChange}
+            onQualityChange={onQualityChange}
+            onSourceFilterChange={onSourceFilterChange}
+            onSortChange={onSortChange}
+            onSearch={onSearch}
+          />
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" disabled={!hasFilters} onClick={onClearFilters}>
+              {t('clearFilters')}
+            </Button>
+            <Button type="button" onClick={() => onOpenChange(false)}>
+              {t('save')}
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function ReleaseTitle({
+  media,
+  query,
+  mobile,
+  titleKind,
+}: {
+  media: ReleaseSearchMedia
+  query: string
+  mobile?: boolean
+  titleKind: 'dialog' | 'sheet' | 'page'
+}) {
+  const { t } = useTranslation()
+  const titleClassName = cn('truncate text-base', mobile && titleKind === 'page' && 'font-semibold')
+  const description = (
+    <>
+      {t('indexerSearch')} · {query}
+    </>
+  )
 
   return (
     <div className="flex min-w-0 items-center gap-3">
@@ -355,19 +690,20 @@ function ReleaseTitle({ media, query, mobile }: { media: ReleaseSearchMedia; que
         <Database />
       </div>
       <div className="min-w-0">
-        {mobile ? (
+        {titleKind === 'sheet' ? (
           <>
-            <SheetTitle className="truncate text-base">{media.title}</SheetTitle>
-            <SheetDescription className="truncate text-xs">
-              {t('indexerSearch')} · {query}
-            </SheetDescription>
+            <SheetTitle className={titleClassName}>{media.title}</SheetTitle>
+            <SheetDescription className="truncate text-xs">{description}</SheetDescription>
+          </>
+        ) : titleKind === 'dialog' ? (
+          <>
+            <DialogTitle className={titleClassName}>{media.title}</DialogTitle>
+            <DialogDescription className="truncate text-xs">{description}</DialogDescription>
           </>
         ) : (
           <>
-            <DialogTitle className="truncate text-base">{media.title}</DialogTitle>
-            <DialogDescription className="truncate text-xs">
-              {t('indexerSearch')} · {query}
-            </DialogDescription>
+            <h2 className={titleClassName}>{media.title}</h2>
+            <p className="truncate text-muted-foreground text-xs">{description}</p>
           </>
         )}
       </div>

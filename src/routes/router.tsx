@@ -11,6 +11,7 @@ import { MediaSeasonDetailPage } from '@/routes/media-season-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
 import { PersonCreditsPage } from '@/routes/person-credits'
+import { BookReleaseSearchPage, MediaReleaseSearchPage, MusicReleaseSearchPage } from '@/routes/release-search'
 import { BookDetailPage, BooksPage, MusicDetailPage, MusicPage } from '@/routes/resource-pages'
 import { SettingsPage } from '@/routes/settings'
 import { UsersPage } from '@/routes/users'
@@ -44,6 +45,10 @@ export const router = createBrowserRouter([
             element: <MediaDetailPage kind="movie" />,
           },
           {
+            path: 'movies/:id/releases',
+            element: <MediaReleaseSearchPage kind="movie" />,
+          },
+          {
             path: 'series',
             element: <MediaWorkspace mode="tv" />,
           },
@@ -60,6 +65,10 @@ export const router = createBrowserRouter([
             element: <MusicDetailPage />,
           },
           {
+            path: 'music/:key/releases',
+            element: <MusicReleaseSearchPage />,
+          },
+          {
             path: 'books',
             element: <BooksPage />,
           },
@@ -68,8 +77,16 @@ export const router = createBrowserRouter([
             element: <BookDetailPage />,
           },
           {
+            path: 'books/:key/releases/:target',
+            element: <BookReleaseSearchPage />,
+          },
+          {
             path: 'series/:id',
             element: <MediaDetailPage kind="tv" />,
+          },
+          {
+            path: 'series/:id/releases',
+            element: <MediaReleaseSearchPage kind="tv" />,
           },
           {
             path: 'series/:id/seasons/:seasonNumber',

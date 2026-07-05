@@ -24,6 +24,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
     override?.pathname === location.pathname ? override : getTopbarCopy(location.pathname, location.state, t)
   const isDetailPage = Boolean(getRouteMedia(location.pathname)) || isResourceDetailPath(location.pathname)
   const showBackButton = isDetailPage || Boolean(pageCopy.backTo)
+  const hideSearch = override?.pathname === location.pathname && override.hideSearch
   const [searchValue, setSearchValue] = useState('')
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -58,24 +59,28 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {override?.pathname === location.pathname ? override.actions : null}
-            <TopbarSearchForm
-              value={searchValue}
-              onValueChange={setSearchValue}
-              onSubmit={handleSearch}
-              placeholder={t('searchPlaceholder')}
-              className="hidden w-[min(36vw,420px)] md:block"
-              inputClassName="h-10 rounded-full bg-background/80 pl-9 shadow-sm"
-            />
+            {!hideSearch ? (
+              <TopbarSearchForm
+                value={searchValue}
+                onValueChange={setSearchValue}
+                onSubmit={handleSearch}
+                placeholder={t('searchPlaceholder')}
+                className="hidden w-[min(36vw,420px)] md:block"
+                inputClassName="h-10 rounded-full bg-background/80 pl-9 shadow-sm"
+              />
+            ) : null}
           </div>
         </div>
-        <TopbarSearchForm
-          value={searchValue}
-          onValueChange={setSearchValue}
-          onSubmit={handleSearch}
-          placeholder={t('searchPlaceholder')}
-          className="w-full min-w-0 md:hidden"
-          inputClassName="h-11 rounded-full bg-background pl-9 shadow-sm"
-        />
+        {!hideSearch ? (
+          <TopbarSearchForm
+            value={searchValue}
+            onValueChange={setSearchValue}
+            onSubmit={handleSearch}
+            placeholder={t('searchPlaceholder')}
+            className="w-full min-w-0 md:hidden"
+            inputClassName="h-11 rounded-full bg-background pl-9 shadow-sm"
+          />
+        ) : null}
       </div>
     </header>
   )
