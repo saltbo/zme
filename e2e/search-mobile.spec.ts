@@ -31,6 +31,33 @@ test.describe('mobile search regressions', () => {
       })
     }
   })
+
+  test('mobile release search route opens filters from the top-right bottom sheet', async ({ page }) => {
+    await signIn(page)
+    await stubReleaseSearchApis(page)
+
+    for (const viewport of MOBILE_VIEWPORTS) {
+      await test.step(`release filters at ${viewport.width}px`, async () => {
+        await page.setViewportSize(viewport)
+        await page.goto(`/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}/releases`)
+
+        await expect(page.getByRole('heading', { name: 'Indexer search' })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Kind of Blue' }).last()).toBeVisible()
+        expect(await visibleLocator(page.getByPlaceholder('Filter titles or indexers'))).toBeNull()
+
+        const filtersButton = page.getByRole('button', { name: 'Filters' })
+        await expect(filtersButton).toBeVisible()
+        await filtersButton.click()
+
+        await expect(page.getByRole('dialog')).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Filters' })).toBeVisible()
+        const mobileFilterInput = await visibleLocator(page.getByPlaceholder('Filter titles or indexers'))
+        if (!mobileFilterInput) throw new Error('Expected a visible release filter input in the bottom sheet.')
+        await expect(mobileFilterInput).toBeVisible()
+        await expectNoHorizontalOverflow(page)
+      })
+    }
+  })
 })
 
 async function signIn(page: Page) {
@@ -52,6 +79,21 @@ async function stubResourceSearchApis(page: Page) {
   })
   await page.route(/\/api\/music\/(?:discover|search)(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: emptyResourcePage() })
+  })
+}
+
+async function stubReleaseSearchApis(page: Page) {
+  await page.route(/\/api\/library\/states(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: { items: [] } })
+  })
+  await page.route(/\/api\/downloaders(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: { items: [] } })
+  })
+  await page.route(/\/api\/music\/details(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: { item: musicAlbumDetails() } })
+  })
+  await page.route(/\/api\/indexers\/search(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: { results: [indexerRelease()] } })
   })
 }
 
@@ -105,5 +147,73 @@ function emptyResourcePage() {
     page: 1,
     totalPages: 1,
     totalResults: 0,
+  }
+}
+
+const MUSIC_RELEASE_KEY = 'musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377'
+
+function musicAlbumDetails() {
+  return {
+    mediaKey: MUSIC_RELEASE_KEY,
+    provider: 'musicbrainz',
+    resourceType: 'release-group',
+    mbid: '89ad4ac3-39f7-470e-963a-56509c546377',
+    releaseGroupMbid: '89ad4ac3-39f7-470e-963a-56509c546377',
+    title: 'Kind of Blue',
+    artist: 'Miles Davis',
+    artists: [{ id: 'artist-1', name: 'Miles Davis', joinPhrase: '' }],
+    firstReleaseDate: '1959-08-17',
+    releaseYear: '1959',
+    releaseDate: '1959-08-17',
+    country: 'US',
+    primaryType: 'Album',
+    secondaryTypes: ['Jazz'],
+    disambiguation: null,
+    coverArt: { frontUrl: null, frontThumbnailUrl: null, backUrl: null, backThumbnailUrl: null },
+    detailMediaKey: 'musicbrainz:release:release-1',
+    releaseMbid: 'release-1',
+    preferredRelease: null,
+    releases: [
+      {
+        mediaKey: 'musicbrainz:release:release-1',
+        mbid: 'release-1',
+        title: 'Kind of Blue Legacy',
+        date: '1959-08-17',
+        country: 'US',
+        status: 'Official',
+        barcode: null,
+        formats: ['Vinyl'],
+      },
+    ],
+    barcode: null,
+    aliases: [{ name: 'Blue Sessions', locale: null, primary: false, type: null }],
+    formats: ['Vinyl'],
+    media: [],
+  }
+}
+
+function indexerRelease() {
+  return {
+    id: 'release-1',
+    downloadTarget: 'music',
+    title: 'Miles Davis Kind of Blue 1959 FLAC',
+    fileName: null,
+    indexer: 'Prowlarr',
+    size: 1024 * 1024 * 700,
+    seeders: 42,
+    leechers: 1,
+    files: 10,
+    protocol: 'torrent',
+    publishDate: '2026-07-01T00:00:00.000Z',
+    downloadUrl: 'https://example.test/kind-of-blue.torrent',
+    magnetUrl: null,
+    infoUrl: 'https://example.test/release-1',
+    infoHash: null,
+    categories: ['Audio', 'Lossless'],
+    categoryIds: [3000, 3040],
+    indexerFlags: [],
+    imdbId: null,
+    tmdbId: null,
+    tvdbId: null,
   }
 }

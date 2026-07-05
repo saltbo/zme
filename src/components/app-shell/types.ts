@@ -6,6 +6,7 @@ export interface TopbarOverride {
   subtitle: string
   backTo?: string
   actions?: ReactNode
+  hideSearch?: boolean
 }
 
 export interface AppOutletContext {

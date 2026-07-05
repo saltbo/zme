@@ -1,5 +1,4 @@
 import type {
-  IndexerSearchItem,
   MediaDetails,
   MediaImage,
   MediaKind,
@@ -25,16 +24,14 @@ import {
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useOutletContext, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
 import { toast } from 'sonner'
 import Lightbox from 'yet-another-react-lightbox'
 import FullscreenPlugin from 'yet-another-react-lightbox/plugins/fullscreen'
 import ZoomPlugin from 'yet-another-react-lightbox/plugins/zoom'
 import 'yet-another-react-lightbox/styles.css'
-import { uniqueStrings } from '@shared/indexer-search'
 import type { AppOutletContext } from '@/components/app-shell/types'
 import { MediaRail } from '@/components/media/media-components'
-import { ReleaseSearchDialog, type ReleaseSearchError } from '@/components/release-search-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -45,45 +42,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useMediaDetails, useMediaWatchClickouts } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
-import { ApiError } from '@/lib/api'
-import { type ReleaseSearchProgress, searchMediaReleasesInSteps } from '@/lib/release-search'
 import { cn } from '@/lib/utils'
-
-function getReleaseSearchInput(media: MediaDetails) {
-  const title = media.title
-  const aliases = uniqueStrings([media.originalTitle, ...media.aliases])
-  const query = [title, media.releaseYear].filter(Boolean).join(' ')
-  const tmdbId = Number(media.ids.tmdb)
-  const tvdbId = Number(media.ids.tvdb)
-  const imdbId = normalizeImdbId(media.ids.imdb)
-  const hasTmdbId = Number.isFinite(tmdbId) && tmdbId > 0
-  const hasTvdbId = Number.isFinite(tvdbId) && tvdbId > 0
-  const label =
-    media.kind === 'tv' && hasTvdbId
-      ? `TVDB ${tvdbId}`
-      : imdbId
-        ? `IMDb ${imdbId}`
-        : hasTmdbId
-          ? `TMDB ${tmdbId}`
-          : query
-
-  return {
-    query,
-    title,
-    aliases,
-    year: media.releaseYear,
-    kind: media.kind,
-    tmdbId: hasTmdbId ? tmdbId : undefined,
-    tvdbId: hasTvdbId ? tvdbId : undefined,
-    imdbId,
-    label,
-  }
-}
-
-function normalizeImdbId(value: string | null): string | undefined {
-  if (!value) return undefined
-  return /^tt\d+$/i.test(value) ? value.toLowerCase() : undefined
-}
 
 const watchRegionOptions = ['US', 'JP', 'CN', 'HK', 'TW', 'GB', 'CA', 'AU', 'KR', 'TH'] as const
 const mobileGenreSkeletonKeys = ['mobile-genre-skeleton-1', 'mobile-genre-skeleton-2', 'mobile-genre-skeleton-3']
@@ -123,6 +82,7 @@ const railItemSkeletonKeys = [
 
 export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { id } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { i18n, t } = useTranslation()
@@ -132,12 +92,6 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   const [watchRegion, setWatchRegion] = useState('US')
   const mediaDetails = useMediaDetails(kind, routeId, tmdbLanguage, watchRegion)
   const media = mediaDetails.data ?? null
-  const [releases, setReleases] = useState<IndexerSearchItem[]>([])
-  const [releaseDialogOpen, setReleaseDialogOpen] = useState(false)
-  const [releaseQuery, setReleaseQuery] = useState('')
-  const [releaseError, setReleaseError] = useState<ReleaseSearchError | null>(null)
-  const [releaseSearchLoading, setReleaseSearchLoading] = useState(false)
-  const [releaseSearchProgress, setReleaseSearchProgress] = useState<ReleaseSearchProgress | null>(null)
   const [selectedVideo, setSelectedVideo] = useState<MediaVideo | null>(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(-1)
 
@@ -153,29 +107,9 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
     return () => setTopbarOverride(null)
   }, [location.pathname, media, setTopbarOverride, t])
 
-  async function handleFindReleases() {
-    if (!media || releaseSearchLoading) return
-
-    const searchInput = getReleaseSearchInput(media)
-    setReleaseQuery(searchInput.label)
-    setReleaseDialogOpen(true)
-    setReleaseError(null)
-    setReleases([])
-    setReleaseSearchLoading(true)
-    setReleaseSearchProgress(null)
-    try {
-      const results = await searchMediaReleasesInSteps(searchInput, (progress) => {
-        setReleaseSearchProgress(progress)
-      })
-      setReleases(results)
-      setReleaseError(null)
-    } catch (error) {
-      setReleases([])
-      setReleaseError(getReleaseSearchError(error, t))
-    } finally {
-      setReleaseSearchLoading(false)
-      setReleaseSearchProgress(null)
-    }
+  function handleFindReleases() {
+    if (!media) return
+    navigate(`${location.pathname}/releases`, { state: { origin: `${location.pathname}${location.search}` } })
   }
 
   async function handleMediaStatusChange(status: MediaStatus) {
@@ -507,19 +441,6 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
             </Card>
           ) : null}
         </div>
-      ) : null}
-
-      {releaseDialogOpen ? (
-        <ReleaseSearchDialog
-          media={media}
-          query={releaseQuery}
-          items={releases}
-          loading={releaseSearchLoading}
-          error={releaseError}
-          progress={releaseSearchProgress}
-          onClose={() => setReleaseDialogOpen(false)}
-          onSearch={() => void handleFindReleases()}
-        />
       ) : null}
 
       <VideoPlayerDialog video={selectedVideo} onClose={() => setSelectedVideo(null)} />
@@ -1004,31 +925,4 @@ function DetailMetric({ label, value }: { label: string; value: string }) {
 
 function SectionTitle({ title }: { title: string }) {
   return <h2 className="font-semibold text-xl">{title}</h2>
-}
-
-function getReleaseSearchError(error: unknown, t: (key: string) => string): ReleaseSearchError {
-  if (error instanceof ApiError && error.code === 'INDEXER_NOT_CONFIGURED') {
-    return {
-      title: t('indexerNotConfiguredTitle'),
-      description: t('indexerNotConfiguredDescription'),
-      action: t('retrySearch'),
-      tone: 'configuration',
-    }
-  }
-
-  if (error instanceof ApiError && error.status === 502) {
-    return {
-      title: t('indexerConnectionFailedTitle'),
-      description: t('indexerConnectionFailedDescription'),
-      action: t('retrySearch'),
-      tone: 'connection',
-    }
-  }
-
-  return {
-    title: t('indexerSearchFailedTitle'),
-    description: error instanceof Error ? error.message : t('indexerSearchFailedDescription'),
-    action: t('retrySearch'),
-    tone: 'generic',
-  }
 }

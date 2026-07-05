@@ -1,11 +1,8 @@
 import type {
-  BookDetails,
   BookDiscoveryInput,
   BookDiscoveryMode,
   BookSearchItem,
   BookTrendingPeriod,
-  DownloadSearchTarget,
-  IndexerSearchItem,
   LibraryKind,
   LibraryResourceInput,
   MusicAlbumDetails,
@@ -34,14 +31,9 @@ import {
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import type { AppOutletContext } from '@/components/app-shell/types'
-import {
-  ReleaseSearchDialog,
-  type ReleaseSearchError,
-  type ReleaseSearchMedia,
-} from '@/components/release-search-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -52,12 +44,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useBookDetails, useBookSearch, useMusicAlbumDetails, useMusicSearch } from '@/hooks/use-resource-queries'
-import { ApiError } from '@/lib/api'
-import {
-  type ReleaseSearchProgress,
-  type ReleaseSearchProgressHandler,
-  searchResourceReleasesInSteps,
-} from '@/lib/release-search'
 import {
   compareResourceTitle,
   getResourceSearchSort,
@@ -1009,14 +995,13 @@ function getBookSubjectParam(value: string | null): string | undefined {
 
 export function MusicDetailPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { key } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { t } = useTranslation()
   const mediaKey = key ?? ''
   const details = useMusicAlbumDetails(mediaKey)
   const album = details.data ?? null
-  const [releaseDialog, setReleaseDialog] = useState<ReleaseDialogState | null>(null)
-  const releaseSearch = useResourceReleaseSearch(setReleaseDialog)
 
   useEffect(() => {
     if (!album) return
@@ -1030,12 +1015,7 @@ export function MusicDetailPage() {
 
   function openReleaseSearch() {
     if (!album) return
-    openResourceReleaseSearch({
-      input: getMusicReleaseSearchInput(album),
-      label: t('musicDownload'),
-      releaseSearch,
-      setReleaseDialog,
-    })
+    navigate(`${location.pathname}/releases`, { state: { origin: `${location.pathname}${location.search}` } })
   }
 
   if (details.isLoading) return <ResourceDetailSkeleton />
@@ -1076,45 +1056,36 @@ export function MusicDetailPage() {
         </>
       }
       sections={
-        <>
-          <ResourceSection title={t('trackList')}>
-            {album.media.length > 0 ? (
-              <div className="space-y-4">
-                {album.media.map((medium) => (
-                  <div key={medium.position} className="rounded-xl border p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="font-semibold text-sm">
-                        {medium.title ?? medium.format ?? `${t('disc')} ${medium.position}`}
-                      </h3>
-                      <Badge variant="secondary">{medium.trackCount}</Badge>
-                    </div>
-                    <div className="space-y-2">
-                      {medium.tracks.map((track) => (
-                        <div
-                          key={`${medium.position}-${track.position}`}
-                          className="grid grid-cols-[3rem_minmax(0,1fr)_4rem] gap-3 text-sm"
-                        >
-                          <span className="text-muted-foreground">{track.number ?? track.position}</span>
-                          <span className="truncate">{track.title}</span>
-                          <span className="text-right text-muted-foreground">{formatTrackLength(track.lengthMs)}</span>
-                        </div>
-                      ))}
-                    </div>
+        <ResourceSection title={t('trackList')}>
+          {album.media.length > 0 ? (
+            <div className="space-y-4">
+              {album.media.map((medium) => (
+                <div key={medium.position} className="rounded-xl border p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-sm">
+                      {medium.title ?? medium.format ?? `${t('disc')} ${medium.position}`}
+                    </h3>
+                    <Badge variant="secondary">{medium.trackCount}</Badge>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyResourceSection />
-            )}
-          </ResourceSection>
-          <ResourceReleaseDialog
-            state={releaseDialog}
-            loading={releaseSearch.isPending}
-            progress={releaseSearch.progress}
-            onClose={() => setReleaseDialog(null)}
-            onSearch={() => releaseSearch.mutate(releaseDialog?.input)}
-          />
-        </>
+                  <div className="space-y-2">
+                    {medium.tracks.map((track) => (
+                      <div
+                        key={`${medium.position}-${track.position}`}
+                        className="grid grid-cols-[3rem_minmax(0,1fr)_4rem] gap-3 text-sm"
+                      >
+                        <span className="text-muted-foreground">{track.number ?? track.position}</span>
+                        <span className="truncate">{track.title}</span>
+                        <span className="text-right text-muted-foreground">{formatTrackLength(track.lengthMs)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyResourceSection />
+          )}
+        </ResourceSection>
       }
     />
   )
@@ -1122,14 +1093,13 @@ export function MusicDetailPage() {
 
 export function BookDetailPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { key } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { t } = useTranslation()
   const mediaKey = key ?? ''
   const details = useBookDetails(mediaKey)
   const book = details.data ?? null
-  const [releaseDialog, setReleaseDialog] = useState<ReleaseDialogState | null>(null)
-  const releaseSearch = useResourceReleaseSearch(setReleaseDialog)
 
   useEffect(() => {
     if (!book) return
@@ -1143,13 +1113,7 @@ export function BookDetailPage() {
 
   function openBookReleaseSearch(target: 'ebook' | 'audiobook') {
     if (!book) return
-    const targetLabel = target === 'ebook' ? t('ebook') : t('audiobook')
-    openResourceReleaseSearch({
-      input: getBookReleaseSearchInput(book, target),
-      label: targetLabel,
-      releaseSearch,
-      setReleaseDialog,
-    })
+    navigate(`${location.pathname}/releases/${target}`, { state: { origin: `${location.pathname}${location.search}` } })
   }
 
   if (details.isLoading) return <ResourceDetailSkeleton />
@@ -1209,35 +1173,26 @@ export function BookDetailPage() {
         </>
       }
       sections={
-        <>
-          <ResourceSection title={t('editions')}>
-            {book.editionCandidates.length > 0 ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {book.editionCandidates.slice(0, 12).map((edition) => (
-                  <Card key={edition.mediaKey} className="p-4">
-                    <CardContent className="px-0">
-                      <h3 className="line-clamp-2 font-semibold text-sm">{edition.title ?? book.title}</h3>
-                      <div className="mt-2 text-muted-foreground text-xs">
-                        {[edition.publishYear, edition.languages.join(', '), edition.openLibraryId]
-                          .filter(Boolean)
-                          .join(' / ')}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <EmptyResourceSection />
-            )}
-          </ResourceSection>
-          <ResourceReleaseDialog
-            state={releaseDialog}
-            loading={releaseSearch.isPending}
-            progress={releaseSearch.progress}
-            onClose={() => setReleaseDialog(null)}
-            onSearch={() => releaseSearch.mutate(releaseDialog?.input)}
-          />
-        </>
+        <ResourceSection title={t('editions')}>
+          {book.editionCandidates.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {book.editionCandidates.slice(0, 12).map((edition) => (
+                <Card key={edition.mediaKey} className="p-4">
+                  <CardContent className="px-0">
+                    <h3 className="line-clamp-2 font-semibold text-sm">{edition.title ?? book.title}</h3>
+                    <div className="mt-2 text-muted-foreground text-xs">
+                      {[edition.publishYear, edition.languages.join(', '), edition.openLibraryId]
+                        .filter(Boolean)
+                        .join(' / ')}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <EmptyResourceSection />
+          )}
+        </ResourceSection>
       }
     />
   )
@@ -1618,207 +1573,6 @@ function ResourceCardStatusMenu({
   )
 }
 
-interface ReleaseDialogState {
-  item: ReleaseSearchMedia
-  label: string
-  query: string
-  releases: IndexerSearchItem[]
-  error: ReleaseSearchError | null
-  input: ResourceReleaseSearchInput
-}
-
-interface ResourceReleaseSearchInput {
-  target: DownloadSearchTarget
-  query: string
-  item: ReleaseSearchMedia
-  title: string
-  aliases: string[]
-  creators: string[]
-  year: string | null
-  formats: string[]
-  narrator: string | null
-}
-
-function useResourceReleaseSearch(setReleaseDialog: (state: ReleaseDialogState | null) => void) {
-  const { t } = useTranslation()
-  const [isPending, setIsPending] = useState(false)
-  const [progress, setProgress] = useState<ReleaseSearchProgress | null>(null)
-
-  async function mutate(input: ResourceReleaseSearchInput | undefined) {
-    if (!input || isPending) return
-
-    setIsPending(true)
-    setProgress(null)
-    const onProgress: ReleaseSearchProgressHandler = (nextProgress) => {
-      setProgress(nextProgress)
-      setReleaseDialog({
-        item: input.item,
-        label: input.target,
-        query: input.query,
-        releases: [],
-        error: null,
-        input,
-      })
-    }
-
-    try {
-      const results = await searchResourceReleasesInSteps(input, onProgress)
-      setReleaseDialog({
-        item: input.item,
-        label: input.target,
-        query: input.query,
-        releases: results,
-        error: null,
-        input,
-      })
-    } catch (error) {
-      setReleaseDialog({
-        item: input.item,
-        label: input.target,
-        query: input.query,
-        releases: [],
-        error: getReleaseSearchError(error, t),
-        input,
-      })
-    } finally {
-      setIsPending(false)
-      setProgress(null)
-    }
-  }
-
-  return { isPending, progress, mutate }
-}
-
-function openResourceReleaseSearch({
-  input,
-  label,
-  releaseSearch,
-  setReleaseDialog,
-}: {
-  input: ResourceReleaseSearchInput
-  label: string
-  releaseSearch: ReturnType<typeof useResourceReleaseSearch>
-  setReleaseDialog: (state: ReleaseDialogState | null) => void
-}) {
-  setReleaseDialog({ item: input.item, label, query: input.query, releases: [], error: null, input })
-  releaseSearch.mutate(input)
-}
-
-function ResourceReleaseDialog({
-  state,
-  loading,
-  progress,
-  onClose,
-  onSearch,
-}: {
-  state: ReleaseDialogState | null
-  loading: boolean
-  progress: ReleaseSearchProgress | null
-  onClose: () => void
-  onSearch: () => void
-}) {
-  if (!state) return null
-
-  return (
-    <ReleaseSearchDialog
-      media={state.item}
-      query={state.query}
-      items={state.releases}
-      loading={loading}
-      error={state.error}
-      progress={progress}
-      onClose={onClose}
-      onSearch={onSearch}
-    />
-  )
-}
-
-export function getMusicReleaseSearchInput(album: MusicAlbumDetails): ResourceReleaseSearchInput {
-  const creators = getMusicCreators(album)
-  const formats = uniqueStrings([...album.formats, album.primaryType, ...album.secondaryTypes, 'flac', 'mp3'])
-  const aliases = uniqueStrings([
-    ...album.aliases.map((alias) => alias.name),
-    ...album.releases.map((release) => release.title),
-  ])
-  const query = [album.title, creators[0], album.releaseYear, formats[0]].filter(Boolean).join(' ')
-
-  return {
-    target: 'music',
-    query,
-    item: toMusicReleaseMedia(album),
-    title: album.title,
-    aliases,
-    creators,
-    year: album.releaseYear,
-    formats,
-    narrator: null,
-  }
-}
-
-export function getBookReleaseSearchInput(
-  book: BookDetails,
-  target: Extract<DownloadSearchTarget, 'ebook' | 'audiobook'>,
-): ResourceReleaseSearchInput {
-  const targetFormat = target === 'ebook' ? 'ebook' : 'audiobook'
-  const formats = target === 'ebook' ? ['ebook', 'epub', 'mobi', 'azw3', 'pdf'] : ['audiobook', 'm4b', 'm4a', 'mp3']
-  const year = book.firstPublishYear ? String(book.firstPublishYear) : null
-  const query = [book.title, book.authors[0], year, targetFormat].filter(Boolean).join(' ')
-
-  return {
-    target,
-    query,
-    item: toBookReleaseMedia(book, target),
-    title: book.title,
-    aliases: uniqueStrings(book.aliases),
-    creators: uniqueStrings(book.authors),
-    year,
-    formats,
-    narrator: null,
-  }
-}
-
-function toMusicReleaseMedia(album: MusicAlbumDetails): ReleaseSearchMedia {
-  return {
-    id: 0,
-    kind: 'movie',
-    title: album.title,
-    originalTitle: album.title,
-    overview: album.disambiguation ?? '',
-    posterUrl: album.coverArt.frontUrl,
-    backdropUrl: null,
-    releaseYear: album.releaseYear,
-    rating: null,
-    genres: album.secondaryTypes,
-    downloadCategory: 'zme:music',
-    downloadTags: [`mediaKey=${album.mediaKey}`, 'kind=music'],
-  }
-}
-
-function toBookReleaseMedia(book: BookDetails, target: 'ebook' | 'audiobook'): ReleaseSearchMedia {
-  return {
-    id: 0,
-    kind: 'movie',
-    title: book.title,
-    originalTitle: book.title,
-    overview: book.description ?? '',
-    posterUrl: book.coverUrl,
-    backdropUrl: null,
-    releaseYear: book.firstPublishYear ? String(book.firstPublishYear) : null,
-    rating: null,
-    genres: book.languages,
-    downloadCategory: `zme:${target}`,
-    downloadTags: [`mediaKey=${book.mediaKey}`, 'kind=book', `target=${target}`],
-  }
-}
-
-function getMusicCreators(album: MusicAlbumDetails) {
-  return uniqueStrings([...album.artists.map((artist) => artist.name), album.artist])
-}
-
-function uniqueStrings(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))))
-}
-
 function ResourceFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-xl bg-white/10 p-4 text-white backdrop-blur ring-1 ring-white/10">
@@ -1885,24 +1639,6 @@ function ResourceDetailError({ message }: { message: string }) {
       <Card className="flex min-h-80 items-center justify-center p-8 text-muted-foreground">{message}</Card>
     </div>
   )
-}
-
-function getReleaseSearchError(error: unknown, t: (key: string) => string): ReleaseSearchError {
-  if (error instanceof ApiError && error.status === 404) {
-    return {
-      title: t('indexerNotConfiguredTitle'),
-      description: t('indexerNotConfiguredDescription'),
-      action: t('retrySearch'),
-      tone: 'configuration',
-    }
-  }
-
-  return {
-    title: t('indexerSearchFailedTitle'),
-    description: error instanceof Error ? error.message : t('indexerSearchFailedDescription'),
-    action: t('retrySearch'),
-    tone: 'generic',
-  }
 }
 
 function getTrackCount(album: MusicAlbumDetails) {
