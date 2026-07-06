@@ -79,6 +79,34 @@ test.describe('mobile search regressions', () => {
     await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
+
+  test('release search app back returns to music detail without leaving release search behind', async ({ page }) => {
+    await signIn(page)
+    await stubResourceSearchApis(page)
+    await stubReleaseSearchApis(page)
+
+    for (const viewport of [DESKTOP_VIEWPORT, ...MOBILE_VIEWPORTS]) {
+      await test.step(`back stack from ${viewport.width}px`, async () => {
+        await page.setViewportSize(viewport)
+        await page.goto('/music')
+        await expect(page.getByRole('heading', { name: 'Music' })).toBeVisible()
+        await page.goto(MUSIC_DETAIL_PATH)
+        await expect(musicDetailHeading(page)).toBeVisible()
+
+        await page.getByRole('button', { name: 'Search music' }).click()
+        await page.waitForURL((url) => url.pathname === MUSIC_RELEASE_PATH)
+        await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
+
+        await page.getByRole('button', { name: 'Back' }).click()
+        await page.waitForURL((url) => url.pathname === MUSIC_DETAIL_PATH)
+        await expect(musicDetailHeading(page)).toBeVisible()
+
+        await page.goBack()
+        await page.waitForURL((url) => url.pathname === '/music')
+        expect(new URL(page.url()).pathname).toBe('/music')
+      })
+    }
+  })
 })
 
 async function signIn(page: Page) {
@@ -160,6 +188,10 @@ async function visibleLocator(locator: Locator) {
   return null
 }
 
+function musicDetailHeading(page: Page) {
+  return page.getByRole('heading', { name: 'Kind of Blue', exact: true }).last()
+}
+
 function emptyResourcePage() {
   return {
     results: [],
@@ -170,6 +202,8 @@ function emptyResourcePage() {
 }
 
 const MUSIC_RELEASE_KEY = 'musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377'
+const MUSIC_DETAIL_PATH = `/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}`
+const MUSIC_RELEASE_PATH = `${MUSIC_DETAIL_PATH}/releases`
 const RELEASE_SEARCH_CONTEXT = 'Music / 1959 / Search query: Kind of Blue Miles Davis 1959 Vinyl'
 
 function musicAlbumDetails() {

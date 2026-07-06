@@ -196,7 +196,8 @@ function ReleaseSearchPageLayout({
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const [retryNonce, setRetryNonce] = useState(0)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
-  const backTo = getOriginPath(location.state) ?? parentPath
+  const originPath = getOriginPath(location.state)
+  const backTo = originPath ?? parentPath
   const [searchState, setSearchState] = useState<{
     items: IndexerSearchItem[]
     progress: ReleaseSearchProgress | null
@@ -210,24 +211,26 @@ function ReleaseSearchPageLayout({
       title: context?.media.title ?? t('indexerSearch'),
       subtitle: context ? getReleaseSearchPageSubtitle(context, t) : t('indexerSearchSubtitle'),
       backTo,
+      backMode: originPath ? 'history' : 'replace',
       hideSearch: true,
-      actions: context ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-lg"
-          className="rounded-full md:hidden"
-          onClick={() => setMobileFiltersOpen(true)}
-          aria-label={t('filters')}
-          title={t('filters')}
-        >
-          <SlidersHorizontal />
-        </Button>
-      ) : null,
+      actions:
+        context && !searchState.loading ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            className="rounded-full md:hidden"
+            onClick={() => setMobileFiltersOpen(true)}
+            aria-label={t('filters')}
+            title={t('filters')}
+          >
+            <SlidersHorizontal />
+          </Button>
+        ) : null,
     })
 
     return () => setTopbarOverride(null)
-  }, [backTo, context, location.pathname, setTopbarOverride, t])
+  }, [backTo, context, location.pathname, originPath, searchState.loading, setTopbarOverride, t])
 
   useEffect(() => {
     if (!context) {
