@@ -166,6 +166,7 @@ function ReleaseSearchContent({
   const visibleItems = filterReleases({ items, keyword, indexer, quality, sourceFilter, sort })
   const status = getReleaseStatus({ loading, error, progress, resultCount: visibleItems.length, t })
   const hasFilters = keyword.trim().length > 0 || indexer !== 'all' || quality !== 'all' || sourceFilter !== 'all'
+  const showFilters = !loading
   const enabledDownloaders = (downloaders.data ?? []).filter((item) => item.enabled)
 
   function clearFilters() {
@@ -181,7 +182,7 @@ function ReleaseSearchContent({
     }
   }, [downloaders.error, t])
 
-  const filters = (
+  const filters = showFilters ? (
     <ReleaseFilterControls
       keyword={keyword}
       indexer={indexer}
@@ -198,7 +199,7 @@ function ReleaseSearchContent({
       onSortChange={setSort}
       onSearch={onSearch}
     />
-  )
+  ) : null
   const summary = (
     <ReleaseSearchSummary
       loading={loading}
@@ -210,7 +211,7 @@ function ReleaseSearchContent({
       onClearFilters={clearFilters}
     />
   )
-  const mobileFilters = (
+  const mobileFilters = showFilters ? (
     <ReleaseMobileFilterSheet
       open={filtersOpen}
       onOpenChange={setFiltersOpen}
@@ -231,19 +232,12 @@ function ReleaseSearchContent({
       onSearch={onSearch}
       onClearFilters={clearFilters}
     />
-  )
+  ) : null
 
   if (layout === 'page') {
     return (
       <div tabIndex={-1} className={cn('min-w-0 bg-background outline-none', className)}>
-        <div className="hidden border-y bg-muted/25 py-4 md:block">
-          <div className="mb-3 flex min-w-0 items-center justify-between gap-4">
-            <div className="min-w-0">
-              <div className="font-medium text-muted-foreground text-xs">{t('releaseSearchQuery')}</div>
-              <div className="mt-1 truncate font-medium text-sm">{query}</div>
-            </div>
-            <ReleaseStatusPill status={status} />
-          </div>
+        <div className="hidden border-b bg-muted/25 py-4 md:block">
           {filters}
           {summary}
         </div>
@@ -278,7 +272,13 @@ function ReleaseSearchContent({
       tabIndex={-1}
       className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-background outline-none', className)}
     >
-      <ReleaseSearchHeader media={media} query={query} status={status} onOpenFilters={() => setFiltersOpen(true)} />
+      <ReleaseSearchHeader
+        media={media}
+        query={query}
+        status={status}
+        showFilters={showFilters}
+        onOpenFilters={() => setFiltersOpen(true)}
+      />
 
       <div className="hidden border-b bg-muted/30 px-4 py-3 md:block sm:px-5">
         {filters}
@@ -310,11 +310,13 @@ function ReleaseSearchContent({
 function ReleaseSearchHeader({
   media,
   query,
+  showFilters,
   status,
   onOpenFilters,
 }: {
   media: ReleaseSearchMedia
   query: string
+  showFilters: boolean
   status: {
     icon: ReactNode
     label: string
@@ -339,17 +341,19 @@ function ReleaseSearchHeader({
             <ReleaseStatusPill status={status} />
           </SheetHeader>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-lg"
-          className="shrink-0 md:hidden"
-          onClick={onOpenFilters}
-          aria-label={t('filters')}
-          title={t('filters')}
-        >
-          <SlidersHorizontal />
-        </Button>
+        {showFilters ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            className="shrink-0 md:hidden"
+            onClick={onOpenFilters}
+            aria-label={t('filters')}
+            title={t('filters')}
+          >
+            <SlidersHorizontal />
+          </Button>
+        ) : null}
       </div>
     </div>
   )

@@ -4,7 +4,7 @@ import type { FormEvent } from 'react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router'
-import type { TopbarOverride } from '@/components/app-shell/types'
+import type { TopbarBackMode, TopbarOverride } from '@/components/app-shell/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getRouteMedia, type RouteMedia } from '@/lib/routes'
@@ -14,6 +14,7 @@ interface TopbarCopy {
   title: string
   subtitle: string
   backTo?: string
+  backMode?: TopbarBackMode
 }
 
 export function AppTopbar({ override }: { override: TopbarOverride | null }) {
@@ -35,6 +36,20 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
     navigate(`${getSearchPath(location.pathname)}?q=${encodeURIComponent(query)}`)
   }
 
+  function handleBack() {
+    if (pageCopy.backMode === 'history') {
+      navigate(-1)
+      return
+    }
+
+    if (pageCopy.backTo) {
+      navigate(pageCopy.backTo, { replace: pageCopy.backMode === 'replace' })
+      return
+    }
+
+    navigate(-1)
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 px-4 py-3 backdrop-blur-xl sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-[1680px] flex-col gap-3">
@@ -43,7 +58,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
             {showBackButton ? (
               <Button
                 type="button"
-                onClick={() => (pageCopy.backTo ? navigate(pageCopy.backTo) : navigate(-1))}
+                onClick={handleBack}
                 variant="outline"
                 size="icon-lg"
                 className="shrink-0 rounded-full"
