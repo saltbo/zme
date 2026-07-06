@@ -61,7 +61,7 @@ export interface ReleaseSearchError {
 type ReleaseSort = 'best' | 'seeders' | 'date' | 'size-desc' | 'size-asc'
 type ReleaseQuality = 'all' | '2160p' | '1080p' | '720p' | 'other'
 type ReleaseSourceFilter = 'all' | 'high' | 'watchable' | 'low' | 'unknown'
-type ReleaseSearchSurfaceKind = 'dialog' | 'page'
+type ReleaseRowLayout = 'dialog' | 'page'
 
 interface ReleaseSearchSurfaceProps {
   media: ReleaseSearchMedia
@@ -74,11 +74,10 @@ interface ReleaseSearchSurfaceProps {
   className?: string
   mobileFiltersOpen?: boolean
   onMobileFiltersOpenChange?: (open: boolean) => void
-  showMobileFilterButton?: boolean
 }
 
 export function ReleaseSearchSurface(props: ReleaseSearchSurfaceProps) {
-  return <ReleaseSearchContent {...props} surface="page" />
+  return <ReleaseSearchContent {...props} layout="page" />
 }
 
 export function ReleaseSearchDialog({
@@ -112,7 +111,7 @@ export function ReleaseSearchDialog({
       error={error}
       progress={progress}
       onSearch={onSearch}
-      surface="dialog"
+      layout="dialog"
     />
   )
 
@@ -149,10 +148,9 @@ function ReleaseSearchContent({
   className,
   mobileFiltersOpen,
   onMobileFiltersOpenChange,
-  showMobileFilterButton = true,
-  surface,
+  layout,
 }: ReleaseSearchSurfaceProps & {
-  surface: ReleaseSearchSurfaceKind
+  layout: ReleaseRowLayout
 }) {
   const { t } = useTranslation()
   const [keyword, setKeyword] = useState('')
@@ -183,63 +181,111 @@ function ReleaseSearchContent({
     }
   }, [downloaders.error, t])
 
+  const filters = (
+    <ReleaseFilterControls
+      keyword={keyword}
+      indexer={indexer}
+      quality={quality}
+      sourceFilter={sourceFilter}
+      sort={sort}
+      indexers={indexers}
+      loading={loading}
+      error={error}
+      onKeywordChange={setKeyword}
+      onIndexerChange={setIndexer}
+      onQualityChange={setQuality}
+      onSourceFilterChange={setSourceFilter}
+      onSortChange={setSort}
+      onSearch={onSearch}
+    />
+  )
+  const summary = (
+    <ReleaseSearchSummary
+      loading={loading}
+      progress={progress}
+      error={error}
+      shown={visibleItems.length}
+      total={items.length}
+      hasFilters={hasFilters}
+      onClearFilters={clearFilters}
+    />
+  )
+  const mobileFilters = (
+    <ReleaseMobileFilterSheet
+      open={filtersOpen}
+      onOpenChange={setFiltersOpen}
+      keyword={keyword}
+      indexer={indexer}
+      quality={quality}
+      sourceFilter={sourceFilter}
+      sort={sort}
+      indexers={indexers}
+      hasFilters={hasFilters}
+      loading={loading}
+      error={error}
+      onKeywordChange={setKeyword}
+      onIndexerChange={setIndexer}
+      onQualityChange={setQuality}
+      onSourceFilterChange={setSourceFilter}
+      onSortChange={setSort}
+      onSearch={onSearch}
+      onClearFilters={clearFilters}
+    />
+  )
+
+  if (layout === 'page') {
+    return (
+      <div tabIndex={-1} className={cn('min-w-0 bg-background outline-none', className)}>
+        <div className="hidden border-y bg-muted/25 py-4 md:block">
+          <div className="mb-3 flex min-w-0 items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="font-medium text-muted-foreground text-xs">{t('releaseSearchQuery')}</div>
+              <div className="mt-1 truncate font-medium text-sm">{query}</div>
+            </div>
+            <ReleaseStatusPill status={status} />
+          </div>
+          {filters}
+          {summary}
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2 border-b py-3 md:hidden">
+          <ReleaseStatusPill status={status} />
+          {summary}
+        </div>
+
+        <div className="py-4 sm:py-5">
+          <ReleasePanel
+            media={media}
+            items={visibleItems}
+            loading={loading}
+            progress={progress}
+            error={error}
+            onRetry={onSearch}
+            filtered={hasFilters}
+            downloaders={enabledDownloaders}
+            loadingDownloaders={downloaders.isLoading}
+            layout="page"
+          />
+        </div>
+
+        {mobileFilters}
+      </div>
+    )
+  }
+
   return (
     <div
       tabIndex={-1}
-      className={cn(
-        'flex h-full min-h-0 flex-col overflow-hidden bg-background outline-none',
-        surface === 'page' && 'rounded-xl border shadow-sm',
-        className,
-      )}
+      className={cn('flex h-full min-h-0 flex-col overflow-hidden bg-background outline-none', className)}
     >
-      <ReleaseSearchHeader
-        media={media}
-        query={query}
-        status={status}
-        surface={surface}
-        showMobileFilterButton={showMobileFilterButton}
-        onOpenFilters={() => setFiltersOpen(true)}
-      />
+      <ReleaseSearchHeader media={media} query={query} status={status} onOpenFilters={() => setFiltersOpen(true)} />
 
       <div className="hidden border-b bg-muted/30 px-4 py-3 md:block sm:px-5">
-        <ReleaseFilterControls
-          keyword={keyword}
-          indexer={indexer}
-          quality={quality}
-          sourceFilter={sourceFilter}
-          sort={sort}
-          indexers={indexers}
-          loading={loading}
-          error={error}
-          onKeywordChange={setKeyword}
-          onIndexerChange={setIndexer}
-          onQualityChange={setQuality}
-          onSourceFilterChange={setSourceFilter}
-          onSortChange={setSort}
-          onSearch={onSearch}
-        />
-        <ReleaseSearchSummary
-          loading={loading}
-          progress={progress}
-          error={error}
-          shown={visibleItems.length}
-          total={items.length}
-          hasFilters={hasFilters}
-          onClearFilters={clearFilters}
-        />
+        {filters}
+        {summary}
       </div>
 
-      <div className="border-b bg-muted/30 px-4 py-2 md:hidden">
-        <ReleaseSearchSummary
-          loading={loading}
-          progress={progress}
-          error={error}
-          shown={visibleItems.length}
-          total={items.length}
-          hasFilters={hasFilters}
-          onClearFilters={clearFilters}
-        />
-      </div>
+      <div className="border-b bg-muted/30 px-4 py-2 md:hidden">{summary}</div>
 
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4 sm:p-5">
         <ReleasePanel
@@ -252,29 +298,11 @@ function ReleaseSearchContent({
           filtered={hasFilters}
           downloaders={enabledDownloaders}
           loadingDownloaders={downloaders.isLoading}
+          layout="dialog"
         />
       </div>
 
-      <ReleaseMobileFilterSheet
-        open={filtersOpen}
-        onOpenChange={setFiltersOpen}
-        keyword={keyword}
-        indexer={indexer}
-        quality={quality}
-        sourceFilter={sourceFilter}
-        sort={sort}
-        indexers={indexers}
-        hasFilters={hasFilters}
-        loading={loading}
-        error={error}
-        onKeywordChange={setKeyword}
-        onIndexerChange={setIndexer}
-        onQualityChange={setQuality}
-        onSourceFilterChange={setSourceFilter}
-        onSortChange={setSort}
-        onSearch={onSearch}
-        onClearFilters={clearFilters}
-      />
+      {mobileFilters}
     </div>
   )
 }
@@ -283,8 +311,6 @@ function ReleaseSearchHeader({
   media,
   query,
   status,
-  surface,
-  showMobileFilterButton,
   onOpenFilters,
 }: {
   media: ReleaseSearchMedia
@@ -294,47 +320,36 @@ function ReleaseSearchHeader({
     label: string
     className: string
   }
-  surface: ReleaseSearchSurfaceKind
-  showMobileFilterButton: boolean
   onOpenFilters: () => void
 }) {
   const { t } = useTranslation()
 
   return (
-    <div className={cn('border-b bg-card py-3 pl-4 sm:pl-5', surface === 'dialog' ? 'pr-14 sm:pr-16' : 'pr-4 sm:pr-5')}>
+    <div className="border-b bg-card py-3 pr-14 pl-4 sm:pr-16 sm:pl-5">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          {surface === 'dialog' ? (
-            <DialogHeader className="hidden md:block">
-              <div className="flex flex-row items-center justify-between gap-3">
-                <ReleaseTitle media={media} query={query} titleKind="dialog" />
-                <ReleaseStatusPill status={status} />
-              </div>
-            </DialogHeader>
-          ) : (
-            <div className="hidden md:flex md:items-center md:justify-between md:gap-3">
-              <ReleaseTitle media={media} query={query} titleKind="page" />
+          <DialogHeader className="hidden md:block">
+            <div className="flex flex-row items-center justify-between gap-3">
+              <ReleaseTitle media={media} query={query} titleKind="dialog" />
               <ReleaseStatusPill status={status} />
             </div>
-          )}
+          </DialogHeader>
           <SheetHeader className="flex flex-col gap-3 p-0 md:hidden">
-            <ReleaseTitle media={media} query={query} titleKind={surface === 'dialog' ? 'sheet' : 'page'} mobile />
+            <ReleaseTitle media={media} query={query} titleKind="sheet" mobile />
             <ReleaseStatusPill status={status} />
           </SheetHeader>
         </div>
-        {showMobileFilterButton ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-lg"
-            className="shrink-0 md:hidden"
-            onClick={onOpenFilters}
-            aria-label={t('filters')}
-            title={t('filters')}
-          >
-            <SlidersHorizontal />
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-lg"
+          className="shrink-0 md:hidden"
+          onClick={onOpenFilters}
+          aria-label={t('filters')}
+          title={t('filters')}
+        >
+          <SlidersHorizontal />
+        </Button>
       </div>
     </div>
   )
@@ -404,7 +419,7 @@ function ReleaseFilterControls({
   return (
     <div
       className={cn(
-        'grid gap-2 lg:grid-cols-[minmax(220px,1fr)_150px_130px_150px_160px_auto] lg:items-center',
+        'grid gap-2 lg:grid-cols-[minmax(220px,1fr)_minmax(140px,180px)_minmax(130px,160px)] lg:items-center xl:grid-cols-[minmax(180px,1fr)_minmax(120px,140px)_minmax(110px,130px)_minmax(120px,140px)_minmax(130px,150px)_auto]',
         stacked && 'flex flex-col gap-3',
       )}
     >
@@ -674,10 +689,10 @@ function ReleaseTitle({
   media: ReleaseSearchMedia
   query: string
   mobile?: boolean
-  titleKind: 'dialog' | 'sheet' | 'page'
+  titleKind: 'dialog' | 'sheet'
 }) {
   const { t } = useTranslation()
-  const titleClassName = cn('truncate text-base', mobile && titleKind === 'page' && 'font-semibold')
+  const titleClassName = cn('truncate text-base', mobile && 'font-semibold')
   const description = (
     <>
       {t('indexerSearch')} · {query}
@@ -700,12 +715,7 @@ function ReleaseTitle({
             <DialogTitle className={titleClassName}>{media.title}</DialogTitle>
             <DialogDescription className="truncate text-xs">{description}</DialogDescription>
           </>
-        ) : (
-          <>
-            <h2 className={titleClassName}>{media.title}</h2>
-            <p className="truncate text-muted-foreground text-xs">{description}</p>
-          </>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -827,6 +837,7 @@ function ReleasePanel({
   error,
   onRetry,
   filtered,
+  layout,
 }: {
   downloaders: DownloaderSummary[]
   media: ReleaseSearchMedia
@@ -837,6 +848,7 @@ function ReleasePanel({
   error: ReleaseSearchError | null
   onRetry: () => void
   filtered: boolean
+  layout: ReleaseRowLayout
 }) {
   const { t } = useTranslation()
 
@@ -892,6 +904,7 @@ function ReleasePanel({
           item={item}
           downloaders={downloaders}
           loadingDownloaders={loadingDownloaders}
+          layout={layout}
         />
       ))}
     </div>
@@ -970,11 +983,13 @@ function ReleaseRow({
   media,
   item,
   loadingDownloaders,
+  layout,
 }: {
   downloaders: DownloaderSummary[]
   media: ReleaseSearchMedia
   item: IndexerSearchItem
   loadingDownloaders: boolean
+  layout: ReleaseRowLayout
 }) {
   const { i18n, t } = useTranslation()
   const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
@@ -1016,17 +1031,25 @@ function ReleaseRow({
   const analysis = analyzeIndexerRelease(item)
 
   return (
-    <Card size="sm" className="grid grid-cols-[minmax(0,1fr)_72px] gap-0 p-0">
-      <CardContent className="min-w-0 px-4 py-3">
+    <Card
+      size="sm"
+      className={cn(
+        'grid gap-0 overflow-hidden p-0',
+        layout === 'page' ? 'grid-cols-1 md:grid-cols-[minmax(0,1fr)_160px]' : 'grid-cols-[minmax(0,1fr)_72px]',
+      )}
+    >
+      <CardContent className={cn('min-w-0 px-4 py-3', layout === 'page' && 'md:px-5 md:py-4')}>
         <div className="min-w-0 space-y-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <ReleaseQualityTags analysis={analysis} />
             <ReleaseSpecTags analysis={analysis} />
           </div>
 
-          <h3 className="line-clamp-2 font-semibold text-sm leading-5">{title}</h3>
+          <h3 className={cn('line-clamp-2 font-semibold text-sm leading-5', layout === 'page' && 'md:text-base')}>
+            {title}
+          </h3>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-1 text-xs', layout === 'page' && 'md:gap-x-5')}>
             <span className="font-medium text-foreground">{item.indexer}</span>
             <span className="font-medium text-foreground">
               {item.seeders ?? 0} {t('seeders')}
@@ -1056,20 +1079,31 @@ function ReleaseRow({
           </div>
         </div>
       </CardContent>
-      <div className="flex items-center justify-center border-l px-4 py-3">
+      <div
+        className={cn(
+          'flex items-center justify-center px-4 py-3',
+          layout === 'page' ? 'border-t bg-muted/25 md:border-t-0 md:border-l md:bg-transparent' : 'border-l',
+        )}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <Button
                 type="button"
-                size="icon-lg"
+                size={layout === 'page' ? 'lg' : 'icon-lg'}
+                className={layout === 'page' ? 'w-full md:w-auto' : undefined}
                 disabled={disabled}
                 aria-label={downloadLabel}
                 title={downloadLabel}
               />
             }
           >
-            {submitting ? <LoaderCircle className="animate-spin" /> : <Download />}
+            {submitting ? (
+              <LoaderCircle className="animate-spin" data-icon={layout === 'page' ? 'inline-start' : undefined} />
+            ) : (
+              <Download data-icon={layout === 'page' ? 'inline-start' : undefined} />
+            )}
+            {layout === 'page' ? <span>{downloadLabel}</span> : null}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuGroup>
