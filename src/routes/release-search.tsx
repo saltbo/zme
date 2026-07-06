@@ -207,8 +207,8 @@ function ReleaseSearchPageLayout({
   useEffect(() => {
     setTopbarOverride({
       pathname: location.pathname,
-      title: t('indexerSearch'),
-      subtitle: context?.media.title ?? t('indexerSearchSubtitle'),
+      title: context?.media.title ?? t('indexerSearch'),
+      subtitle: context ? getReleaseSearchPageSubtitle(context, t) : t('indexerSearchSubtitle'),
       backTo,
       hideSearch: true,
       actions: context ? (
@@ -254,36 +254,32 @@ function ReleaseSearchPageLayout({
 
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-[1520px] flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <div className="h-[calc(100dvh-11rem)] min-h-[430px] md:h-[calc(100dvh-8rem)] md:min-h-[560px]">
-        {contextLoading ? (
-          <ReleaseSearchPlaceholder>{t('searchingIndexers')}</ReleaseSearchPlaceholder>
-        ) : contextError ? (
-          <ReleaseSearchRouteError message={contextError} fallbackPath={fallbackPath} onRetry={onContextRetry} />
-        ) : context ? (
-          <ReleaseSearchSurface
-            media={context.media}
-            query={context.displayQuery}
-            items={searchState.items}
-            loading={searchState.loading}
-            error={searchState.error}
-            progress={searchState.progress}
-            onSearch={() => setRetryNonce((current) => current + 1)}
-            mobileFiltersOpen={mobileFiltersOpen}
-            onMobileFiltersOpenChange={setMobileFiltersOpen}
-            showMobileFilterButton={false}
-            className="h-full"
-          />
-        ) : (
-          <ReleaseSearchRouteError message={t('indexerSearchMissingContext')} fallbackPath={fallbackPath} />
-        )}
-      </div>
+      {contextLoading ? (
+        <ReleaseSearchPlaceholder>{t('searchingIndexers')}</ReleaseSearchPlaceholder>
+      ) : contextError ? (
+        <ReleaseSearchRouteError message={contextError} fallbackPath={fallbackPath} onRetry={onContextRetry} />
+      ) : context ? (
+        <ReleaseSearchSurface
+          media={context.media}
+          query={context.displayQuery}
+          items={searchState.items}
+          loading={searchState.loading}
+          error={searchState.error}
+          progress={searchState.progress}
+          onSearch={() => setRetryNonce((current) => current + 1)}
+          mobileFiltersOpen={mobileFiltersOpen}
+          onMobileFiltersOpenChange={setMobileFiltersOpen}
+        />
+      ) : (
+        <ReleaseSearchRouteError message={t('indexerSearchMissingContext')} fallbackPath={fallbackPath} />
+      )}
     </div>
   )
 }
 
 function ReleaseSearchPlaceholder({ children }: { children: ReactNode }) {
   return (
-    <Card className="flex h-full items-center justify-center p-6">
+    <Card className="flex min-h-80 items-center justify-center p-6">
       <CardContent className="flex flex-col items-center gap-4 px-0 text-muted-foreground">
         <LoaderCircle className="size-8 animate-spin text-primary" />
         <div className="font-medium text-sm">{children}</div>
@@ -294,6 +290,26 @@ function ReleaseSearchPlaceholder({ children }: { children: ReactNode }) {
       </CardContent>
     </Card>
   )
+}
+
+function getReleaseSearchPageSubtitle(context: ReleaseSearchContext, t: (key: string) => string) {
+  return [
+    getReleaseSearchKindLabel(context, t),
+    context.media.releaseYear,
+    `${t('releaseSearchQuery')}: ${context.displayQuery}`,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join(' / ')
+}
+
+function getReleaseSearchKindLabel(context: ReleaseSearchContext, t: (key: string) => string) {
+  if (context.mode === 'media') {
+    return context.search.kind === 'movie' ? t('movie') : t('tv')
+  }
+
+  if (context.search.target === 'music') return t('music')
+  if (context.search.target === 'ebook') return t('ebook')
+  return t('audiobook')
 }
 
 function ReleaseSearchRouteError({

@@ -41,9 +41,12 @@ test.describe('mobile search regressions', () => {
         await page.setViewportSize(viewport)
         await page.goto(`/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}/releases`)
 
-        await expect(page.getByRole('heading', { name: 'Indexer search' })).toBeVisible()
-        await expect(page.getByRole('heading', { name: 'Kind of Blue' }).last()).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Kind of Blue', exact: true })).toBeVisible()
+        await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
         expect(await visibleLocator(page.getByPlaceholder('Filter titles or indexers'))).toBeNull()
+        await expect(page.getByText('Miles Davis Kind of Blue 1959 FLAC')).toBeVisible()
+        await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
+        await expectNoHorizontalOverflow(page)
 
         const filtersButton = page.getByRole('button', { name: 'Filters' })
         await expect(filtersButton).toBeVisible()
@@ -57,6 +60,24 @@ test.describe('mobile search regressions', () => {
         await expectNoHorizontalOverflow(page)
       })
     }
+  })
+
+  test('desktop release search route uses a page toolbar and result list', async ({ page }) => {
+    await signIn(page)
+    await stubReleaseSearchApis(page)
+    await page.setViewportSize(DESKTOP_VIEWPORT)
+    await page.goto(`/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}/releases`)
+
+    await expect(page.getByRole('heading', { name: 'Kind of Blue', exact: true })).toBeVisible()
+    await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.getByPlaceholder('Filter titles or indexers')).toBeVisible()
+    const resultSummary = await visibleLocator(page.getByText('Showing 1 / 1 results'))
+    if (!resultSummary) throw new Error('Expected a visible result summary in the page toolbar.')
+    await expect(resultSummary).toBeVisible()
+    await expect(page.getByText('Miles Davis Kind of Blue 1959 FLAC')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
   })
 })
 
@@ -121,12 +142,10 @@ async function submitGlobalSearch(page: Page, query: string) {
 async function expectNoHorizontalOverflow(page: Page) {
   await expect
     .poll(() =>
-      page.evaluate(() =>
-        Math.max(
-          document.documentElement.scrollWidth - document.documentElement.clientWidth,
-          document.body.scrollWidth - document.body.clientWidth,
-        ),
-      ),
+      page.evaluate(() => {
+        const viewportWidth = Math.ceil(window.visualViewport?.width ?? window.innerWidth)
+        return Math.max(document.documentElement.scrollWidth - viewportWidth, document.body.scrollWidth - viewportWidth)
+      }),
     )
     .toBeLessThanOrEqual(0)
 }
@@ -151,6 +170,7 @@ function emptyResourcePage() {
 }
 
 const MUSIC_RELEASE_KEY = 'musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377'
+const RELEASE_SEARCH_CONTEXT = 'Music / 1959 / Search query: Kind of Blue Miles Davis 1959 Vinyl'
 
 function musicAlbumDetails() {
   return {
