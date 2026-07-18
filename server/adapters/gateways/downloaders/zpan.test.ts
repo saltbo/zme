@@ -1,3 +1,4 @@
+import { ZpanClient, type ZpanDownloadTask } from '@server/adapters/gateways/zpan-client'
 import type { ConnectorConfig, DownloaderGateway, DownloadTaskOwner } from '@server/usecases/ports'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse, stubFetch } from './test-support'
@@ -16,6 +17,7 @@ const owner: DownloadTaskOwner = {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -101,4 +103,59 @@ describe('zpanDownloadTaskGateway', () => {
       totalBytes: 100,
     })
   })
+
+  it('maps successive ZPan snapshots to changed live speed and progress [spec: downloads/live-task-monitoring]', async () => {
+    vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (_params, _signal, emit) => {
+      emit({
+        event: 'download-tasks',
+        data: { items: [zpanTask(100, 10)], total: 1, page: 1, pageSize: 20 },
+      })
+      emit({
+        event: 'download-tasks',
+        data: { items: [zpanTask(400, 40)], total: 1, page: 1, pageSize: 20 },
+      })
+    })
+
+    const snapshots: Array<{ downloadedBytes: number; downloadBps: number }> = []
+    await zpanDownloadTaskGateway.stream(config, owner, new AbortController().signal, (event) => {
+      if (event.event !== 'snapshot') return
+      snapshots.push({
+        downloadedBytes: event.data.items[0].downloadedBytes,
+        downloadBps: event.data.items[0].downloadBps,
+      })
+    })
+
+    expect(snapshots).toEqual([
+      { downloadedBytes: 100, downloadBps: 10 },
+      { downloadedBytes: 400, downloadBps: 40 },
+    ])
+  })
 })
+
+function zpanTask(downloadedBytes: number, downloadBps: number): ZpanDownloadTask {
+  return {
+    id: 'task-1',
+    createdAt: '2026-07-18T00:00:00.000Z',
+    spec: {
+      source: { type: 'magnet', uri: 'magnet:?xt=urn:btih:abc' },
+      destination: { name: 'Live Task', folder: '/media/Movies' },
+      labels: { category: 'zme:movie', tags: [] },
+    },
+    status: {
+      state: 'downloading',
+      attempt: 1,
+      assignment: { downloaderId: 'worker-1' },
+      progress: {
+        download: { bytes: downloadedBytes, totalBytes: 1_000, bytesPerSecond: downloadBps },
+        upload: { bytes: 0, totalBytes: 1_000, bytesPerSecond: 0 },
+      },
+      billing: { state: 'ok', authorizedBytes: 1_000, chargedBytes: 0, chargedCredits: 0 },
+      output: { objectId: '' },
+      runtime: {},
+      error: { message: '' },
+      startedAt: '2026-07-18T00:00:00.000Z',
+      finishedAt: '',
+      updatedAt: '2026-07-18T00:00:01.000Z',
+    },
+  }
+}
