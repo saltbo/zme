@@ -1,3 +1,4 @@
+import type { DownloadTaskSummary } from '@shared/types'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
 import { listDownloadTasks, streamDownloadTaskEvents } from './download-tasks'
@@ -18,7 +19,7 @@ function downloaderRecord(id: string, kind: DownloaderRecord['kind'], descriptio
   }
 }
 
-function taskSummary(id: string, downloaderId: string) {
+function taskSummary(id: string, downloaderId: string, overrides: Partial<DownloadTaskSummary> = {}) {
   return {
     id,
     downloaderId,
@@ -37,6 +38,7 @@ function taskSummary(id: string, downloaderId: string) {
     downloadBps: 0,
     storageUploadBps: 0,
     errorMessage: null,
+    ...overrides,
   } as never
 }
 
@@ -105,6 +107,48 @@ describe('streamDownloadTaskEvents', () => {
     expect(lastSnapshot?.data.items.map((item: { id: string }) => item.id).sort()).toEqual([
       'task-zpan-a',
       'task-zpan-b',
+    ])
+  })
+
+  it('keeps another downloader in the merged snapshot when one downloader reports successive live progress [spec: downloads/monitor-context]', async () => {
+    const zpanA = downloaderRecord('zpan-a', 'zpan', 'A')
+    const zpanB = downloaderRecord('zpan-b', 'zpan', 'B')
+
+    const gateway: DownloadTaskGateway = {
+      list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+      stream: async (_config, owner, _signal, emit) => {
+        if (owner.downloaderId === 'zpan-a') {
+          emit({
+            event: 'snapshot',
+            data: { items: [taskSummary('task-a', 'zpan-a', { downloadedBytes: 100, downloadBps: 10 })] },
+          })
+          await Promise.resolve()
+          emit({
+            event: 'snapshot',
+            data: { items: [taskSummary('task-a', 'zpan-a', { downloadedBytes: 400, downloadBps: 40 })] },
+          })
+          return
+        }
+
+        emit({
+          event: 'snapshot',
+          data: { items: [taskSummary('task-b', 'zpan-b', { downloadedBytes: 200, downloadBps: 20 })] },
+        })
+      },
+    }
+
+    const deps = {
+      downloadersRepo: { listEnabled: async () => [zpanA, zpanB] },
+      downloadTaskGateways: { zpan: gateway },
+    } as never as Deps
+
+    const events: DownloadTaskEvent[] = []
+    await streamDownloadTaskEvents(deps, 'user-1', new AbortController().signal, (event) => events.push(event))
+
+    const snapshots = events.filter((event) => event.event === 'snapshot')
+    expect(snapshots.at(-1)?.data.items).toEqual([
+      taskSummary('task-a', 'zpan-a', { downloadedBytes: 400, downloadBps: 40 }),
+      taskSummary('task-b', 'zpan-b', { downloadedBytes: 200, downloadBps: 20 }),
     ])
   })
 
