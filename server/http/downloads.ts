@@ -52,6 +52,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        controller.enqueue(encoder.encode('retry: 5000\n\n'))
         const send = (event: DownloadTaskEvent) => {
           if (closed) return
           controller.enqueue(encoder.encode(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`))
@@ -60,7 +61,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
         streamDownloadTaskEvents(deps, userId, aborter.signal, send)
           .catch((error) => {
             send({
-              event: 'error',
+              event: 'stream-error',
               data: { message: error instanceof Error ? error.message : 'Download task stream failed.' },
             })
           })

@@ -72,26 +72,41 @@ describe('listDownloadTasks', () => {
 })
 
 describe('streamDownloadTaskEvents', () => {
-  it('emits one empty snapshot and resolves when no downloader supports tasks', async () => {
+  it('keeps an empty stream alive with heartbeats when no downloader supports tasks', async () => {
     const deps = {
       downloadersRepo: { listEnabled: async () => [downloaderRecord('qb-1', 'qbittorrent', 'qB')] },
       downloadTaskGateways: {},
     } as never as Deps
 
+    const aborter = new AbortController()
     const events: DownloadTaskEvent[] = []
-    await streamDownloadTaskEvents(deps, 'user-1', new AbortController().signal, (event) => events.push(event))
+    await streamDownloadTaskEvents(
+      deps,
+      'user-1',
+      aborter.signal,
+      (event) => {
+        events.push(event)
+        if (event.event === 'heartbeat') aborter.abort()
+      },
+      { heartbeatIntervalMs: 0 },
+    )
 
-    expect(events).toEqual([{ event: 'snapshot', data: { items: [] } }])
+    expect(events[0]).toEqual({ event: 'snapshot', data: { items: [] } })
+    expect(events[1]).toMatchObject({ event: 'heartbeat', data: { at: expect.any(String) } })
   })
 
-  it('merges snapshots across downloaders and resolves when all streams end', async () => {
+  it('merges snapshots across downloaders until the consumer aborts', async () => {
     const zpanA = downloaderRecord('zpan-a', 'zpan', 'A')
     const zpanB = downloaderRecord('zpan-b', 'zpan', 'B')
 
     const gateway: DownloadTaskGateway = {
       list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
-      stream: async (_config, owner, _signal, emit) => {
-        emit({ event: 'snapshot', data: { items: [taskSummary(`task-${owner.downloaderId}`, owner.downloaderId)] } })
+      stream: async (_config, owner, signal, emit) => {
+        await emit({
+          event: 'snapshot',
+          data: { items: [taskSummary(`task-${owner.downloaderId}`, owner.downloaderId)] },
+        })
+        await waitForAbort(signal)
       },
     }
 
@@ -100,8 +115,12 @@ describe('streamDownloadTaskEvents', () => {
       downloadTaskGateways: { zpan: gateway },
     } as never as Deps
 
+    const aborter = new AbortController()
     const events: DownloadTaskEvent[] = []
-    await streamDownloadTaskEvents(deps, 'user-1', new AbortController().signal, (event) => events.push(event))
+    await streamDownloadTaskEvents(deps, 'user-1', aborter.signal, (event) => {
+      events.push(event)
+      if (event.event === 'snapshot' && event.data.items.length === 2) aborter.abort()
+    })
 
     const lastSnapshot = events.filter((event) => event.event === 'snapshot').at(-1)
     expect(lastSnapshot?.data.items.map((item: { id: string }) => item.id).sort()).toEqual([
@@ -118,22 +137,24 @@ describe('streamDownloadTaskEvents', () => {
       list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
       stream: async (_config, owner, _signal, emit) => {
         if (owner.downloaderId === 'zpan-a') {
-          emit({
+          await emit({
             event: 'snapshot',
             data: { items: [taskSummary('task-a', 'zpan-a', { downloadedBytes: 100, downloadBps: 10 })] },
           })
           await Promise.resolve()
-          emit({
+          await emit({
             event: 'snapshot',
             data: { items: [taskSummary('task-a', 'zpan-a', { downloadedBytes: 400, downloadBps: 40 })] },
           })
+          await waitForAbort(_signal)
           return
         }
 
-        emit({
+        await emit({
           event: 'snapshot',
           data: { items: [taskSummary('task-b', 'zpan-b', { downloadedBytes: 200, downloadBps: 20 })] },
         })
+        await waitForAbort(_signal)
       },
     }
 
@@ -142,8 +163,18 @@ describe('streamDownloadTaskEvents', () => {
       downloadTaskGateways: { zpan: gateway },
     } as never as Deps
 
+    const aborter = new AbortController()
     const events: DownloadTaskEvent[] = []
-    await streamDownloadTaskEvents(deps, 'user-1', new AbortController().signal, (event) => events.push(event))
+    await streamDownloadTaskEvents(deps, 'user-1', aborter.signal, (event) => {
+      events.push(event)
+      if (
+        event.event === 'snapshot' &&
+        event.data.items.some((item) => item.id === 'task-a' && item.downloadedBytes === 400) &&
+        event.data.items.some((item) => item.id === 'task-b')
+      ) {
+        aborter.abort()
+      }
+    })
 
     const snapshots = events.filter((event) => event.event === 'snapshot')
     expect(snapshots.at(-1)?.data.items).toEqual([
@@ -152,7 +183,7 @@ describe('streamDownloadTaskEvents', () => {
     ])
   })
 
-  it('reports stream failures as error events prefixed with the downloader name', async () => {
+  it('reports a stream failure once and includes the retry delay', async () => {
     const zpanA = downloaderRecord('zpan-a', 'zpan', 'Broken ZPan')
 
     const gateway: DownloadTaskGateway = {
@@ -167,10 +198,71 @@ describe('streamDownloadTaskEvents', () => {
       downloadTaskGateways: { zpan: gateway },
     } as never as Deps
 
+    const aborter = new AbortController()
     const events: DownloadTaskEvent[] = []
-    await streamDownloadTaskEvents(deps, 'user-1', new AbortController().signal, (event) => events.push(event))
+    await streamDownloadTaskEvents(
+      deps,
+      'user-1',
+      aborter.signal,
+      (event) => {
+        events.push(event)
+        if (event.event === 'upstream-error') aborter.abort()
+      },
+      { initialRetryDelayMs: 25 },
+    )
 
-    expect(events).toContainEqual({ event: 'error', data: { message: 'Broken ZPan: upstream gone' } })
+    expect(events).toContainEqual({
+      event: 'upstream-error',
+      data: {
+        downloaderId: 'zpan-a',
+        downloaderName: 'Broken ZPan',
+        message: 'Broken ZPan: upstream gone',
+        retryingInMs: 25,
+      },
+    })
+  })
+
+  it('reconnects one failed downloader without interrupting another downloader stream', async () => {
+    const zpanA = downloaderRecord('zpan-a', 'zpan', 'A')
+    const zpanB = downloaderRecord('zpan-b', 'zpan', 'B')
+    let attemptsA = 0
+
+    const gateway: DownloadTaskGateway = {
+      list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+      stream: async (_config, owner, signal, emit) => {
+        if (owner.downloaderId === 'zpan-a') {
+          attemptsA += 1
+          if (attemptsA === 1) throw new Error('temporary outage')
+          await emit({ event: 'snapshot', data: { items: [taskSummary('task-a', 'zpan-a')] } })
+          await waitForAbort(signal)
+          return
+        }
+        await emit({ event: 'snapshot', data: { items: [taskSummary('task-b', 'zpan-b')] } })
+        await waitForAbort(signal)
+      },
+    }
+
+    const deps = {
+      downloadersRepo: { listEnabled: async () => [zpanA, zpanB] },
+      downloadTaskGateways: { zpan: gateway },
+    } as never as Deps
+
+    const aborter = new AbortController()
+    const events: DownloadTaskEvent[] = []
+    await streamDownloadTaskEvents(
+      deps,
+      'user-1',
+      aborter.signal,
+      (event) => {
+        events.push(event)
+        if (event.event === 'snapshot' && event.data.items.length === 2) aborter.abort()
+      },
+      { initialRetryDelayMs: 0, maxRetryDelayMs: 0 },
+    )
+
+    expect(attemptsA).toBe(2)
+    expect(events.filter((event) => event.event === 'upstream-error')).toHaveLength(1)
+    expect(events.filter((event) => event.event === 'snapshot').at(-1)?.data.items).toHaveLength(2)
   })
 
   it('suppresses failure events after the consumer aborts', async () => {
@@ -194,6 +286,13 @@ describe('streamDownloadTaskEvents', () => {
     const events: DownloadTaskEvent[] = []
     await streamDownloadTaskEvents(deps, 'user-1', aborter.signal, (event) => events.push(event))
 
-    expect(events.filter((event) => event.event === 'error')).toEqual([])
+    expect(events.filter((event) => event.event === 'upstream-error')).toEqual([])
   })
 })
+
+function waitForAbort(signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) return resolve()
+    signal.addEventListener('abort', () => resolve(), { once: true })
+  })
+}

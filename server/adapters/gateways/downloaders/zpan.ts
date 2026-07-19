@@ -11,6 +11,7 @@ import type { DownloaderKind, DownloadTaskPage, DownloadTaskStatus, DownloadTask
 import { getTypedDownloadDirectory } from './shared'
 
 type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']
+const snapshotPageSize = 50
 
 export const zpanDownloaderGateway: DownloaderGateway = {
   async submit(config, input) {
@@ -45,18 +46,46 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
   },
 
   async stream(config, owner, signal, emit) {
-    await getClient(config).streamDownloadTaskEvents({}, signal, (event) => {
+    const client = getClient(config)
+    await emitSnapshot(emit, owner, await listAllDownloadTasks(client))
+
+    await client.streamDownloadTaskEvents({}, signal, async (event) => {
       if (event.event === 'download-tasks') {
         const payload = event.data as ZpanDownloadTaskPage
-        emit({ event: 'snapshot', data: { items: payload.items.map((task) => toTaskSummary(owner, task)) } })
+        await emitSnapshot(emit, owner, await listAllDownloadTasks(client, payload))
+        return
+      }
+      if (event.event === 'heartbeat') {
+        await emitSnapshot(emit, owner, await listAllDownloadTasks(client))
         return
       }
       if (event.event === 'error') {
         const payload = event.data as { message?: string }
-        emit({ event: 'error', data: { message: payload.message || 'ZPan event stream failed' } })
+        await emit({ event: 'error', data: { message: payload.message || 'ZPan event stream failed' } })
       }
     })
   },
+}
+
+async function listAllDownloadTasks(client: ZpanClient, firstPage?: ZpanDownloadTaskPage) {
+  const first = firstPage ?? (await client.listDownloadTasks({ page: 1, pageSize: snapshotPageSize }))
+  if (first.pageSize < 1) throw new Error('ZPan returned an invalid download task page size')
+
+  const items = [...first.items]
+  const totalPages = Math.ceil(first.total / first.pageSize)
+  for (let page = first.page + 1; page <= totalPages; page += 1) {
+    const next = await client.listDownloadTasks({ page, pageSize: first.pageSize })
+    items.push(...next.items)
+  }
+  return items
+}
+
+async function emitSnapshot(
+  emit: Parameters<DownloadTaskGateway['stream']>[3],
+  owner: DownloadTaskOwner,
+  items: ZpanDownloadTask[],
+) {
+  await emit({ event: 'snapshot', data: { items: items.map((task) => toTaskSummary(owner, task)) } })
 }
 
 function getClient(config: ConnectorConfig) {

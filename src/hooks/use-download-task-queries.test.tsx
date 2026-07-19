@@ -2,6 +2,7 @@ import type { DownloadTaskPage, DownloadTaskStatus, DownloadTaskSummary } from '
 import { type InfiniteData, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DownloadsPage } from '@/routes/downloads'
 import '@/i18n'
@@ -40,6 +41,21 @@ class SnapshotEventSource {
     const event = new MessageEvent('snapshot', { data: JSON.stringify({ items }) })
     for (const listener of this.listeners.get('snapshot') ?? []) listener(event)
   }
+
+  emitUpstreamError(downloaderId: string, message: string) {
+    const event = new MessageEvent('upstream-error', { data: JSON.stringify({ downloaderId, message }) })
+    for (const listener of this.listeners.get('upstream-error') ?? []) listener(event)
+  }
+
+  emitStreamError(message: string) {
+    const event = new MessageEvent('stream-error', { data: JSON.stringify({ message }) })
+    for (const listener of this.listeners.get('stream-error') ?? []) listener(event)
+  }
+
+  emit(type: 'open' | 'error') {
+    const event = new Event(type)
+    for (const listener of this.listeners.get(type) ?? []) listener(event)
+  }
 }
 
 class InertIntersectionObserver {
@@ -51,6 +67,7 @@ beforeEach(() => {
   testQueryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
   })
+  vi.spyOn(testQueryClient, 'invalidateQueries').mockResolvedValue()
   SnapshotEventSource.instances = []
   vi.stubGlobal('EventSource', SnapshotEventSource)
   vi.stubGlobal('IntersectionObserver', InertIntersectionObserver)
@@ -58,6 +75,7 @@ beforeEach(() => {
 
 afterEach(() => {
   testQueryClient.clear()
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -161,6 +179,55 @@ describe('useDownloadTasks live snapshots', () => {
     expect(cached?.pages.map((page) => page.page)).toEqual([1, 2])
     expect(cachedTasks('running').map((task) => task.id)).toEqual(['task-a', 'task-b'])
     expect(cachedTasks('running').find((task) => task.id === 'task-a')?.downloadBps).toBe(4_096)
+  })
+
+  it('updates every loaded status cache and revalidates REST data after a snapshot', async () => {
+    seedDownloadTasks('all', [downloadTaskPage([taskSummary('task-a', 'zpan-a')], 1, 1, 20)], [1])
+    seedDownloadTasks('running', [downloadTaskPage([taskSummary('task-a', 'zpan-a')], 1, 1, 20)], [1])
+
+    renderHook(() => useDownloadTasks('all'), { wrapper })
+    act(() => {
+      eventSource().emitSnapshot([taskSummary('task-a', 'zpan-a', { downloadedBytes: 900, downloadBps: 8_192 })])
+    })
+
+    await waitFor(() => expect(cachedTasks('all')[0].downloadedBytes).toBe(900))
+    expect(cachedTasks('running')[0].downloadBps).toBe(8_192)
+    expect(testQueryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: queryKeys.downloadTasksRoot,
+      refetchType: 'active',
+    })
+  })
+
+  it('keeps one EventSource while the status filter changes', () => {
+    const { rerender } = renderHook(({ status }) => useDownloadTasks(status), {
+      initialProps: { status: 'all' as 'all' | DownloadTaskStatus },
+      wrapper,
+    })
+
+    expect(SnapshotEventSource.instances).toHaveLength(1)
+    rerender({ status: 'running' })
+    expect(SnapshotEventSource.instances).toHaveLength(1)
+    expect(SnapshotEventSource.instances[0].closed).toBe(false)
+  })
+
+  it('surfaces upstream failures and transport reconnects without conflating the event types', () => {
+    const error = vi.spyOn(toast, 'error')
+    const dismiss = vi.spyOn(toast, 'dismiss')
+    renderHook(() => useDownloadTasks('all'), { wrapper })
+
+    act(() => eventSource().emitUpstreamError('zpan-a', 'ZPan A: Unauthorized'))
+    expect(error).toHaveBeenCalledWith('ZPan A: Unauthorized', { id: 'download-task-upstream-zpan-a' })
+
+    act(() => eventSource().emitStreamError('Unable to load downloaders'))
+    expect(error).toHaveBeenCalledWith('Unable to load downloaders', { id: 'download-task-stream-source' })
+
+    act(() => eventSource().emit('error'))
+    expect(error).toHaveBeenCalledWith('Live download connection lost. Reconnecting…', {
+      id: 'download-task-stream',
+    })
+
+    act(() => eventSource().emit('open'))
+    expect(dismiss).toHaveBeenCalledWith('download-task-stream')
   })
 })
 

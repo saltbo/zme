@@ -16,6 +16,7 @@ export const queryKeys = {
   },
   librarySources: ['library-sources'] as const,
   downloaders: ['downloaders'] as const,
+  downloadTasksRoot: ['download-tasks'] as const,
   downloadTasks: (status: string) => ['download-tasks', status] as const,
   indexers: ['indexers'] as const,
   mediaSources: ['media-sources'] as const,

@@ -105,12 +105,18 @@ describe('zpanDownloadTaskGateway', () => {
   })
 
   it('maps successive ZPan snapshots to changed live speed and progress [spec: downloads/live-task-monitoring]', async () => {
+    vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockResolvedValue({
+      items: [zpanTask(50, 5)],
+      total: 1,
+      page: 1,
+      pageSize: 50,
+    })
     vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (_params, _signal, emit) => {
-      emit({
+      await emit({
         event: 'download-tasks',
         data: { items: [zpanTask(100, 10)], total: 1, page: 1, pageSize: 20 },
       })
-      emit({
+      await emit({
         event: 'download-tasks',
         data: { items: [zpanTask(400, 40)], total: 1, page: 1, pageSize: 20 },
       })
@@ -126,9 +132,35 @@ describe('zpanDownloadTaskGateway', () => {
     })
 
     expect(snapshots).toEqual([
+      { downloadedBytes: 50, downloadBps: 5 },
       { downloadedBytes: 100, downloadBps: 10 },
       { downloadedBytes: 400, downloadBps: 40 },
     ])
+  })
+
+  it('refreshes a complete paginated snapshot when ZPan sends a heartbeat', async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) => zpanTask(index, index))
+    const lastTask = { ...zpanTask(50, 50), id: 'task-51' }
+    const list = vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockImplementation(async (params) => ({
+      items: params.page === 1 ? firstPage : [lastTask],
+      total: 51,
+      page: params.page ?? 1,
+      pageSize: 50,
+    }))
+    vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (_params, _signal, emit) => {
+      await emit({ event: 'heartbeat', data: { at: '2026-07-19T00:00:00.000Z' } })
+    })
+
+    const snapshots: string[][] = []
+    await zpanDownloadTaskGateway.stream(config, owner, new AbortController().signal, (event) => {
+      if (event.event === 'snapshot') snapshots.push(event.data.items.map((item) => item.id))
+    })
+
+    expect(snapshots).toHaveLength(2)
+    expect(snapshots[0]).toHaveLength(51)
+    expect(snapshots[1]).toHaveLength(51)
+    expect(snapshots[1]).toContain('task-51')
+    expect(list.mock.calls.map(([params]) => params.page)).toEqual([1, 2, 1, 2])
   })
 })
 

@@ -1,6 +1,8 @@
 import type { DownloadTaskPage, DownloadTaskStatus, DownloadTaskSummary } from '@shared/types'
 import { type InfiniteData, type QueryClient, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { toast } from 'sonner'
+import i18n from '@/i18n'
 import { downloadTaskEventsUrl, listDownloadTasks } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -15,10 +17,23 @@ export function useDownloadTasks(status: StatusFilter) {
     events.addEventListener('snapshot', (event) => {
       const payload = parseDownloadTaskSnapshot(event)
       if (!payload) return
-      updateDownloadTaskSnapshot(queryClient, status, payload.items)
+      updateDownloadTaskSnapshots(queryClient, payload.items)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.downloadTasksRoot, refetchType: 'active' })
+    })
+    events.addEventListener('upstream-error', (event) => {
+      const payload = parseUpstreamError(event)
+      if (payload) toast.error(payload.message, { id: `download-task-upstream-${payload.downloaderId}` })
+    })
+    events.addEventListener('stream-error', (event) => {
+      const message = parseStreamError(event)
+      if (message) toast.error(message, { id: 'download-task-stream-source' })
+    })
+    events.addEventListener('open', () => toast.dismiss('download-task-stream'))
+    events.addEventListener('error', () => {
+      toast.error(i18n.t('downloadStreamDisconnected'), { id: 'download-task-stream' })
     })
     return () => events.close()
-  }, [queryClient, status])
+  }, [queryClient])
 
   return useInfiniteQuery({
     queryKey: queryKeys.downloadTasks(status),
@@ -40,6 +55,37 @@ function parseDownloadTaskSnapshot(event: Event): { items: DownloadTaskSummary[]
     return Array.isArray(payload.items) ? { items: payload.items as DownloadTaskSummary[] } : null
   } catch {
     return null
+  }
+}
+
+function parseUpstreamError(event: Event): { downloaderId: string; message: string } | null {
+  if (!('data' in event) || typeof event.data !== 'string') return null
+  try {
+    const payload = JSON.parse(event.data) as { downloaderId?: unknown; message?: unknown }
+    return typeof payload.downloaderId === 'string' && typeof payload.message === 'string'
+      ? { downloaderId: payload.downloaderId, message: payload.message }
+      : null
+  } catch {
+    return null
+  }
+}
+
+function parseStreamError(event: Event): string | null {
+  if (!('data' in event) || typeof event.data !== 'string') return null
+  try {
+    const payload = JSON.parse(event.data) as { message?: unknown }
+    return typeof payload.message === 'string' ? payload.message : null
+  } catch {
+    return null
+  }
+}
+
+function updateDownloadTaskSnapshots(queryClient: QueryClient, items: DownloadTaskSummary[]) {
+  const queries = queryClient.getQueryCache().findAll({ queryKey: queryKeys.downloadTasksRoot })
+  for (const query of queries) {
+    const status = query.queryKey[1]
+    if (typeof status !== 'string') continue
+    updateDownloadTaskSnapshot(queryClient, status as StatusFilter, items)
   }
 }
 

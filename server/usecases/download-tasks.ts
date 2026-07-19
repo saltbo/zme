@@ -8,6 +8,16 @@ import type {
   ListDownloadTasksInput,
 } from './ports'
 
+const heartbeatIntervalMs = 15_000
+const initialRetryDelayMs = 1_000
+const maxRetryDelayMs = 30_000
+
+type StreamOptions = {
+  heartbeatIntervalMs?: number
+  initialRetryDelayMs?: number
+  maxRetryDelayMs?: number
+}
+
 export type { DownloadTaskEvent, ListDownloadTasksInput }
 
 export async function listDownloadTasks(
@@ -31,52 +41,126 @@ export async function listDownloadTasks(
 /**
  * Streams merged download-task events from every task-capable downloader.
  * Emits a fresh full snapshot whenever any downloader reports one, and
- * resolves once all upstream streams have ended or `signal` aborts.
+ * keeps each upstream connected until `signal` aborts.
  */
 export async function streamDownloadTaskEvents(
   deps: Deps,
   userId: string,
   signal: AbortSignal,
   emit: (event: DownloadTaskEvent) => void,
+  options: StreamOptions = {},
 ): Promise<void> {
   const rows = await listTaskCapableDownloaders(deps, userId)
   const latestByDownloader = new Map<string, DownloadTaskSummary[]>()
-  const sendSnapshot = () => {
+  const sendSnapshot = (downloaderId: string, items: DownloadTaskSummary[]) => {
+    const current = latestByDownloader.get(downloaderId)
+    if (current && JSON.stringify(current) === JSON.stringify(items)) return
+    latestByDownloader.set(downloaderId, items)
     emit({ event: 'snapshot', data: { items: [...latestByDownloader.values()].flat() } })
-  }
-
-  if (rows.length === 0) {
-    sendSnapshot()
-    return
   }
 
   const aborter = new AbortController()
   const abort = () => aborter.abort()
   signal.addEventListener('abort', abort, { once: true })
+  if (signal.aborted) aborter.abort()
 
   try {
-    await Promise.all(
-      rows.map(({ downloader, gateway }) =>
-        gateway
-          .stream(downloader.config, toOwner(downloader), aborter.signal, (event) => {
+    if (rows.length === 0) emit({ event: 'snapshot', data: { items: [] } })
+    await Promise.all([
+      ...rows.map(({ downloader, gateway }) =>
+        superviseDownloaderStream(
+          downloader,
+          gateway,
+          aborter.signal,
+          (event) => {
             if (event.event === 'snapshot') {
-              latestByDownloader.set(downloader.id, event.data.items)
-              sendSnapshot()
+              sendSnapshot(downloader.id, event.data.items)
               return
             }
-            emit({ event: 'error', data: { message: `${getDownloaderName(downloader)}: ${event.data.message}` } })
-          })
-          .catch((error) => {
-            if (!aborter.signal.aborted) {
-              emit({ event: 'error', data: { message: `${getDownloaderName(downloader)}: ${getErrorMessage(error)}` } })
-            }
-          }),
+            emit({
+              event: 'upstream-error',
+              data: {
+                downloaderId: downloader.id,
+                downloaderName: getDownloaderName(downloader),
+                message: `${getDownloaderName(downloader)}: ${event.data.message}`,
+              },
+            })
+          },
+          emit,
+          options,
+        ),
       ),
-    )
+      sendHeartbeats(aborter.signal, emit, options.heartbeatIntervalMs ?? heartbeatIntervalMs),
+    ])
   } finally {
     signal.removeEventListener('abort', abort)
     aborter.abort()
   }
+}
+
+async function superviseDownloaderStream(
+  downloader: DownloaderRecord,
+  gateway: DownloadTaskGateway,
+  signal: AbortSignal,
+  onEvent: Parameters<DownloadTaskGateway['stream']>[3],
+  emit: (event: DownloadTaskEvent) => void,
+  options: StreamOptions,
+) {
+  let retryDelay = options.initialRetryDelayMs ?? initialRetryDelayMs
+  const maximumRetryDelay = options.maxRetryDelayMs ?? maxRetryDelayMs
+  let failureReported = false
+
+  while (!signal.aborted) {
+    let failure: unknown
+    try {
+      await gateway.stream(downloader.config, toOwner(downloader), signal, onEvent)
+      if (signal.aborted) return
+      failure = new Error('upstream event stream ended')
+    } catch (error) {
+      if (signal.aborted) return
+      failure = error
+    }
+
+    if (!failureReported) {
+      const downloaderName = getDownloaderName(downloader)
+      emit({
+        event: 'upstream-error',
+        data: {
+          downloaderId: downloader.id,
+          downloaderName,
+          message: `${downloaderName}: ${getErrorMessage(failure)}`,
+          retryingInMs: retryDelay,
+        },
+      })
+      failureReported = true
+    }
+
+    await delay(retryDelay, signal)
+    retryDelay = Math.min(retryDelay * 2, maximumRetryDelay)
+  }
+}
+
+async function sendHeartbeats(signal: AbortSignal, emit: (event: DownloadTaskEvent) => void, intervalMs: number) {
+  while (!signal.aborted) {
+    await delay(intervalMs, signal)
+    if (!signal.aborted) emit({ event: 'heartbeat', data: { at: new Date().toISOString() } })
+  }
+}
+
+function delay(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) return resolve()
+    const timer = setTimeout(done, ms)
+    const abort = () => {
+      clearTimeout(timer)
+      done()
+    }
+    function done() {
+      signal.removeEventListener('abort', abort)
+      resolve()
+    }
+    signal.addEventListener('abort', abort, { once: true })
+  })
 }
 
 async function listTaskCapableDownloaders(

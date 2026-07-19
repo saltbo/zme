@@ -42,9 +42,10 @@ export class ZpanClient {
   async streamDownloadTaskEvents(
     params: ZpanStreamDownloadTasksParams,
     signal: AbortSignal,
-    onEvent: (event: ZpanDownloadTaskEvent) => void,
+    onEvent: (event: ZpanDownloadTaskEvent) => void | Promise<void>,
   ): Promise<void> {
     let streamError: unknown
+    const pendingEvents: ZpanDownloadTaskEvent[] = []
     const result = await zpanApi.streamEvents({
       client: this.client,
       query: { ...params, downloadTasks: '1' },
@@ -54,19 +55,29 @@ export class ZpanClient {
         streamError = error
       },
       onSseEvent: (event) => {
-        onEvent({ event: event.event || 'message', data: event.data })
+        pendingEvents.push({ event: event.event || 'message', data: event.data })
       },
     })
 
     let next = await result.stream.next(false)
     while (!next.done) {
-      // Events are emitted through onSseEvent so event names are preserved.
+      await flushPendingEvents(pendingEvents, onEvent)
       next = await result.stream.next(false)
     }
+    await flushPendingEvents(pendingEvents, onEvent)
 
     if (streamError && !signal.aborted) {
       throw new Error(getErrorMessage(streamError, 'ZPan download task events failed'))
     }
+  }
+}
+
+async function flushPendingEvents(
+  pendingEvents: ZpanDownloadTaskEvent[],
+  onEvent: (event: ZpanDownloadTaskEvent) => void | Promise<void>,
+) {
+  for (const event of pendingEvents.splice(0)) {
+    await onEvent(event)
   }
 }
 

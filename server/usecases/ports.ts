@@ -60,6 +60,20 @@ export interface ListDownloadTasksInput {
 
 export type DownloadTaskEvent =
   | { event: 'snapshot'; data: { items: DownloadTaskSummary[] } }
+  | { event: 'heartbeat'; data: { at: string } }
+  | { event: 'stream-error'; data: { message: string } }
+  | {
+      event: 'upstream-error'
+      data: {
+        downloaderId: string
+        downloaderName: string
+        message: string
+        retryingInMs?: number
+      }
+    }
+
+export type DownloadTaskGatewayEvent =
+  | { event: 'snapshot'; data: { items: DownloadTaskSummary[] } }
   | { event: 'error'; data: { message: string } }
 
 export interface DownloadTaskGateway {
@@ -68,7 +82,7 @@ export interface DownloadTaskGateway {
     config: ConnectorConfig,
     owner: DownloadTaskOwner,
     signal: AbortSignal,
-    emit: (event: DownloadTaskEvent) => void,
+    emit: (event: DownloadTaskGatewayEvent) => void | Promise<void>,
   ): Promise<void>
 }
 
