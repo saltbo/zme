@@ -1,0 +1,2 @@
+DROP INDEX `music_collection_tracks_collection_track_idx`;--> statement-breakpoint
+CREATE UNIQUE INDEX `music_collection_tracks_collection_position_idx` ON `music_collection_tracks` (`collection_id`,`position`);

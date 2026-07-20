@@ -1,7 +1,7 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 
 // Adds the test-only migrations binding to the generated Cloudflare.Env
-// (DB / ASSETS / BETTER_AUTH_SECRET come from worker-configuration.d.ts).
+// (DB / ASSETS and runtime secrets come from worker-configuration.d.ts).
 declare namespace Cloudflare {
   interface Env {
     TEST_MIGRATIONS: import('@cloudflare/vitest-pool-workers').D1Migration[]

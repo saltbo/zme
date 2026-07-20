@@ -2,6 +2,7 @@
 
 export * from './books'
 export { ApiError } from './client'
+export * from './connectors'
 export * from './downloaders'
 export * from './downloads'
 export * from './indexers'

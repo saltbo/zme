@@ -3,11 +3,10 @@ import type {
   LibraryPageInput,
   LibraryResourceInput,
   LibraryResourceStateInput,
-  LibrarySourceInput,
-  LibrarySourceKind,
-  LibrarySourceSummary,
-  LibrarySourceSyncResult,
   LibraryStateItem,
+  MusicCollectionDetails,
+  MusicCollectionSummary,
+  MusicFavoriteTrackInput,
 } from '@shared/types'
 import { apiRequest, query } from './client'
 
@@ -46,35 +45,44 @@ export async function removeLibraryResource(input: LibraryResourceInput) {
   )
 }
 
-export async function listLibrarySources() {
-  return apiRequest<{ items: LibrarySourceSummary[] }>('/api/library/sources', 'Failed to load library sources.')
-}
-
-export async function saveLibrarySource(source: LibrarySourceKind, input: LibrarySourceInput) {
-  return apiRequest<{ item: LibrarySourceSummary }>(
-    `/api/library/sources/${source}`,
-    'Failed to save library source.',
-    {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    },
+export async function listMusicCollections(kind: 'playlist' | 'album') {
+  return apiRequest<{ items: MusicCollectionSummary[] }>(
+    `/api/library/music/collections?kind=${kind}`,
+    'Failed to load music collections.',
   )
 }
 
-export async function deleteLibrarySource(source: LibrarySourceKind) {
-  return apiRequest<{ source: LibrarySourceKind }>(
-    `/api/library/sources/${source}`,
-    'Failed to delete library source.',
-    {
-      method: 'DELETE',
-    },
+export async function getMusicCollection(id: string) {
+  return apiRequest<{ item: MusicCollectionDetails }>(
+    `/api/library/music/collections/${id}`,
+    'Failed to load music collection.',
   )
 }
 
-export async function syncLibrarySource(source: LibrarySourceKind) {
-  return apiRequest<{ result: LibrarySourceSyncResult }>(
-    `/api/library/sources/${source}/sync`,
-    'Failed to sync library source.',
-    { method: 'POST' },
+export async function removeMusicCollection(id: string) {
+  return apiRequest<{ id: string }>(`/api/library/music/collections/${id}`, 'Failed to remove music collection.', {
+    method: 'DELETE',
+  })
+}
+
+export async function saveMusicAlbum(mediaKey: string) {
+  return apiRequest<{ item: MusicCollectionDetails }>('/api/library/music/albums', 'Failed to save music album.', {
+    method: 'POST',
+    body: JSON.stringify({ mediaKey }),
+  })
+}
+
+export async function getFavoriteSongs() {
+  return apiRequest<{ item: MusicCollectionDetails | null }>(
+    '/api/library/music/favorites',
+    'Failed to load favorite songs.',
+  )
+}
+
+export async function setFavoriteSong(track: MusicFavoriteTrackInput, selected: boolean) {
+  return apiRequest<{ item: MusicCollectionDetails | null }>(
+    '/api/library/music/favorites',
+    'Failed to update favorite song.',
+    { method: 'PUT', body: JSON.stringify({ track, selected }) },
   )
 }

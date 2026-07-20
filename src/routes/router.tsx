@@ -5,13 +5,14 @@ import { useAuth } from '@/contexts/auth'
 import { AuthGate } from '@/routes/auth-gate'
 import { DownloadsPage } from '@/routes/downloads'
 import { IndexersPage } from '@/routes/indexers'
-import { LibraryPage } from '@/routes/library'
+import { LibraryBooksPage, LibraryMediaPage } from '@/routes/library'
+import { MusicCollectionDetailPage, MusicLibraryCollectionsPage } from '@/routes/library-music'
 import { MediaDetailPage } from '@/routes/media-detail'
 import { MediaSeasonDetailPage } from '@/routes/media-season-detail'
 import { MediaSourcesPage } from '@/routes/media-sources'
 import { MediaWorkspace } from '@/routes/media-workspace'
 import { PersonCreditsPage } from '@/routes/person-credits'
-import { BookReleaseSearchPage, MediaReleaseSearchPage, MusicReleaseSearchPage } from '@/routes/release-search'
+import { BookReleaseSearchPage, MediaReleaseSearchPage } from '@/routes/release-search'
 import { BookDetailPage, BooksPage, MusicDetailPage, MusicPage } from '@/routes/resource-pages'
 import { SettingsPage } from '@/routes/settings'
 import { UsersPage } from '@/routes/users'
@@ -65,10 +66,6 @@ export const router = createBrowserRouter([
             element: <MusicDetailPage />,
           },
           {
-            path: 'music/:key/releases',
-            element: <MusicReleaseSearchPage />,
-          },
-          {
             path: 'books',
             element: <BooksPage />,
           },
@@ -98,7 +95,35 @@ export const router = createBrowserRouter([
           },
           {
             path: 'library',
-            element: <LibraryPage />,
+            element: <Navigate to="/library/media" replace />,
+          },
+          {
+            path: 'library/media',
+            element: <LibraryMediaPage />,
+          },
+          {
+            path: 'library/books',
+            element: <LibraryBooksPage />,
+          },
+          {
+            path: 'library/music',
+            element: <Navigate to="/library/music/playlists" replace />,
+          },
+          {
+            path: 'library/music/playlists',
+            element: <MusicLibraryCollectionsPage kind="playlist" />,
+          },
+          {
+            path: 'library/music/playlists/:collectionId',
+            element: <MusicCollectionDetailPage />,
+          },
+          {
+            path: 'library/music/albums',
+            element: <MusicLibraryCollectionsPage kind="album" />,
+          },
+          {
+            path: 'library/music/albums/:collectionId',
+            element: <MusicCollectionDetailPage />,
           },
           {
             path: 'downloads',

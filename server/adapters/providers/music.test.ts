@@ -201,7 +201,7 @@ describe('music provider', () => {
     ])
   })
 
-  it('loads popular recordings from ListenBrainz as release-backed track cards', async () => {
+  it('loads popular recordings from ListenBrainz as recording cards linked to their release', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -233,10 +233,10 @@ describe('music provider', () => {
 
     expect(page.results).toEqual([
       expect.objectContaining({
-        mediaKey: `musicbrainz:release:${releaseMbid}`,
+        resourceType: 'recording',
+        releaseMediaKey: `musicbrainz:release:${releaseMbid}`,
         title: 'LEMONADE',
         artist: 'aespa',
-        primaryType: 'Track',
         scoreLabel: '4.1K',
       }),
     ])

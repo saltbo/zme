@@ -182,10 +182,14 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('booksSubtitle'),
     }
   }
-  if (pathname === '/library') {
+  if (pathname.startsWith('/library')) {
     return {
       title: t('myLibrary'),
-      subtitle: t('librarySubtitle'),
+      subtitle: pathname.startsWith('/library/music')
+        ? t('libraryMusicSubtitle')
+        : pathname.startsWith('/library/books')
+          ? t('libraryBooksSubtitle')
+          : t('libraryMediaSubtitle'),
     }
   }
   if (pathname === '/downloads') {

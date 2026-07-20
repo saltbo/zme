@@ -4,6 +4,9 @@
 # Required: Better Auth signing secret (>= 32 characters).
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
 
+# Required for encrypting third-party connector sessions at rest.
+CONNECTOR_CREDENTIALS_SECRET=replace-with-an-independent-32-character-secret
+
 # Optional, only for local browser/E2E verification (see AGENTS.md):
 # LOCAL_TEST_EMAIL=admin@example.com
 # LOCAL_TEST_PASSWORD=replace-me

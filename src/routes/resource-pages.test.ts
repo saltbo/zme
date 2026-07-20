@@ -1,10 +1,6 @@
-import type { BookDetails, MediaDetails, MusicAlbumDetails } from '@shared/types'
+import type { BookDetails, MediaDetails } from '@shared/types'
 import { describe, expect, it } from 'vitest'
-import {
-  getBookReleaseSearchInput,
-  getMediaReleaseSearchInput,
-  getMusicReleaseSearchInput,
-} from '@/lib/release-search-context'
+import { getBookReleaseSearchInput, getMediaReleaseSearchInput } from '@/lib/release-search-context'
 
 describe('media release search inputs', () => {
   it('preserves movie external identifiers for exact indexer matching', () => {
@@ -41,26 +37,6 @@ describe('media release search inputs', () => {
 })
 
 describe('resource release search inputs', () => {
-  it('builds target-aware music download metadata', () => {
-    const input = getMusicReleaseSearchInput(musicAlbumFixture)
-
-    expect(input).toMatchObject({
-      target: 'music',
-      title: 'Kind of Blue',
-      creators: ['Miles Davis'],
-      year: '1959',
-      narrator: null,
-    })
-    expect(input.query).toContain('Kind of Blue')
-    expect(input.formats).toEqual(expect.arrayContaining(['Vinyl', 'Jazz', 'flac', 'mp3']))
-    expect(input.aliases).toEqual(expect.arrayContaining(['Blue Sessions', 'Kind of Blue Legacy']))
-    expect(input.item).toMatchObject({
-      title: 'Kind of Blue',
-      downloadCategory: 'zme:music',
-      downloadTags: ['mediaKey=musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377', 'kind=music'],
-    })
-  })
-
   it('builds ebook metadata with book creators and ebook formats', () => {
     const input = getBookReleaseSearchInput(bookFixture, 'ebook')
 
@@ -152,44 +128,6 @@ const seriesFixture: MediaDetails = {
     imdb: 'tt0944947',
     tvdb: '121361',
   },
-}
-
-const musicAlbumFixture: MusicAlbumDetails = {
-  mediaKey: 'musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377',
-  provider: 'musicbrainz',
-  resourceType: 'release-group',
-  mbid: '89ad4ac3-39f7-470e-963a-56509c546377',
-  releaseGroupMbid: '89ad4ac3-39f7-470e-963a-56509c546377',
-  title: 'Kind of Blue',
-  artist: 'Miles Davis',
-  artists: [{ id: '561d854a-6a28-4aa7-8c99-323e6ce46c2a', name: 'Miles Davis', joinPhrase: '' }],
-  firstReleaseDate: '1959-08-17',
-  releaseYear: '1959',
-  releaseDate: '1959-08-17',
-  country: 'US',
-  primaryType: 'Album',
-  secondaryTypes: ['Jazz'],
-  disambiguation: null,
-  coverArt: { frontUrl: null, frontThumbnailUrl: null, backUrl: null, backThumbnailUrl: null },
-  detailMediaKey: 'musicbrainz:release:00000000-0000-0000-0000-000000000001',
-  releaseMbid: '00000000-0000-0000-0000-000000000001',
-  preferredRelease: null,
-  releases: [
-    {
-      mediaKey: 'musicbrainz:release:00000000-0000-0000-0000-000000000001',
-      mbid: '00000000-0000-0000-0000-000000000001',
-      title: 'Kind of Blue Legacy',
-      date: '1959-08-17',
-      country: 'US',
-      status: 'Official',
-      barcode: null,
-      formats: ['Vinyl'],
-    },
-  ],
-  barcode: null,
-  aliases: [{ name: 'Blue Sessions', locale: null, primary: false, type: null }],
-  formats: ['Vinyl'],
-  media: [],
 }
 
 const bookFixture: BookDetails = {

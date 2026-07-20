@@ -3,6 +3,7 @@ import { createAuth } from './auth'
 import { createDeps } from './composition'
 import type { Env } from './env'
 import { registerBookRoutes } from './http/books'
+import { registerConnectorRoutes } from './http/connectors'
 import type { AppEnv } from './http/context'
 import { registerDownloaderRoutes } from './http/downloaders'
 import { registerDownloadRoutes } from './http/downloads'
@@ -16,6 +17,7 @@ import {
   requireAuthMiddleware,
 } from './http/middleware'
 import { registerMusicRoutes } from './http/music'
+import { registerMusicLibraryRoutes } from './http/music-library'
 import { registerSetupRoutes } from './http/setup'
 
 const routes = new Hono<AppEnv>()
@@ -39,6 +41,8 @@ routes.use('/media-sources/*', requireAdminMiddleware)
 registerMediaRoutes(routes)
 registerBookRoutes(routes)
 registerMusicRoutes(routes)
+registerMusicLibraryRoutes(routes)
+registerConnectorRoutes(routes)
 registerIndexerRoutes(routes)
 registerLibraryRoutes(routes)
 registerMediaSourceRoutes(routes)

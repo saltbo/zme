@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
+import { LibraryNavigation } from '@/components/library/library-navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -17,7 +18,7 @@ import { LibraryResourceCard } from '@/routes/resource-pages'
 
 type LibrarySort = 'updated' | 'saved' | 'watched'
 
-export function LibraryPage() {
+export function LibraryMediaPage() {
   const { i18n, t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { items: libraryStates, loading } = useLibrary()
@@ -28,7 +29,12 @@ export function LibraryPage() {
   const visibleItems = useMemo(
     () =>
       sortLibraryItems(
-        libraryStates.filter((item) => matchesLibraryKind(item, kind) && matchesLibraryStatus(item, status)),
+        libraryStates.filter(
+          (item) =>
+            (item.kind === 'movie' || item.kind === 'tv') &&
+            matchesLibraryKind(item, kind) &&
+            matchesLibraryStatus(item, status),
+        ),
         sort,
       ),
     [kind, libraryStates, sort, status],
@@ -48,6 +54,7 @@ export function LibraryPage() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+      <LibraryNavigation />
       <div className="mb-5 flex flex-col gap-3 border-b pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="font-semibold text-sm text-muted-foreground">{t('myLibrary')}</div>
@@ -88,6 +95,35 @@ export function LibraryPage() {
       {!loading && visibleItems.length === 0 ? (
         <Card className="flex min-h-80 items-center justify-center p-8 text-center text-muted-foreground">
           {t('noLibrary')}
+        </Card>
+      ) : null}
+    </div>
+  )
+}
+
+export function LibraryBooksPage() {
+  const { t } = useTranslation()
+  const { items: libraryStates, loading } = useLibrary()
+  const items = libraryStates.filter((item) => item.kind === 'book' && item.savedAt)
+
+  return (
+    <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+      <LibraryNavigation />
+      <div className="mb-5 border-b pb-4">
+        <div className="font-semibold text-sm text-muted-foreground">{t('books')}</div>
+        <div className="mt-1 text-muted-foreground text-sm">{t('libraryResultCount', { count: items.length })}</div>
+      </div>
+      {loading ? <LibraryGridSkeleton /> : null}
+      {!loading && items.length > 0 ? (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-4 sm:gap-y-7 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
+          {items.map((item) => (
+            <LibraryResourceCard key={item.mediaKey} kind="book" mediaKey={item.mediaKey} />
+          ))}
+        </div>
+      ) : null}
+      {!loading && items.length === 0 ? (
+        <Card className="flex min-h-80 items-center justify-center p-8 text-center text-muted-foreground">
+          {t('noLibraryBooks')}
         </Card>
       ) : null}
     </div>
@@ -311,7 +347,7 @@ function LibraryGridSkeleton() {
 }
 
 function getKindParam(value: string | null): LibraryFilterKind {
-  return value === 'movie' || value === 'tv' || value === 'music' || value === 'book' ? value : 'all'
+  return value === 'movie' || value === 'tv' ? value : 'all'
 }
 
 function getStatusParam(value: string | null): LibraryFilterStatus {
@@ -368,8 +404,6 @@ function getKindOptions(t: ReturnType<typeof useTranslation>['t']) {
     { label: t('allTypes'), value: 'all' },
     { label: t('movies'), value: 'movie' },
     { label: t('series'), value: 'tv' },
-    { label: t('music'), value: 'music' },
-    { label: t('books'), value: 'book' },
   ]
 }
 

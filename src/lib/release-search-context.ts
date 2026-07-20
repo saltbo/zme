@@ -1,6 +1,6 @@
 import type { ReleaseMatchCriteria, ResourceDownloadSearchInput } from '@shared/indexer-search'
 import { uniqueStrings } from '@shared/indexer-search'
-import type { BookDetails, DownloadSearchTarget, MediaDetails, MusicAlbumDetails } from '@shared/types'
+import type { BookDetails, DownloadSearchTarget, MediaDetails } from '@shared/types'
 import type { ReleaseSearchMedia } from '@/components/release-search-dialog'
 
 export interface MediaReleaseSearchInput extends ReleaseMatchCriteria {
@@ -48,28 +48,6 @@ export function getMediaReleaseSearchInput(media: MediaDetails): MediaReleaseSea
   }
 }
 
-export function getMusicReleaseSearchInput(album: MusicAlbumDetails): ResourceReleaseSearchInput {
-  const creators = getMusicCreators(album)
-  const formats = uniqueStrings([...album.formats, album.primaryType, ...album.secondaryTypes, 'flac', 'mp3'])
-  const aliases = uniqueStrings([
-    ...album.aliases.map((alias) => alias.name),
-    ...album.releases.map((release) => release.title),
-  ])
-  const query = [album.title, creators[0], album.releaseYear, formats[0]].filter(Boolean).join(' ')
-
-  return {
-    target: 'music',
-    query,
-    item: toMusicReleaseMedia(album),
-    title: album.title,
-    aliases,
-    creators,
-    year: album.releaseYear,
-    formats,
-    narrator: null,
-  }
-}
-
 export function getBookReleaseSearchInput(
   book: BookDetails,
   target: Extract<DownloadSearchTarget, 'ebook' | 'audiobook'>,
@@ -92,23 +70,6 @@ export function getBookReleaseSearchInput(
   }
 }
 
-function toMusicReleaseMedia(album: MusicAlbumDetails): ReleaseSearchMedia {
-  return {
-    id: 0,
-    kind: 'movie',
-    title: album.title,
-    originalTitle: album.title,
-    overview: album.disambiguation ?? '',
-    posterUrl: album.coverArt.frontUrl,
-    backdropUrl: null,
-    releaseYear: album.releaseYear,
-    rating: null,
-    genres: album.secondaryTypes,
-    downloadCategory: 'zme:music',
-    downloadTags: [`mediaKey=${album.mediaKey}`, 'kind=music'],
-  }
-}
-
 function toBookReleaseMedia(book: BookDetails, target: 'ebook' | 'audiobook'): ReleaseSearchMedia {
   return {
     id: 0,
@@ -124,10 +85,6 @@ function toBookReleaseMedia(book: BookDetails, target: 'ebook' | 'audiobook'): R
     downloadCategory: `zme:${target}`,
     downloadTags: [`mediaKey=${book.mediaKey}`, 'kind=book', `target=${target}`],
   }
-}
-
-function getMusicCreators(album: MusicAlbumDetails) {
-  return uniqueStrings([...album.artists.map((artist) => artist.name), album.artist])
 }
 
 function normalizeImdbId(value: string | null): string | undefined {

@@ -6,12 +6,6 @@ import {
   saveLibraryState,
   setWatchedState,
 } from '@server/usecases/library'
-import {
-  deleteLibrarySource,
-  listLibrarySources,
-  saveLibrarySource,
-  syncLibrarySource,
-} from '@server/usecases/library-sources'
 import type { LibraryRecord } from '@server/usecases/ports'
 import type { Hono } from 'hono'
 import { z } from 'zod'
@@ -24,15 +18,6 @@ const libraryQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
   kind: z.enum(['all', 'movie', 'tv', 'music', 'book']).default('all'),
   status: z.enum(['all', 'unwatched', 'watched']).default('all'),
-})
-
-const librarySourceParamsSchema = z.object({
-  source: z.enum(['douban']),
-})
-
-const librarySourceSchema = z.object({
-  profileId: z.string().trim().min(1),
-  enabled: z.boolean(),
 })
 
 const libraryResourceSchema = z.object({
@@ -49,34 +34,6 @@ export function registerLibraryRoutes(routes: Hono<AppEnv>) {
   routes.get('/library/states', async (c) => {
     const items = await listLibraryStates(c.get('deps'), c.get('user').id)
     return c.json({ items })
-  })
-
-  routes.get('/library/sources', async (c) => {
-    const items = await listLibrarySources(c.get('deps'), c.get('user').id)
-    return c.json({ items })
-  })
-
-  routes.put(
-    '/library/sources/:source',
-    zValidator('param', librarySourceParamsSchema),
-    zValidator('json', librarySourceSchema),
-    async (c) => {
-      const { source } = c.req.valid('param')
-      const item = await saveLibrarySource(c.get('deps'), c.get('user').id, source, c.req.valid('json'))
-      return c.json({ item })
-    },
-  )
-
-  routes.delete('/library/sources/:source', zValidator('param', librarySourceParamsSchema), async (c) => {
-    const { source } = c.req.valid('param')
-    const deleted = await deleteLibrarySource(c.get('deps'), c.get('user').id, source)
-    if (!deleted) return c.json({ error: 'Library source not found.' }, 404)
-    return c.json({ source })
-  })
-
-  routes.post('/library/sources/:source/sync', zValidator('param', librarySourceParamsSchema), async (c) => {
-    const result = await syncLibrarySource(c.get('deps'), c.get('user').id, c.req.valid('param').source)
-    return c.json({ result })
   })
 
   routes.put('/library/resources', zValidator('json', libraryResourceSchema), async (c) => {

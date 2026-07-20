@@ -124,6 +124,25 @@ export interface MusicAlbumSearchItem {
   scoreLabel?: string | null
 }
 
+export interface MusicTrackSearchItem {
+  mediaKey: string
+  provider: 'musicbrainz'
+  resourceType: 'recording'
+  recordingMbid: string | null
+  releaseMediaKey: string
+  releaseMbid: string
+  title: string
+  artist: string | null
+  artists: MusicArtistCredit[]
+  albumTitle: string | null
+  coverArt: MusicCoverArt
+  durationMs: number | null
+  isrcs: string[]
+  scoreLabel: string | null
+}
+
+export type MusicSearchItem = MusicAlbumSearchItem | MusicTrackSearchItem
+
 export type MusicDiscoveryMode = 'popular' | 'genre'
 export type MusicDiscoveryRange = 'week' | 'month' | 'year' | 'all_time'
 export type MusicChartType = 'albums' | 'tracks'
@@ -241,14 +260,18 @@ export interface LibraryMediaPage {
   totalPages: number
 }
 
-export type LibrarySourceKind = 'douban'
+export type ConnectorKind = 'douban' | 'netease'
+export type ConnectorCapability = 'library.import' | 'music.playlists.read'
+export type ConnectorAuthMode = 'profile' | 'qr'
+export type ConnectorStatus = 'connected' | 'reauth_required' | 'error'
 
-export interface LibrarySourceInput {
+export interface DoubanConnectorInput {
   profileId: string
   enabled: boolean
 }
 
-export interface LibrarySourceSyncResult {
+export interface LibraryImportSyncResult {
+  capability: 'library.import'
   scanned: number
   imported: number
   saved: number
@@ -256,16 +279,82 @@ export interface LibrarySourceSyncResult {
   unmatched: number
 }
 
-export interface LibrarySourceSummary {
+export interface MusicPlaylistSyncResult {
+  capability: 'music.playlists.read'
+  playlists: number
+  selectedPlaylists: number
+  tracks: number
+}
+
+export type ConnectorSyncResult = LibraryImportSyncResult | MusicPlaylistSyncResult
+
+export interface ConnectorSummary {
   id: string
-  source: LibrarySourceKind
-  profileId: string
+  kind: ConnectorKind
+  displayName: string
+  avatarUrl: string | null
+  externalAccountId: string
+  authMode: ConnectorAuthMode
+  capabilities: ConnectorCapability[]
+  status: ConnectorStatus
   enabled: boolean
   lastSyncedAt: string | null
   lastError: string | null
-  lastResult: LibrarySourceSyncResult | null
+  lastResult: ConnectorSyncResult | null
   createdAt: string
   updatedAt: string
+}
+
+export type ConnectorLoginStatus = 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'
+
+export interface ConnectorLoginAttempt {
+  id: string
+  kind: 'netease'
+  qrUrl: string
+  status: ConnectorLoginStatus
+  expiresAt: string
+}
+
+export type MusicCollectionKind = 'playlist' | 'album' | 'favorites'
+export type MusicCollectionProvider = 'netease' | 'musicbrainz' | 'zme'
+
+export interface MusicCollectionSummary {
+  id: string
+  kind: MusicCollectionKind
+  provider: MusicCollectionProvider
+  externalId: string
+  title: string
+  description: string | null
+  coverUrl: string | null
+  ownerName: string | null
+  trackCount: number
+  libraryAddedAt: string | null
+  remoteUpdatedAt: string | null
+  lastSyncedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MusicLibraryTrack {
+  id: string
+  provider: 'netease' | 'musicbrainz'
+  externalId: string
+  mediaKey: string
+  title: string
+  artists: string[]
+  albumTitle: string | null
+  albumExternalId: string | null
+  coverUrl: string | null
+  durationMs: number | null
+  isrcs: string[]
+  position: number
+  addedAt: string | null
+}
+
+export type MusicFavoriteTrackInput = Omit<MusicLibraryTrack, 'id' | 'position' | 'addedAt'>
+
+export interface MusicCollectionDetails extends MusicCollectionSummary {
+  tracks: MusicLibraryTrack[]
 }
 
 export type UserRole = 'admin' | 'user'

@@ -1,6 +1,8 @@
-import type { DownloaderKind, IndexerKind, LibrarySourceKind } from '@shared/types'
+import type { DownloaderKind, IndexerKind } from '@shared/types'
 import type {
   BookProvider,
+  ConnectorLoginAttemptsRepo,
+  ConnectorsRepo,
   DownloaderGateway,
   DownloadersRepo,
   DownloadTaskGateway,
@@ -8,9 +10,10 @@ import type {
   IndexersRepo,
   LibraryEntryImporter,
   LibraryRepo,
-  LibrarySourcesRepo,
   MediaProvider,
   MediaSourcesRepo,
+  MusicCollectionsRepo,
+  MusicPlaylistConnector,
   MusicProvider,
   UsersRepo,
 } from './ports'
@@ -18,7 +21,9 @@ import type {
 export interface Deps {
   usersRepo: UsersRepo
   libraryRepo: LibraryRepo
-  librarySourcesRepo: LibrarySourcesRepo
+  connectorsRepo: ConnectorsRepo
+  connectorLoginAttemptsRepo: ConnectorLoginAttemptsRepo
+  musicCollectionsRepo: MusicCollectionsRepo
   downloadersRepo: DownloadersRepo
   indexersRepo: IndexersRepo
   mediaSourcesRepo: MediaSourcesRepo
@@ -28,5 +33,6 @@ export interface Deps {
   mediaProvider: MediaProvider
   bookProvider: BookProvider
   musicProvider: MusicProvider
-  libraryImporters: Record<LibrarySourceKind, LibraryEntryImporter>
+  libraryImporters: { douban: LibraryEntryImporter }
+  musicPlaylistConnectors: { netease: MusicPlaylistConnector }
 }

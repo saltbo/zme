@@ -9,7 +9,9 @@ import type {
   MusicDiscoveryInput,
   MusicMedium,
   MusicReleaseSummary,
+  MusicSearchItem,
   MusicTrack,
+  MusicTrackSearchItem,
   ResourcePage,
 } from '@shared/types'
 
@@ -117,6 +119,7 @@ interface ListenBrainzTopRecording {
   recording_mbid?: string
   recording_name?: string
   track_name?: string
+  release_name?: string
   artist_name?: string
   artist_mbids?: string[]
   caa_id?: number
@@ -188,7 +191,7 @@ async function getCoverArtOrEmpty(kind: 'release' | 'release-group', mbid: strin
   }
 }
 
-export async function discoverMusicAlbums(input: MusicDiscoveryInput): Promise<ResourcePage<MusicAlbumSearchItem>> {
+export async function discoverMusicAlbums(input: MusicDiscoveryInput): Promise<ResourcePage<MusicSearchItem>> {
   if (input.mode === 'genre') {
     return searchMusicAlbums({
       tag: input.genre,
@@ -217,7 +220,7 @@ export async function discoverMusicAlbums(input: MusicDiscoveryInput): Promise<R
     }
     const results = (payload.payload?.recordings ?? [])
       .map(toPopularMusicRecordingSearchItem)
-      .filter((item): item is MusicAlbumSearchItem => item !== null)
+      .filter((item): item is MusicTrackSearchItem => item !== null)
     return toResourcePage(results, input.page, input.pageSize)
   }
 
@@ -550,7 +553,7 @@ function toPopularMusicAlbumSearchItem(release: ListenBrainzTopRelease): MusicAl
   }
 }
 
-function toPopularMusicRecordingSearchItem(recording: ListenBrainzTopRecording): MusicAlbumSearchItem | null {
+function toPopularMusicRecordingSearchItem(recording: ListenBrainzTopRecording): MusicTrackSearchItem | null {
   const title = recording.track_name ?? recording.recording_name
   if (!recording.caa_release_mbid || !MBID_PATTERN.test(recording.caa_release_mbid) || !title) {
     return null
@@ -562,23 +565,24 @@ function toPopularMusicRecordingSearchItem(recording: ListenBrainzTopRecording):
       ? compactNumber.format(recording.listen_count)
       : null
 
+  const recordingMbid =
+    recording.recording_mbid && MBID_PATTERN.test(recording.recording_mbid) ? recording.recording_mbid : null
+  const fallbackId = encodeURIComponent(`${recording.caa_release_mbid}:${title}:${artistName ?? ''}`)
+
   return {
-    mediaKey: buildMusicBrainzMediaKey('release', recording.caa_release_mbid),
+    mediaKey: recordingMbid ? `musicbrainz:recording:${recordingMbid}` : `listenbrainz:recording:${fallbackId}`,
     provider: 'musicbrainz',
-    resourceType: 'release',
-    mbid: recording.caa_release_mbid,
-    releaseGroupMbid: recording.caa_release_mbid,
+    resourceType: 'recording',
+    recordingMbid,
+    releaseMediaKey: buildMusicBrainzMediaKey('release', recording.caa_release_mbid),
+    releaseMbid: recording.caa_release_mbid,
     title,
     artist: artistName,
     artists: artistName ? [{ id: artistMbid, name: artistName, joinPhrase: '' }] : [],
-    firstReleaseDate: null,
-    releaseYear: null,
-    releaseDate: null,
-    country: null,
-    primaryType: 'Track',
-    secondaryTypes: [],
-    disambiguation: recording.listen_count ? `${recording.listen_count.toLocaleString()} listens` : null,
+    albumTitle: recording.release_name?.trim() || null,
     coverArt: getListenBrainzCoverArt(recording),
+    durationMs: null,
+    isrcs: [],
     scoreLabel,
   }
 }

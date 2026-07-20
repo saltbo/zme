@@ -1,4 +1,10 @@
-import type { MusicAlbumDetails, MusicAlbumSearchItem, MusicDiscoveryInput, ResourcePage } from '@shared/types'
+import type {
+  MusicAlbumDetails,
+  MusicAlbumSearchItem,
+  MusicDiscoveryInput,
+  MusicSearchItem,
+  ResourcePage,
+} from '@shared/types'
 import { apiRequest, query } from './client'
 
 export async function searchMusicAlbums(input: {
@@ -21,7 +27,7 @@ export async function searchMusicAlbums(input: {
 }
 
 export async function discoverMusicAlbums(input: MusicDiscoveryInput) {
-  return apiRequest<ResourcePage<MusicAlbumSearchItem>>(
+  return apiRequest<ResourcePage<MusicSearchItem>>(
     `/api/music/discover${query({
       mode: input.mode,
       range: input.range,

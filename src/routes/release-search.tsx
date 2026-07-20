@@ -16,7 +16,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useMediaDetails } from '@/hooks/use-media-queries'
-import { useBookDetails, useMusicAlbumDetails } from '@/hooks/use-resource-queries'
+import { useBookDetails } from '@/hooks/use-resource-queries'
 import { getTmdbLanguage } from '@/i18n'
 import { ApiError } from '@/lib/api'
 import {
@@ -28,7 +28,6 @@ import {
 import {
   getBookReleaseSearchInput,
   getMediaReleaseSearchInput,
-  getMusicReleaseSearchInput,
   type ResourceReleaseSearchInput,
 } from '@/lib/release-search-context'
 
@@ -101,39 +100,6 @@ export function MediaReleaseSearchPage({ kind }: { kind: MediaKind }) {
                 : t('mediaNotFound')
       }
       fallbackPath={getMediaIndexPath(kind)}
-      parentPath={parentPath}
-      onContextRetry={() => void details.refetch()}
-    />
-  )
-}
-
-export function MusicReleaseSearchPage() {
-  const { key } = useParams()
-  const mediaKey = key ?? ''
-  const details = useMusicAlbumDetails(mediaKey)
-  const rawAlbum = details.data ?? null
-  const album = rawAlbum?.mediaKey === mediaKey ? rawAlbum : null
-  const waitingForCurrentAlbum = details.isFetching && Boolean(rawAlbum) && !album
-  const { t } = useTranslation()
-  const parentPath = mediaKey ? `/music/${encodeURIComponent(mediaKey)}` : '/music'
-  const context = useMemo<ReleaseSearchContext | null>(() => {
-    if (!album) return null
-    const input = getMusicReleaseSearchInput(album)
-    return getResourceSearchContext(input)
-  }, [album])
-
-  return (
-    <ReleaseSearchPageLayout
-      context={context}
-      contextLoading={details.isLoading || waitingForCurrentAlbum}
-      contextError={
-        details.error instanceof Error
-          ? details.error.message
-          : album || !mediaKey || waitingForCurrentAlbum
-            ? null
-            : t('mediaNotFound')
-      }
-      fallbackPath="/music"
       parentPath={parentPath}
       onContextRetry={() => void details.refetch()}
     />

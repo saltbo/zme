@@ -67,10 +67,11 @@ cd zme
 pnpm install
 ```
 
-Create a `.dev.vars` file with an auth signing secret (≥ 32 characters):
+Create a `.dev.vars` file with independent auth and connector-encryption secrets (each ≥ 32 characters):
 
 ```dotenv
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
+CONNECTOR_CREDENTIALS_SECRET=replace-with-a-different-32-character-secret
 ```
 
 Then start the dev server:
@@ -88,6 +89,7 @@ the services you point it at.
 
 ```bash
 wrangler secret put BETTER_AUTH_SECRET   # set the auth secret on the Worker
+wrangler secret put CONNECTOR_CREDENTIALS_SECRET # encrypt music-platform login sessions
 pnpm db:migrate:remote                   # apply D1 migrations
 pnpm deploy
 ```
@@ -99,7 +101,7 @@ pnpm deploy
 | Frontend | React 19, React Router 7, TanStack Query, Tailwind CSS 4, i18n (中文 / English) |
 | Backend | Hono RPC API on Cloudflare Workers, serving the SPA as static assets |
 | Data | Cloudflare D1 (SQLite) via Drizzle ORM; Better Auth for sessions |
-| Integrations | TMDB, Open Library, ListenBrainz (discovery) · Prowlarr (indexers) · qBittorrent / Transmission / Aria2 / ZPan (downloaders) |
+| Integrations | TMDB, Open Library, ListenBrainz (discovery) · Douban and Netease Cloud Music (connectors) · Prowlarr (indexers) · qBittorrent / Transmission / Aria2 / ZPan (downloaders) |
 | Tooling | TypeScript, Biome, Vitest, Playwright, Wrangler, pnpm |
 
 The server follows a clean, layered architecture (domain → use cases → adapters →

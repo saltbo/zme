@@ -11,9 +11,13 @@ import type {
   MusicDiscoveryInput,
   MusicDiscoveryMode,
   MusicDiscoveryRange,
+  MusicFavoriteTrackInput,
   MusicGenre,
   MusicReleaseType,
+  MusicSearchItem,
+  MusicTrackSearchItem,
 } from '@shared/types'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BookOpen,
   CalendarDays,
@@ -21,9 +25,11 @@ import {
   ChevronsUpDown,
   CircleCheck,
   Disc3,
+  Download,
   Heart,
   Languages,
   ListMusic,
+  LoaderCircle,
   RotateCcw,
   Search,
   SlidersHorizontal,
@@ -44,6 +50,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
 import { useBookDetails, useBookSearch, useMusicAlbumDetails, useMusicSearch } from '@/hooks/use-resource-queries'
+import {
+  getFavoriteSongs,
+  listMusicCollections,
+  removeMusicCollection,
+  saveMusicAlbum,
+  setFavoriteSong,
+} from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import {
   compareResourceTitle,
   getResourceSearchSort,
@@ -145,7 +159,10 @@ export function MusicPage() {
       loadingMore={search.isFetchingNextPage}
       hasNextPage={search.hasNextPage}
       loadMoreRef={loadMoreRef}
-      items={items.map((item) => ({ key: item.mediaKey, node: <MusicAlbumCard item={item} /> }))}
+      items={items.map((item) => ({
+        key: item.mediaKey,
+        node: item.resourceType === 'recording' ? <MusicTrackCard item={item} /> : <MusicAlbumCard item={item} />,
+      }))}
       filters={
         query ? (
           <ResourceSearchSortBar
@@ -304,14 +321,14 @@ function updateSearchParam(
   })
 }
 
-function sortMusicSearchResults(items: MusicAlbumSearchItem[], sort: ResourceSearchSort) {
+function sortMusicSearchResults(items: MusicSearchItem[], sort: ResourceSearchSort) {
   if (sort === 'best') return items
 
   return [...items].sort((left, right) => {
     if (sort === 'title') return compareResourceTitle(left.title, right.title)
 
-    const leftYear = parseResourceYear(left.releaseYear)
-    const rightYear = parseResourceYear(right.releaseYear)
+    const leftYear = parseResourceYear(left.resourceType === 'recording' ? null : left.releaseYear)
+    const rightYear = parseResourceYear(right.resourceType === 'recording' ? null : right.releaseYear)
     const yearComparison = sort === 'newest' ? rightYear - leftYear : leftYear - rightYear
     return yearComparison || compareResourceTitle(left.title, right.title)
   })
@@ -995,13 +1012,14 @@ function getBookSubjectParam(value: string | null): string | undefined {
 
 export function MusicDetailPage() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { key } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { t } = useTranslation()
   const mediaKey = key ?? ''
   const details = useMusicAlbumDetails(mediaKey)
   const album = details.data ?? null
+  const albumLibrary = useMusicAlbumLibrary(album ? { mediaKey: album.detailMediaKey } : null)
+  const favoriteSongs = useFavoriteSongs()
 
   useEffect(() => {
     if (!album) return
@@ -1012,11 +1030,6 @@ export function MusicDetailPage() {
     })
     return () => setTopbarOverride(null)
   }, [album, location.pathname, setTopbarOverride, t])
-
-  function openReleaseSearch() {
-    if (!album) return
-    navigate(`${location.pathname}/releases`, { state: { origin: `${location.pathname}${location.search}` } })
-  }
 
   if (details.isLoading) return <ResourceDetailSkeleton />
   if (!album)
@@ -1032,16 +1045,23 @@ export function MusicDetailPage() {
       description={album.disambiguation}
       badges={[album.releaseYear, album.primaryType, album.country, ...album.secondaryTypes].filter(isString)}
       statusInput={statusInput}
+      statusControl={
+        <MusicAlbumLibraryButton
+          saved={albumLibrary.saved}
+          pending={albumLibrary.pending}
+          onToggle={albumLibrary.toggle}
+        />
+      }
       actions={
         <Button
           type="button"
-          onClick={openReleaseSearch}
           size="icon-lg"
+          disabled
           className="size-11 rounded-xl shadow-lg shadow-primary/25"
-          aria-label={t('musicDownload')}
-          title={t('musicDownload')}
+          aria-label={t('downloadComingSoon')}
+          title={t('downloadComingSoon')}
         >
-          <Search />
+          <Download />
         </Button>
       }
       meta={
@@ -1068,16 +1088,29 @@ export function MusicDetailPage() {
                     <Badge variant="secondary">{medium.trackCount}</Badge>
                   </div>
                   <div className="space-y-2">
-                    {medium.tracks.map((track) => (
-                      <div
-                        key={`${medium.position}-${track.position}`}
-                        className="grid grid-cols-[3rem_minmax(0,1fr)_4rem] gap-3 text-sm"
-                      >
-                        <span className="text-muted-foreground">{track.number ?? track.position}</span>
-                        <span className="truncate">{track.title}</span>
-                        <span className="text-right text-muted-foreground">{formatTrackLength(track.lengthMs)}</span>
-                      </div>
-                    ))}
+                    {medium.tracks.map((track) => {
+                      const favoriteInput = toFavoriteTrackInput(album, medium.position, track.position)
+                      return (
+                        <div
+                          key={`${medium.position}-${track.position}`}
+                          className="grid grid-cols-[3rem_minmax(0,1fr)_4rem_auto] items-center gap-3 text-sm"
+                        >
+                          <span className="text-muted-foreground">{track.number ?? track.position}</span>
+                          <span className="truncate">{track.title}</span>
+                          <span className="text-right text-muted-foreground">{formatTrackLength(track.lengthMs)}</span>
+                          <div className="flex items-center gap-1">
+                            <FavoriteSongButton
+                              selected={favoriteSongs.has(favoriteInput.mediaKey)}
+                              pending={favoriteSongs.pendingMediaKey === favoriteInput.mediaKey}
+                              onToggle={() => favoriteSongs.toggle(favoriteInput)}
+                            />
+                            <Button size="icon-sm" variant="ghost" disabled title={t('downloadComingSoon')}>
+                              <Download />
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
@@ -1206,6 +1239,7 @@ function ResourceDetailLayout({
   description,
   badges,
   statusInput,
+  statusControl,
   actions,
   meta,
   sections,
@@ -1217,6 +1251,7 @@ function ResourceDetailLayout({
   description: string | null
   badges: string[]
   statusInput: LibraryResourceInput
+  statusControl?: ReactNode
   actions: ReactNode
   meta: ReactNode
   sections: ReactNode
@@ -1264,7 +1299,7 @@ function ResourceDetailLayout({
                     {kind === 'book' ? <BookOpen className="size-3.5" /> : <Disc3 className="size-3.5" />}
                     {kind === 'book' ? t('book') : t('music')}
                   </Badge>
-                  <ResourceStatusButton kind={kind} status={status} onChange={updateStatus} />
+                  {statusControl ?? <ResourceStatusButton kind={kind} status={status} onChange={updateStatus} />}
                 </div>
                 <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:text-4xl sm:leading-[0.98]">
                   {title}
@@ -1281,7 +1316,7 @@ function ResourceDetailLayout({
                   {kind === 'book' ? t('book') : t('music')}
                 </Badge>
                 <div className="flex shrink-0 items-center gap-2">
-                  <ResourceStatusButton kind={kind} status={status} onChange={updateStatus} />
+                  {statusControl ?? <ResourceStatusButton kind={kind} status={status} onChange={updateStatus} />}
                   {actions}
                 </div>
               </div>
@@ -1365,6 +1400,7 @@ function ResourceStatusButton({
 }
 
 function MusicAlbumCard({ item }: { item: MusicAlbumSearchItem }) {
+  const library = useMusicAlbumLibrary(item)
   return (
     <ResourceCard
       kind="music"
@@ -1375,6 +1411,45 @@ function MusicAlbumCard({ item }: { item: MusicAlbumSearchItem }) {
       overlayMeta={item.releaseYear ?? item.artist ?? null}
       badge={item.secondaryTypes[0] ?? item.primaryType ?? null}
       score={item.scoreLabel ?? item.releaseYear ?? 'NR'}
+      statusControl={
+        <MusicAlbumLibraryIconButton saved={library.saved} pending={library.pending} onToggle={library.toggle} />
+      }
+    />
+  )
+}
+
+function MusicTrackCard({ item }: { item: MusicTrackSearchItem }) {
+  const { t } = useTranslation()
+  const favorites = useFavoriteSongs()
+  const favoriteInput: MusicFavoriteTrackInput = {
+    provider: 'musicbrainz',
+    externalId: item.recordingMbid ?? item.mediaKey,
+    mediaKey: item.mediaKey,
+    title: item.title,
+    artists: item.artists.map((artist) => artist.name),
+    albumTitle: item.albumTitle,
+    albumExternalId: item.releaseMbid,
+    coverUrl: item.coverArt.frontThumbnailUrl ?? item.coverArt.frontUrl,
+    durationMs: item.durationMs,
+    isrcs: item.isrcs,
+  }
+  return (
+    <ResourceCard
+      kind="music"
+      mediaKey={item.mediaKey}
+      to={`/music/${encodeURIComponent(item.releaseMediaKey)}`}
+      imageUrl={item.coverArt.frontThumbnailUrl ?? item.coverArt.frontUrl}
+      title={item.title}
+      overlayMeta={item.artist}
+      badge={t('track')}
+      score={item.scoreLabel ?? 'NR'}
+      statusControl={
+        <FavoriteSongIconButton
+          selected={favorites.has(item.mediaKey)}
+          pending={favorites.pendingMediaKey === item.mediaKey}
+          onToggle={() => favorites.toggle(favoriteInput)}
+        />
+      }
     />
   )
 }
@@ -1428,6 +1503,7 @@ function ResourceCard({
   overlayMeta,
   badge,
   score,
+  statusControl,
 }: {
   kind: ResourceKind
   mediaKey: string
@@ -1437,6 +1513,7 @@ function ResourceCard({
   overlayMeta: string | null
   badge: string | null
   score: string
+  statusControl?: ReactNode
 }) {
   const { t } = useTranslation()
   const { getResourceStatus, setResourceStatus } = useLibrary()
@@ -1467,7 +1544,7 @@ function ResourceCard({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#120c1d] via-[#120c1d]/18 to-transparent opacity-92" />
         <Link to={to} aria-label={title} className="absolute inset-0 z-10" />
-        <ResourceCardStatusMenu kind={kind} status={status} onChange={handleStatusChange} />
+        {statusControl ?? <ResourceCardStatusMenu kind={kind} status={status} onChange={handleStatusChange} />}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4 text-white">
           <div className="mb-2 flex items-center gap-2 text-white/72 text-xs">
             {badge ? (
@@ -1494,6 +1571,199 @@ function ResourceCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function useMusicAlbumLibrary(album: Pick<MusicAlbumSearchItem, 'mediaKey'> | null) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const collections = useQuery({
+    queryKey: queryKeys.music.library('album'),
+    queryFn: async () => (await listMusicCollections('album')).items,
+    enabled: Boolean(album),
+  })
+  const collection = collections.data?.find((item) => item.externalId === album?.mediaKey) ?? null
+  const mutation = useMutation({
+    mutationFn: async () => {
+      if (!album) throw new Error('Music album is unavailable.')
+      return collection ? removeMusicCollection(collection.id) : saveMusicAlbum(album.mediaKey)
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.music.library('album') })
+      toast.success(collection ? t('collectionRemoved') : t('albumSaved'))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('albumSaveFailed')),
+  })
+  return { saved: Boolean(collection), pending: mutation.isPending, toggle: () => mutation.mutate() }
+}
+
+function useFavoriteSongs() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const favorites = useQuery({
+    queryKey: queryKeys.music.favorites,
+    queryFn: async () => (await getFavoriteSongs()).item,
+  })
+  const mutation = useMutation({
+    mutationFn: ({ track, selected }: { track: MusicFavoriteTrackInput; selected: boolean }) =>
+      setFavoriteSong(track, selected),
+    onSuccess: async (_payload, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['music', 'library'] })
+      toast.success(variables.selected ? t('favoriteSongAdded') : t('favoriteSongRemoved'))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('favoriteSongFailed')),
+  })
+  const has = (mediaKey: string) => favorites.data?.tracks.some((track) => track.mediaKey === mediaKey) ?? false
+  return {
+    has,
+    pendingMediaKey: mutation.isPending ? mutation.variables?.track.mediaKey : null,
+    toggle: (track: MusicFavoriteTrackInput) => mutation.mutate({ track, selected: !has(track.mediaKey) }),
+  }
+}
+
+function toFavoriteTrackInput(
+  album: MusicAlbumDetails,
+  mediumPosition: number,
+  trackPosition: number,
+): MusicFavoriteTrackInput {
+  const track = album.media
+    .find((medium) => medium.position === mediumPosition)
+    ?.tracks.find((item) => item.position === trackPosition)
+  if (!track) throw new Error('Music track is unavailable.')
+  const externalId = track.recordingMbid ?? `${album.releaseGroupMbid}:${mediumPosition}:${trackPosition}`
+  return {
+    provider: 'musicbrainz',
+    externalId,
+    mediaKey: track.recordingMediaKey ?? `musicbrainz:recording:${externalId}`,
+    title: track.title,
+    artists: album.artist ? [album.artist] : [],
+    albumTitle: album.title,
+    albumExternalId: album.releaseGroupMbid,
+    coverUrl: album.coverArt.frontThumbnailUrl ?? album.coverArt.frontUrl,
+    durationMs: track.lengthMs,
+    isrcs: track.isrcs,
+  }
+}
+
+function FavoriteSongButton({
+  selected,
+  pending,
+  onToggle,
+}: {
+  selected: boolean
+  pending: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      disabled={pending}
+      onClick={onToggle}
+      title={selected ? t('removeFavoriteSong') : t('addFavoriteSong')}
+      aria-label={selected ? t('removeFavoriteSong') : t('addFavoriteSong')}
+    >
+      {pending ? (
+        <LoaderCircle className="animate-spin" />
+      ) : (
+        <Heart className={cn(selected && 'fill-[#f06595] text-[#f06595]')} />
+      )}
+    </Button>
+  )
+}
+
+function FavoriteSongIconButton({
+  selected,
+  pending,
+  onToggle,
+}: {
+  selected: boolean
+  pending: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle()
+      }}
+      aria-label={selected ? t('removeFavoriteSong') : t('addFavoriteSong')}
+      title={selected ? t('removeFavoriteSong') : t('addFavoriteSong')}
+      className="absolute top-2 right-2 z-30 flex size-10 items-center justify-center text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 disabled:opacity-60"
+    >
+      {pending ? (
+        <LoaderCircle className="size-5 animate-spin" />
+      ) : (
+        <Heart className={cn('size-6', selected && 'fill-[#f06595] text-[#f06595]')} />
+      )}
+    </button>
+  )
+}
+
+function MusicAlbumLibraryButton({
+  saved,
+  pending,
+  onToggle,
+}: {
+  saved: boolean
+  pending: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      size="icon-lg"
+      className="size-11 shrink-0 rounded-xl border-white/18 bg-white/12 text-white shadow-lg backdrop-blur hover:bg-white/20 hover:text-white"
+      onClick={onToggle}
+      disabled={pending}
+      aria-label={saved ? t('removeFromLibrary') : t('saveToLibrary')}
+      title={saved ? t('removeFromLibrary') : t('saveToLibrary')}
+    >
+      {pending ? (
+        <LoaderCircle className="animate-spin" />
+      ) : (
+        <Heart className={cn(saved && 'fill-[#f06595] text-[#f06595]')} />
+      )}
+    </Button>
+  )
+}
+
+function MusicAlbumLibraryIconButton({
+  saved,
+  pending,
+  onToggle,
+}: {
+  saved: boolean
+  pending: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        onToggle()
+      }}
+      aria-label={saved ? t('removeFromLibrary') : t('saveToLibrary')}
+      title={saved ? t('removeFromLibrary') : t('saveToLibrary')}
+      className="absolute top-2 right-2 z-30 flex size-10 items-center justify-center text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.55)] transition hover:scale-110 disabled:opacity-60"
+    >
+      {pending ? (
+        <LoaderCircle className="size-5 animate-spin" />
+      ) : (
+        <Heart className={cn('size-6', saved && 'fill-[#f06595] text-[#f06595]')} />
+      )}
+    </button>
   )
 }
 

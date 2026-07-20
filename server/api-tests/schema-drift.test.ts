@@ -1,11 +1,15 @@
 import { env } from 'cloudflare:test'
 import {
   account,
+  connectorLoginAttempts,
+  connectors,
   downloaders,
   indexers,
   library,
-  librarySources,
   mediaSources,
+  musicCollections,
+  musicCollectionTracks,
+  musicTracks,
   session,
   user,
   verification,
@@ -26,7 +30,11 @@ const tables = {
   indexers,
   mediaSources,
   library,
-  librarySources,
+  connectors,
+  connectorLoginAttempts,
+  musicCollections,
+  musicTracks,
+  musicCollectionTracks,
 }
 
 describe('schema drift: drizzle schema.ts vs applied D1 migrations', () => {

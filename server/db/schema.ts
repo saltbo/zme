@@ -122,15 +122,22 @@ export const library = sqliteTable(
   (table) => [uniqueIndex('library_user_media_key_idx').on(table.userId, table.mediaKey)],
 )
 
-export const librarySources = sqliteTable(
-  'library_sources',
+export const connectors = sqliteTable(
+  'connectors',
   {
     id: text('id').primaryKey(),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    source: text('source', { enum: ['douban'] }).notNull(),
-    profileId: text('profile_id').notNull(),
+    kind: text('kind', { enum: ['douban', 'netease'] }).notNull(),
+    externalAccountId: text('external_account_id').notNull(),
+    displayName: text('display_name').notNull().default(''),
+    avatarUrl: text('avatar_url'),
+    settingsJson: text('settings_json').notNull().default('{}'),
+    credentialsEncrypted: text('credentials_encrypted'),
+    status: text('status', { enum: ['connected', 'reauth_required', 'error'] })
+      .notNull()
+      .default('connected'),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
     lastSyncedAt: text('last_synced_at'),
     lastError: text('last_error'),
@@ -138,7 +145,88 @@ export const librarySources = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [uniqueIndex('library_sources_user_source_idx').on(table.userId, table.source)],
+  (table) => [uniqueIndex('connectors_user_kind_idx').on(table.userId, table.kind)],
+)
+
+export const connectorLoginAttempts = sqliteTable('connector_login_attempts', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  kind: text('kind', { enum: ['netease'] }).notNull(),
+  externalKey: text('external_key').notNull(),
+  credentialsEncrypted: text('credentials_encrypted'),
+  status: text('status', { enum: ['waiting_scan', 'waiting_confirmation', 'connected', 'expired'] })
+    .notNull()
+    .default('waiting_scan'),
+  expiresAt: text('expires_at').notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const musicCollections = sqliteTable(
+  'music_collections',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    connectorId: text('connector_id').references(() => connectors.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: ['playlist', 'album', 'favorites'] }).notNull(),
+    provider: text('provider', { enum: ['netease', 'musicbrainz', 'zme'] }).notNull(),
+    externalId: text('external_id').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    coverUrl: text('cover_url'),
+    ownerName: text('owner_name'),
+    trackCount: integer('track_count').notNull().default(0),
+    libraryAddedAt: text('library_added_at'),
+    remoteUpdatedAt: text('remote_updated_at'),
+    lastSyncedAt: text('last_synced_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('music_collections_user_provider_external_idx').on(table.userId, table.provider, table.externalId),
+  ],
+)
+
+export const musicTracks = sqliteTable(
+  'music_tracks',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider', { enum: ['netease', 'musicbrainz'] }).notNull(),
+    externalId: text('external_id').notNull(),
+    mediaKey: text('media_key').notNull(),
+    title: text('title').notNull(),
+    artistsJson: text('artists_json').notNull().default('[]'),
+    albumTitle: text('album_title'),
+    albumExternalId: text('album_external_id'),
+    coverUrl: text('cover_url'),
+    durationMs: integer('duration_ms'),
+    isrcsJson: text('isrcs_json').notNull().default('[]'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('music_tracks_provider_external_idx').on(table.provider, table.externalId),
+    uniqueIndex('music_tracks_media_key_idx').on(table.mediaKey),
+  ],
+)
+
+export const musicCollectionTracks = sqliteTable(
+  'music_collection_tracks',
+  {
+    collectionId: text('collection_id')
+      .notNull()
+      .references(() => musicCollections.id, { onDelete: 'cascade' }),
+    trackId: text('track_id')
+      .notNull()
+      .references(() => musicTracks.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    addedAt: text('added_at'),
+  },
+  (table) => [uniqueIndex('music_collection_tracks_collection_position_idx').on(table.collectionId, table.position)],
 )
 
 export type User = typeof user.$inferSelect
@@ -150,4 +238,7 @@ export type MediaSource = typeof mediaSources.$inferSelect
 export type NewMediaSource = typeof mediaSources.$inferInsert
 export type LibraryItem = typeof library.$inferSelect
 export type NewLibraryItem = typeof library.$inferInsert
-export type LibrarySource = typeof librarySources.$inferSelect
+export type Connector = typeof connectors.$inferSelect
+export type ConnectorLoginAttempt = typeof connectorLoginAttempts.$inferSelect
+export type MusicCollection = typeof musicCollections.$inferSelect
+export type MusicTrackRow = typeof musicTracks.$inferSelect

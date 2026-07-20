@@ -14,7 +14,10 @@ export const queryKeys = {
     page: (input: LibraryPageInput) => ['library', 'page', input] as const,
     infinite: (input: Omit<LibraryPageInput, 'page'>) => ['library', 'infinite', input] as const,
   },
-  librarySources: ['library-sources'] as const,
+  connectors: {
+    root: ['connectors'] as const,
+    playlists: (id: string) => ['connectors', id, 'playlists'] as const,
+  },
   downloaders: ['downloaders'] as const,
   downloadTasksRoot: ['download-tasks'] as const,
   downloadTasks: (status: string) => ['download-tasks', status] as const,
@@ -30,6 +33,9 @@ export const queryKeys = {
     discover: (input: Omit<MusicDiscoveryInput, 'page'>) => ['music', 'discover', input] as const,
     search: (query: string) => ['music', 'search', query] as const,
     details: (mediaKey: string) => ['music', 'details', mediaKey] as const,
+    library: (kind: 'playlist' | 'album') => ['music', 'library', kind] as const,
+    collection: (id: string) => ['music', 'library', 'collection', id] as const,
+    favorites: ['music', 'library', 'favorites'] as const,
   },
   media: {
     trending: (language: string) => ['media', 'trending', language] as const,

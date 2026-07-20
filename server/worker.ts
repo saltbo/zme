@@ -1,7 +1,7 @@
 import { app } from '@server/app'
 import { createDeps } from '@server/composition'
 import type { Env } from '@server/env'
-import { syncEnabledLibrarySources } from '@server/usecases/library-sources'
+import { syncEnabledConnectors } from '@server/usecases/connectors'
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -13,6 +13,6 @@ export default {
     return env.ASSETS.fetch(request)
   },
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(syncEnabledLibrarySources(createDeps(env)))
+    ctx.waitUntil(syncEnabledConnectors(createDeps(env), env))
   },
 }

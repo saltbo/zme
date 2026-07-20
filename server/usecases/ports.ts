@@ -2,6 +2,9 @@ import type {
   BookDetails,
   BookDiscoveryInput,
   BookSearchItem,
+  ConnectorKind,
+  ConnectorStatus,
+  ConnectorSyncResult,
   CreateDownloadInput,
   DownloaderInput,
   DownloaderKind,
@@ -14,8 +17,6 @@ import type {
   LibraryFilterKind,
   LibraryFilterStatus,
   LibraryKind,
-  LibrarySourceKind,
-  LibrarySourceSyncResult,
   MediaDetails,
   MediaDiscoverInput,
   MediaDiscoverPage,
@@ -28,7 +29,13 @@ import type {
   MediaSourceKind,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
+  MusicCollectionDetails,
+  MusicCollectionKind,
+  MusicCollectionProvider,
+  MusicCollectionSummary,
   MusicDiscoveryInput,
+  MusicLibraryTrack,
+  MusicSearchItem,
   ResourcePage,
 } from '@shared/types'
 
@@ -229,30 +236,108 @@ export interface LibraryRepo {
   delete(userId: string, mediaKey: string): Promise<boolean>
 }
 
-export interface LibrarySourceRecord {
+export interface ConnectorRecord {
   id: string
   userId: string
-  source: LibrarySourceKind
-  profileId: string
+  kind: ConnectorKind
+  externalAccountId: string
+  displayName: string
+  avatarUrl: string | null
+  settings: Record<string, string>
+  credentialsEncrypted: string | null
+  status: ConnectorStatus
   enabled: boolean
   lastSyncedAt: string | null
   lastError: string | null
-  lastResult: LibrarySourceSyncResult | null
+  lastResult: ConnectorSyncResult | null
   createdAt: string
   updatedAt: string
 }
 
-export interface LibrarySourcesRepo {
-  list(userId: string): Promise<LibrarySourceRecord[]>
-  get(userId: string, source: LibrarySourceKind): Promise<LibrarySourceRecord | null>
-  listEnabled(): Promise<LibrarySourceRecord[]>
+export interface ConnectorsRepo {
+  list(userId: string): Promise<ConnectorRecord[]>
+  get(userId: string, id: string): Promise<ConnectorRecord | null>
+  findByKind(userId: string, kind: ConnectorKind): Promise<ConnectorRecord | null>
+  listEnabled(): Promise<ConnectorRecord[]>
   save(
     userId: string,
-    source: LibrarySourceKind,
-    input: { profileId: string; enabled: boolean },
-  ): Promise<LibrarySourceRecord>
-  delete(userId: string, source: LibrarySourceKind): Promise<boolean>
-  markSynced(id: string, result: LibrarySourceSyncResult | null, error: string | null): Promise<void>
+    kind: ConnectorKind,
+    input: Omit<
+      ConnectorRecord,
+      'id' | 'userId' | 'kind' | 'lastSyncedAt' | 'lastError' | 'lastResult' | 'createdAt' | 'updatedAt'
+    >,
+  ): Promise<ConnectorRecord>
+  updateState(
+    userId: string,
+    id: string,
+    input: { enabled?: boolean; status?: ConnectorStatus },
+  ): Promise<ConnectorRecord | null>
+  delete(userId: string, id: string): Promise<boolean>
+  markSynced(id: string, result: ConnectorSyncResult | null, error: string | null): Promise<void>
+}
+
+export interface ConnectorLoginAttemptRecord {
+  id: string
+  userId: string
+  kind: 'netease'
+  externalKey: string
+  credentialsEncrypted: string | null
+  status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'
+  expiresAt: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConnectorLoginAttemptsRepo {
+  create(record: ConnectorLoginAttemptRecord): Promise<void>
+  get(userId: string, id: string): Promise<ConnectorLoginAttemptRecord | null>
+  update(
+    userId: string,
+    id: string,
+    patch: Partial<Pick<ConnectorLoginAttemptRecord, 'credentialsEncrypted' | 'status' | 'updatedAt'>>,
+  ): Promise<ConnectorLoginAttemptRecord | null>
+}
+
+export interface MusicCollectionRecord extends MusicCollectionSummary {
+  userId: string
+  connectorId: string | null
+}
+
+export interface MusicTrackInput extends Omit<MusicLibraryTrack, 'id' | 'position' | 'addedAt'> {
+  addedAt?: string | null
+}
+
+export interface MusicCollectionsRepo {
+  listLibrary(userId: string, kind: 'playlist' | 'album'): Promise<MusicCollectionSummary[]>
+  listForConnector(userId: string, connectorId: string): Promise<MusicCollectionSummary[]>
+  getDetails(userId: string, id: string): Promise<MusicCollectionDetails | null>
+  find(userId: string, provider: MusicCollectionProvider, externalId: string): Promise<MusicCollectionRecord | null>
+  upsert(
+    userId: string,
+    input: {
+      connectorId: string | null
+      kind: MusicCollectionKind
+      provider: MusicCollectionProvider
+      externalId: string
+      title: string
+      description: string | null
+      coverUrl: string | null
+      ownerName: string | null
+      trackCount: number
+      libraryAddedAt: string | null
+      remoteUpdatedAt: string | null
+      lastSyncedAt: string | null
+    },
+  ): Promise<MusicCollectionRecord>
+  setLibraryAdded(userId: string, id: string, libraryAddedAt: string | null): Promise<MusicCollectionRecord | null>
+  updateSnapshot(
+    userId: string,
+    id: string,
+    input: { trackCount: number; lastSyncedAt: string },
+  ): Promise<MusicCollectionRecord | null>
+  replaceTracks(collectionId: string, tracks: MusicTrackInput[]): Promise<void>
+  deleteMissingConnectorCollections(connectorId: string, externalIds: string[]): Promise<void>
+  delete(userId: string, id: string): Promise<boolean>
 }
 
 export interface UsersRepo {
@@ -319,7 +404,7 @@ export interface MusicSearchInput {
 
 export interface MusicProvider {
   search(input: MusicSearchInput): Promise<ResourcePage<MusicAlbumSearchItem>>
-  discover(input: MusicDiscoveryInput): Promise<ResourcePage<MusicAlbumSearchItem>>
+  discover(input: MusicDiscoveryInput): Promise<ResourcePage<MusicSearchItem>>
   details(mediaKey: string): Promise<MusicAlbumDetails>
 }
 
@@ -334,4 +419,33 @@ export interface ImportedLibraryEntry {
 
 export interface LibraryEntryImporter {
   fetchEntries(profileId: string): Promise<ImportedLibraryEntry[]>
+}
+
+export interface ImportedMusicPlaylist {
+  externalId: string
+  title: string
+  description: string | null
+  coverUrl: string | null
+  ownerName: string | null
+  trackCount: number
+  remoteUpdatedAt: string | null
+}
+
+export interface ImportedMusicTrack extends MusicTrackInput {}
+
+export interface MusicPlaylistConnector {
+  beginQrLogin(): Promise<{ key: string; qrUrl: string; cookies: string[]; expiresAt: string }>
+  checkQrLogin(
+    key: string,
+    cookies: string[],
+  ): Promise<
+    | { status: 'waiting_scan' | 'waiting_confirmation' | 'expired'; cookies: string[] }
+    | {
+        status: 'connected'
+        cookies: string[]
+        account: { externalAccountId: string; displayName: string; avatarUrl: string | null }
+      }
+  >
+  listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
+  listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
 }

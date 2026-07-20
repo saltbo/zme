@@ -1,14 +1,20 @@
+import type { Env } from '@server/env'
 import type { MediaSearchItem } from '@shared/types'
 import { describe, expect, it } from 'vitest'
+import { syncConnector } from './connectors'
 import type { Deps } from './deps'
-import { syncLibrarySource } from './library-sources'
-import type { ImportedLibraryEntry, LibraryRecord, LibrarySourceRecord } from './ports'
+import type { ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
 
-const sourceRecord: LibrarySourceRecord = {
-  id: 'source-1',
+const connectorRecord: ConnectorRecord = {
+  id: 'connector-1',
   userId: 'user-1',
-  source: 'douban',
-  profileId: 'profile-1',
+  kind: 'douban',
+  externalAccountId: 'profile-1',
+  displayName: 'profile-1',
+  avatarUrl: null,
+  settings: {},
+  credentialsEncrypted: null,
+  status: 'connected',
   enabled: true,
   lastSyncedAt: null,
   lastError: null,
@@ -45,18 +51,15 @@ function createSyncDeps(
 ): SyncFixture {
   const inserted: LibraryRecord[] = []
   const synced: SyncFixture['synced'] = []
-
   const deps = {
-    librarySourcesRepo: {
-      get: async () => sourceRecord,
+    connectorsRepo: {
+      get: async () => connectorRecord,
       markSynced: async (id: string, result: unknown, error: string | null) => {
         synced.push({ id, result, error })
       },
     },
     libraryImporters: {
-      douban: {
-        fetchEntries: fetchEntries ?? (async () => entries),
-      },
+      douban: { fetchEntries: fetchEntries ?? (async () => entries) },
     },
     mediaSourcesRepo: {
       findEnabled: async () => ({
@@ -78,17 +81,16 @@ function createSyncDeps(
     },
     libraryRepo: {
       get: async () => null,
-      insert: async (record: LibraryRecord) => {
-        inserted.push(record)
-      },
+      insert: async (record: LibraryRecord) => inserted.push(record),
     },
   }
-
   return { deps: deps as never as Deps, inserted, synced }
 }
 
-describe('syncLibrarySource', () => {
-  it('imports wish entries as saved and collect entries as watched, counting unmatched', async () => {
+const env = {} as Env
+
+describe('syncConnector', () => {
+  it('imports Douban wish and collect entries through the connector abstraction', async () => {
     const entries: ImportedLibraryEntry[] = [
       { sourceId: 'd1', status: 'wish', title: 'Saved Movie', aliases: [], year: '2020', markedAt: null },
       {
@@ -106,24 +108,30 @@ describe('syncLibrarySource', () => {
       'Watched Movie': [mediaItem(22, 'Watched Movie')],
     })
 
-    const result = await syncLibrarySource(deps, 'user-1', 'douban')
+    const result = await syncConnector(deps, env, 'user-1', 'connector-1')
 
-    expect(result).toEqual({ scanned: 3, imported: 2, saved: 1, watched: 1, unmatched: 1 })
-    expect(synced).toEqual([{ id: 'source-1', result, error: null }])
-
-    const saved = inserted.find((record) => record.tmdbId === 11)
-    expect(saved).toMatchObject({ mediaKey: 'tmdb:movie:11', kind: 'movie', watchedAt: null })
-
-    const watched = inserted.find((record) => record.tmdbId === 22)
-    expect(watched).toMatchObject({
-      mediaKey: 'tmdb:movie:22',
+    expect(result).toEqual({
+      capability: 'library.import',
+      scanned: 3,
+      imported: 2,
+      saved: 1,
+      watched: 1,
+      unmatched: 1,
+    })
+    expect(synced).toEqual([{ id: 'connector-1', result, error: null }])
+    expect(inserted.find((record) => record.tmdbId === 11)).toMatchObject({
+      mediaKey: 'tmdb:movie:11',
       kind: 'movie',
+      watchedAt: null,
+    })
+    expect(inserted.find((record) => record.tmdbId === 22)).toMatchObject({
+      mediaKey: 'tmdb:movie:22',
       savedAt: '2026-05-01T00:00:00.000Z',
       watchedAt: '2026-05-01T00:00:00.000Z',
     })
   })
 
-  it('rejects low-confidence matches instead of importing the wrong media', async () => {
+  it('rejects low-confidence matches', async () => {
     const entries: ImportedLibraryEntry[] = [
       { sourceId: 'd1', status: 'wish', title: 'Specific Title', aliases: [], year: '2020', markedAt: null },
     ]
@@ -131,26 +139,23 @@ describe('syncLibrarySource', () => {
       'Specific Title': [mediaItem(33, 'Entirely Different Film')],
     })
 
-    const result = await syncLibrarySource(deps, 'user-1', 'douban')
+    const result = await syncConnector(deps, env, 'user-1', 'connector-1')
 
-    expect(result).toEqual({ scanned: 1, imported: 0, saved: 0, watched: 0, unmatched: 1 })
+    expect(result).toMatchObject({ imported: 0, unmatched: 1 })
     expect(inserted).toEqual([])
   })
 
-  it('records the error and rethrows when the importer fails', async () => {
+  it('records importer errors and rethrows them', async () => {
     const { deps, synced } = createSyncDeps([], {}, async () => {
       throw new Error('Douban profile is unreachable.')
     })
 
-    await expect(syncLibrarySource(deps, 'user-1', 'douban')).rejects.toThrow('Douban profile is unreachable.')
-    expect(synced).toEqual([{ id: 'source-1', result: null, error: 'Douban profile is unreachable.' }])
+    await expect(syncConnector(deps, env, 'user-1', 'connector-1')).rejects.toThrow('Douban profile is unreachable.')
+    expect(synced).toEqual([{ id: 'connector-1', result: null, error: 'Douban profile is unreachable.' }])
   })
 
-  it('fails when the source is not configured', async () => {
-    const deps = {
-      librarySourcesRepo: { get: async () => null },
-    } as never as Deps
-
-    await expect(syncLibrarySource(deps, 'user-1', 'douban')).rejects.toThrow('Library source is not configured.')
+  it('fails when the connector is not configured', async () => {
+    const deps = { connectorsRepo: { get: async () => null } } as never as Deps
+    await expect(syncConnector(deps, env, 'user-1', 'connector-1')).rejects.toThrow('Connector was not found.')
   })
 })

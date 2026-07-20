@@ -92,7 +92,7 @@ function SidebarLink({
   muted?: boolean
 }) {
   const location = useLocation()
-  const isActive = !muted && location.pathname === to
+  const isActive = !muted && (location.pathname === to || (to !== '/' && location.pathname.startsWith(`${to}/`)))
 
   return (
     <SidebarMenuItem>
