@@ -2,9 +2,11 @@ import type { createDb } from '@server/db/client'
 import { musicCollections, musicCollectionTracks, musicTracks } from '@server/db/schema'
 import type { MusicCollectionRecord, MusicCollectionsRepo } from '@server/usecases/ports'
 import type { MusicCollectionDetails, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
-import { and, eq, inArray, notInArray } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
+const D1_MAX_BOUND_PARAMETERS = 100
+const MUSIC_COLLECTION_TRACK_PARAMETERS = 4
 
 export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
   async function find(
@@ -164,16 +166,23 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       if (relations.length === 0) {
         await clear
       } else {
-        await db.batch([clear, db.insert(musicCollectionTracks).values(relations)])
+        const inserts = chunks(relations, Math.floor(D1_MAX_BOUND_PARAMETERS / MUSIC_COLLECTION_TRACK_PARAMETERS)).map(
+          (items) => db.insert(musicCollectionTracks).values(items),
+        )
+        await db.batch([clear, ...inserts])
       }
     },
 
     async deleteMissingConnectorCollections(connectorId, externalIds) {
-      const condition =
-        externalIds.length > 0
-          ? and(eq(musicCollections.connectorId, connectorId), notInArray(musicCollections.externalId, externalIds))
-          : eq(musicCollections.connectorId, connectorId)
-      await db.delete(musicCollections).where(condition)
+      const existing = await db
+        .select({ id: musicCollections.id, externalId: musicCollections.externalId })
+        .from(musicCollections)
+        .where(eq(musicCollections.connectorId, connectorId))
+      const remoteIds = new Set(externalIds)
+      const staleIds = existing.filter((item) => !remoteIds.has(item.externalId)).map((item) => item.id)
+      for (const ids of chunks(staleIds, D1_MAX_BOUND_PARAMETERS)) {
+        await db.delete(musicCollections).where(inArray(musicCollections.id, ids))
+      }
     },
 
     async delete(userId, id) {
@@ -184,6 +193,12 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       return rows.length > 0
     },
   }
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = []
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size))
+  return result
 }
 
 function toRecord(row: typeof musicCollections.$inferSelect): MusicCollectionRecord {
