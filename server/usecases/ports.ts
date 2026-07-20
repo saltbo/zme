@@ -441,6 +441,14 @@ export interface ConnectedMusicAccount {
   avatarUrl: string | null
 }
 
+export type MusicSmsLoginResult =
+  | { status: 'connected'; cookies: string[]; account: ConnectedMusicAccount }
+  | {
+      status: 'verification_required'
+      cookies: string[]
+      verification: { qrCode: string; qrUrl: string; expiresAt: string }
+    }
+
 export interface MusicPlaylistConnector {
   beginQrLogin(): Promise<{ key: string; qrUrl: string; cookies: string[]; expiresAt: string }>
   checkQrLogin(
@@ -455,7 +463,11 @@ export interface MusicPlaylistConnector {
       }
   >
   sendSmsCode(input: NeteaseSmsCodeInput): Promise<void>
-  loginWithSms(input: NeteaseSmsLoginInput): Promise<{ cookies: string[]; account: ConnectedMusicAccount }>
+  loginWithSms(input: NeteaseSmsLoginInput, cookies: string[]): Promise<MusicSmsLoginResult>
+  checkRiskVerification(
+    qrCode: string,
+    cookies: string[],
+  ): Promise<{ status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'; cookies: string[] }>
   listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
   listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
 }

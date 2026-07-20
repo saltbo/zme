@@ -277,6 +277,7 @@ export interface NeteaseSmsCodeInput {
 
 export interface NeteaseSmsLoginInput extends NeteaseSmsCodeInput {
   code: string
+  verificationAttemptId?: string
 }
 
 export interface LibraryImportSyncResult {

@@ -79,5 +79,28 @@ test.describe
       await expect(dialog.locator('#netease-phone')).toBeVisible()
       await expect(dialog.getByRole('button', { name: 'Send verification code' })).toBeDisabled()
       await expect(dialog.getByText(/not your phone number or verification code/i)).toBeVisible()
+
+      const verificationAttempt = {
+        id: '11111111-1111-4111-8111-111111111111',
+        kind: 'netease',
+        qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+        status: 'waiting_scan',
+        expiresAt: '2026-07-21T00:00:00.000Z',
+      }
+      await page.route('**/api/connectors/netease/sms-codes', (route) => route.fulfill({ json: { sent: true } }))
+      await page.route('**/api/connectors/netease/sms-login', (route) =>
+        route.fulfill({ json: { connector: null, verification: verificationAttempt } }),
+      )
+      await page.route('**/api/connectors/netease/login-attempts/*/check', (route) =>
+        route.fulfill({ json: { attempt: verificationAttempt, connector: null } }),
+      )
+
+      await dialog.locator('#netease-phone').fill('13800138000')
+      await dialog.getByRole('button', { name: 'Send verification code' }).click()
+      await dialog.locator('#netease-sms-code').fill('1234')
+      await dialog.getByRole('button', { name: 'Connect' }).click()
+
+      await expect(dialog.getByText('Account verification required')).toBeVisible()
+      await expect(dialog.getByText(/scan with the Netease Cloud Music app/i)).toBeVisible()
     })
   })

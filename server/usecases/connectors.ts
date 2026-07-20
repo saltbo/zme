@@ -100,6 +100,20 @@ export async function checkNeteaseLogin(
   if (!attempt.credentialsEncrypted) throw new Error('Connector login attempt has no credentials.')
 
   const credentials = await decryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, attempt.credentialsEncrypted)
+  const riskVerification = parseRiskVerification(attempt.externalKey)
+  if (riskVerification) {
+    const result = await deps.musicPlaylistConnectors.netease.checkRiskVerification(
+      riskVerification.qrCode,
+      credentials,
+    )
+    await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
+      status: result.status,
+      credentialsEncrypted: await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies),
+      updatedAt: new Date().toISOString(),
+    })
+    return { attempt: toLoginAttempt(attempt, result.status), connector: null }
+  }
+
   const result = await deps.musicPlaylistConnectors.netease.checkQrLogin(attempt.externalKey, credentials)
   const encrypted = await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies)
   await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
@@ -125,11 +139,51 @@ export async function loginNeteaseWithSms(
   env: Env,
   userId: string,
   input: NeteaseSmsLoginInput,
-): Promise<ConnectorSummary> {
+): Promise<{ connector: ConnectorSummary | null; verification: ConnectorLoginAttempt | null }> {
   validateConnectorCredentialsSecret(env.CONNECTOR_CREDENTIALS_SECRET)
-  const result = await deps.musicPlaylistConnectors.netease.loginWithSms(input)
+  let credentials: string[] = []
+  if (input.verificationAttemptId) {
+    const attempt = await deps.connectorLoginAttemptsRepo.get(userId, input.verificationAttemptId)
+    if (!attempt || !parseRiskVerification(attempt.externalKey)) {
+      throw new Error('Netease account verification attempt was not found.')
+    }
+    if (attempt.status !== 'connected' || Date.parse(attempt.expiresAt) <= Date.now()) {
+      throw new Error('Netease account verification is not complete.')
+    }
+    if (!attempt.credentialsEncrypted) throw new Error('Netease account verification has no credentials.')
+    credentials = await decryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, attempt.credentialsEncrypted)
+  }
+
+  const result = await deps.musicPlaylistConnectors.netease.loginWithSms(input, credentials)
   const encrypted = await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies)
-  return saveConnectedNeteaseConnector(deps, env, userId, result.account, encrypted)
+  if (result.status === 'verification_required') {
+    const now = new Date().toISOString()
+    const id = crypto.randomUUID()
+    await deps.connectorLoginAttemptsRepo.create({
+      id,
+      userId,
+      kind: 'netease',
+      externalKey: encodeRiskVerification(result.verification),
+      credentialsEncrypted: encrypted,
+      status: 'waiting_scan',
+      expiresAt: result.verification.expiresAt,
+      createdAt: now,
+      updatedAt: now,
+    })
+    return {
+      connector: null,
+      verification: {
+        id,
+        kind: 'netease',
+        qrUrl: result.verification.qrUrl,
+        status: 'waiting_scan',
+        expiresAt: result.verification.expiresAt,
+      },
+    }
+  }
+
+  const connector = await saveConnectedNeteaseConnector(deps, env, userId, result.account, encrypted)
+  return { connector, verification: null }
 }
 
 export async function syncConnector(deps: Deps, env: Env, userId: string, id: string): Promise<ConnectorSyncResult> {
@@ -366,13 +420,27 @@ function toLoginAttempt(
   record: { id: string; kind: 'netease'; externalKey: string; expiresAt: string },
   status: ConnectorLoginAttempt['status'],
 ): ConnectorLoginAttempt {
+  const riskVerification = parseRiskVerification(record.externalKey)
   return {
     id: record.id,
     kind: record.kind,
-    qrUrl: `https://music.163.com/login?codekey=${encodeURIComponent(record.externalKey)}`,
+    qrUrl: riskVerification?.qrUrl ?? `https://music.163.com/login?codekey=${encodeURIComponent(record.externalKey)}`,
     status,
     expiresAt: record.expiresAt,
   }
+}
+
+function encodeRiskVerification(value: { qrCode: string; qrUrl: string }): string {
+  return `risk:${JSON.stringify(value)}`
+}
+
+function parseRiskVerification(value: string): { qrCode: string; qrUrl: string } | null {
+  if (!value.startsWith('risk:')) return null
+  const parsed = JSON.parse(value.slice('risk:'.length)) as { qrCode?: unknown; qrUrl?: unknown }
+  if (typeof parsed.qrCode !== 'string' || typeof parsed.qrUrl !== 'string') {
+    throw new Error('Netease account verification data is invalid.')
+  }
+  return { qrCode: parsed.qrCode, qrUrl: parsed.qrUrl }
 }
 
 function normalizeDoubanProfileId(value: string): string {

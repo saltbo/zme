@@ -4,7 +4,7 @@ import type { MediaSearchItem } from '@shared/types'
 import { describe, expect, it } from 'vitest'
 import { loginNeteaseWithSms, sendNeteaseSmsCode, syncConnector } from './connectors'
 import type { Deps } from './deps'
-import type { ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
+import type { ConnectorLoginAttemptRecord, ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
 
 const connectorRecord: ConnectorRecord = {
   id: 'connector-1',
@@ -207,6 +207,7 @@ describe('Netease SMS login', () => {
       musicPlaylistConnectors: {
         netease: {
           loginWithSms: async () => ({
+            status: 'connected',
             cookies: ['MUSIC_U=session-value', '__csrf=csrf-value'],
             account: {
               externalAccountId: '42',
@@ -229,12 +230,13 @@ describe('Netease SMS login', () => {
       code: '1234',
     })
 
-    expect(result).toMatchObject({
+    expect(result.connector).toMatchObject({
       kind: 'netease',
       displayName: 'Music Fan',
       authModes: ['qr', 'sms'],
       status: 'connected',
     })
+    expect(result.verification).toBeNull()
     expect(saved.input).toMatchObject({
       externalAccountId: '42',
       settings: {},
@@ -247,6 +249,51 @@ describe('Netease SMS login', () => {
     expect(await decryptConnectorCredentials(secret, encryptedCredentials as string)).toEqual([
       'MUSIC_U=session-value',
       '__csrf=csrf-value',
+    ])
+  })
+
+  it('stores only an encrypted temporary device session when account verification is required', async () => {
+    const secret = 'test-connector-secret-with-32-chars!'
+    const created: { attempt: ConnectorLoginAttemptRecord | null } = { attempt: null }
+    const deps = {
+      connectorLoginAttemptsRepo: {
+        create: async (attempt: ConnectorLoginAttemptRecord) => {
+          created.attempt = attempt
+        },
+      },
+      musicPlaylistConnectors: {
+        netease: {
+          loginWithSms: async () => ({
+            status: 'verification_required',
+            cookies: ['deviceId=device-1', 'NMTID=nmtid-1'],
+            verification: {
+              qrCode: 'risk-qr-code',
+              qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+              expiresAt: '2026-07-20T01:05:00.000Z',
+            },
+          }),
+        },
+      },
+    } as never as Deps
+
+    const result = await loginNeteaseWithSms(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', {
+      countryCode: '86',
+      phone: '13800138000',
+      code: '1234',
+    })
+
+    expect(result.connector).toBeNull()
+    expect(result.verification).toMatchObject({
+      kind: 'netease',
+      qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+      status: 'waiting_scan',
+    })
+    if (!created.attempt?.credentialsEncrypted) throw new Error('The verification attempt was not stored.')
+    expect(created.attempt.externalKey).not.toContain('13800138000')
+    expect(created.attempt.externalKey).not.toContain('1234')
+    expect(await decryptConnectorCredentials(secret, created.attempt.credentialsEncrypted)).toEqual([
+      'deviceId=device-1',
+      'NMTID=nmtid-1',
     ])
   })
 })

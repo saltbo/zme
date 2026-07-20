@@ -1,9 +1,11 @@
-import { constants, publicEncrypt } from 'node:crypto'
+import { constants, createCipheriv, createHash, publicEncrypt } from 'node:crypto'
 import type { ImportedMusicPlaylist, ImportedMusicTrack, MusicPlaylistConnector } from '@server/usecases/ports'
 
 const NETEASE_BASE = 'https://music.163.com'
+const NETEASE_INTERFACE_BASE = 'https://interface.music.163.com'
 const WEAPI_IV = '0102030405060708'
 const WEAPI_PRESET_KEY = '0CoJUm6Qyw8W8jud'
+const EAPI_KEY = 'e82ckenh8dichen8'
 const WEAPI_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB
 -----END PUBLIC KEY-----`
@@ -31,6 +33,13 @@ interface NeteaseSong {
   dt?: number
   ar?: Array<{ name?: string }>
   al?: { id?: number; name?: string; picUrl?: string }
+}
+
+interface NeteaseRiskData {
+  verifyId?: string | number
+  verifyType?: string | number
+  verifyToken?: string
+  params?: { event_id?: string; sign?: string } | string
 }
 
 export const neteasePlaylistConnector: MusicPlaylistConnector = {
@@ -87,9 +96,9 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
     }
   },
 
-  async loginWithSms({ countryCode, phone, code }) {
-    const response = await weapiRequest<{ code?: number; message?: string }>(
-      '/weapi/w/login/cellphone',
+  async loginWithSms({ countryCode, phone, code }, cookies) {
+    const response = await eapiRequest<{ code?: number; message?: string; data?: NeteaseRiskData }>(
+      '/api/w/login/cellphone',
       {
         type: '1',
         https: 'true',
@@ -98,13 +107,36 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
         captcha: code,
         remember: 'true',
       },
-      [],
+      cookies,
     )
+    if ((response.body.code === -462 || response.body.code === 8860) && response.body.data) {
+      const verification = await createRiskVerification(response.body.data, response.cookies)
+      return { status: 'verification_required', cookies: verification.cookies, verification: verification.challenge }
+    }
     if (response.body.code !== 200) {
       throw new Error(neteaseError('Netease SMS login failed', response.body))
     }
     const account = await getAccount(response.cookies)
-    return { cookies: account.cookies, account: account.profile }
+    return { status: 'connected', cookies: account.cookies, account: account.profile }
+  },
+
+  async checkRiskVerification(qrCode, cookies) {
+    const response = await weapiRequest<{
+      code?: number
+      message?: string
+      qrCodeStatus?: number
+      detailReason?: number
+      data?: { qrCodeStatus?: number; detailReason?: number }
+    }>('/weapi/frontrisk/verify/qrcodestatus', { qrCode }, cookies)
+    const status = response.body.data?.qrCodeStatus ?? response.body.qrCodeStatus
+    const detailReason = response.body.data?.detailReason ?? response.body.detailReason
+    const mergedCookies = mergeCookies(cookies, response.cookies)
+    if (status === 0 && detailReason === 0) return { status: 'waiting_scan', cookies: mergedCookies }
+    if (status === 10 && detailReason === 0) return { status: 'waiting_confirmation', cookies: mergedCookies }
+    if (status === 20 && detailReason === 0) return { status: 'connected', cookies: mergedCookies }
+    if (status === 21) return { status: 'expired', cookies: mergedCookies }
+    if (detailReason === 303) throw new Error('The Netease verification was scanned by a different account.')
+    throw new Error(neteaseError('Netease account verification failed', response.body))
   },
 
   async listPlaylists(credentials) {
@@ -151,6 +183,49 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
   },
 }
 
+async function createRiskVerification(data: NeteaseRiskData, cookies: string[]) {
+  const params = typeof data.params === 'string' ? (JSON.parse(data.params) as NeteaseRiskData['params']) : data.params
+  const verifyId = data.verifyId
+  const verifyType = data.verifyType
+  const verifyToken = data.verifyToken
+  const eventId = typeof params === 'object' ? params?.event_id : undefined
+  const sign = typeof params === 'object' ? params?.sign : undefined
+  if (verifyId === undefined || verifyType === undefined || !verifyToken || !eventId || !sign) {
+    throw new Error('Netease did not return account verification details.')
+  }
+
+  const verificationParams = JSON.stringify({ event_id: eventId, sign })
+  const response = await weapiRequest<{ code?: number; message?: string; data?: { qrCode?: string } }>(
+    '/weapi/frontrisk/verify/getqrcode',
+    {
+      verifyConfigId: verifyId,
+      verifyType,
+      token: verifyToken,
+      params: verificationParams,
+      size: 150,
+    },
+    cookies,
+  )
+  const qrCode = response.body.data?.qrCode
+  if (!qrCode) throw new Error(neteaseError('Netease did not return an account verification QR code', response.body))
+
+  const query = new URLSearchParams({
+    qrCode,
+    verifyToken,
+    verifyId: String(verifyId),
+    verifyType: String(verifyType),
+    params: verificationParams,
+  })
+  return {
+    cookies: mergeCookies(cookies, response.cookies),
+    challenge: {
+      qrCode,
+      qrUrl: `https://st.music.163.com/encrypt-pages?${query.toString()}`,
+      expiresAt: new Date(Date.now() + 5 * 60_000).toISOString(),
+    },
+  }
+}
+
 async function getAccount(cookies: string[]) {
   const response = await weapiRequest<{ profile?: NeteaseProfile }>('/weapi/w/nuser/account/get', {}, cookies)
   const profile = response.body.profile
@@ -186,6 +261,60 @@ async function weapiRequest<T>(path: string, data: Record<string, unknown>, cook
   return { body: (await response.json()) as T, cookies: readResponseCookies(response.headers) }
 }
 
+async function eapiRequest<T>(path: string, data: Record<string, unknown>, cookies: string[]) {
+  const contextCookies = mergeCookies(cookies, [
+    `deviceId=${readCookie(cookies, 'deviceId') ?? randomHex(16)}`,
+    `NMTID=${readCookie(cookies, 'NMTID') ?? randomHex(16)}`,
+    'os=pc',
+    'appver=3.1.17.204416',
+  ])
+  const header = createEapiHeader(contextCookies)
+  const headerCookies = Object.entries(header).map(
+    ([name, value]) => `${encodeURIComponent(name)}=${encodeURIComponent(value)}`,
+  )
+  const response = await fetch(`${NETEASE_INTERFACE_BASE}/eapi/${path.slice('/api/'.length)}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Cookie: mergeCookies(contextCookies, headerCookies).join('; '),
+      'User-Agent': 'NeteaseMusic 9.0.90/5038 (iPhone; iOS 16.2; zh_CN)',
+    },
+    body: new URLSearchParams({ params: encryptEapi(path, { ...data, e_r: false, header }) }),
+  })
+  if (!response.ok) throw new Error(`Netease request failed: ${response.status}`)
+  return {
+    body: (await response.json()) as T,
+    cookies: mergeCookies(contextCookies, readResponseCookies(response.headers)),
+  }
+}
+
+function createEapiHeader(cookies: string[]) {
+  return {
+    osver: 'Microsoft-Windows-10-Professional-build-19045-64bit',
+    deviceId: readCookie(cookies, 'deviceId') ?? randomHex(16),
+    os: 'pc',
+    appver: '3.1.17.204416',
+    versioncode: '140',
+    mobilename: '',
+    buildver: String(Math.floor(Date.now() / 1000)),
+    resolution: '1920x1080',
+    __csrf: readCookie(cookies, '__csrf') ?? '',
+    channel: 'netease',
+    requestId: `${Date.now()}_${String(Math.floor(Math.random() * 1000)).padStart(4, '0')}`,
+  }
+}
+
+function encryptEapi(path: string, data: Record<string, unknown>): string {
+  const text = JSON.stringify(data)
+  const digest = createHash('md5').update(`nobody${path}use${text}md5forencrypt`).digest('hex')
+  const plaintext = `${path}-36cd479b6b5-${text}-36cd479b6b5-${digest}`
+  const cipher = createCipheriv('aes-128-ecb', EAPI_KEY, null)
+  return Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+    .toString('hex')
+    .toUpperCase()
+}
+
 function readCookie(cookies: string[], name: string): string | null {
   const prefix = `${name}=`
   const value = cookies.find((cookie) => cookie.startsWith(prefix))
@@ -216,6 +345,10 @@ async function aesCbcEncrypt(value: string, keyValue: string): Promise<string> {
 function randomSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   return [...bytes].map((byte) => SECRET_CHARACTERS[byte % SECRET_CHARACTERS.length]).join('')
+}
+
+function randomHex(length: number): string {
+  return [...crypto.getRandomValues(new Uint8Array(length))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
 function readResponseCookies(headers: Headers): string[] {

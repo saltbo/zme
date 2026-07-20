@@ -63,10 +63,14 @@ export async function sendNeteaseSmsCode(input: NeteaseSmsCodeInput) {
 }
 
 export async function loginNeteaseWithSms(input: NeteaseSmsLoginInput) {
-  return apiRequest<{ item: ConnectorSummary }>('/api/connectors/netease/sms-login', 'Netease SMS login failed.', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  })
+  return apiRequest<{ connector: ConnectorSummary | null; verification: ConnectorLoginAttempt | null }>(
+    '/api/connectors/netease/sms-login',
+    'Netease SMS login failed.',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+  )
 }
 
 export async function listConnectorPlaylists(id: string) {

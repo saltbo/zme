@@ -79,26 +79,97 @@ describe('Netease playlist connector', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(
-      neteasePlaylistConnector.loginWithSms({ countryCode: '86', phone: '13800138000', code: '1234' }),
-    ).resolves.toEqual({
-      cookies: ['MUSIC_U=session-value', '__csrf=csrf-value'],
+    const result = await neteasePlaylistConnector.loginWithSms(
+      { countryCode: '86', phone: '13800138000', code: '1234' },
+      [],
+    )
+    expect(result).toMatchObject({
+      status: 'connected',
       account: {
         externalAccountId: '42',
         displayName: 'Music Fan',
         avatarUrl: 'https://img.test/42.jpg',
       },
     })
+    expect(result.cookies).toEqual(expect.arrayContaining(['MUSIC_U=session-value', '__csrf=csrf-value']))
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      'https://music.163.com/weapi/w/login/cellphone',
+      'https://interface.music.163.com/eapi/w/login/cellphone',
       expect.objectContaining({ method: 'POST' }),
     )
+    const loginRequest = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const loginBody = new URLSearchParams(loginRequest.body as string)
+    expect(loginBody.get('params')).toMatch(/^[0-9A-F]+$/)
+    expect(loginBody.has('encSecKey')).toBe(false)
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       'https://music.163.com/weapi/w/nuser/account/get',
-      expect.objectContaining({ headers: expect.objectContaining({ Cookie: 'MUSIC_U=session-value' }) }),
+      expect.objectContaining({
+        headers: expect.objectContaining({ Cookie: expect.stringContaining('MUSIC_U=session-value') }),
+      }),
     )
+  })
+
+  it('turns a login risk response into an account verification QR challenge', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: -462,
+            data: {
+              verifyId: 2001,
+              verifyType: 40,
+              verifyToken: 'risk-token',
+              params: { event_id: 'event-1', sign: 'risk-sign' },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 200, data: { qrCode: 'risk-qr-code' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await neteasePlaylistConnector.loginWithSms(
+      { countryCode: '86', phone: '13800138000', code: '1234' },
+      [],
+    )
+
+    expect(result).toMatchObject({
+      status: 'verification_required',
+      verification: { qrCode: 'risk-qr-code' },
+    })
+    if (result.status !== 'verification_required') throw new Error('Expected a verification challenge.')
+    expect(result.verification.qrUrl).toContain('qrCode=risk-qr-code')
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://music.163.com/weapi/frontrisk/verify/getqrcode',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('maps a completed account verification QR status', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ code: 200, data: { qrCodeStatus: 20, detailReason: 0 } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(
+      neteasePlaylistConnector.checkRiskVerification('risk-qr-code', ['deviceId=device-1']),
+    ).resolves.toEqual({
+      status: 'connected',
+      cookies: ['deviceId=device-1'],
+    })
   })
 
   it('surfaces Netease SMS errors', async () => {

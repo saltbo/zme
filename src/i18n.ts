@@ -431,6 +431,9 @@ const resources = {
       neteaseLoginDescription: '选择一种登录方式。ZME 只加密保存登录会话，不保存手机号或验证码。',
       neteaseQrDescription: '二维码只能使用网易云音乐 App 扫描，微信扫码无法完成授权。',
       neteaseSmsDescription: '输入网易云音乐账号绑定的手机号，国家或地区代码不包含“+”。',
+      neteaseVerificationTitle: '需要确认本人账号',
+      neteaseVerificationDescription: '请使用同一账号登录的网易云音乐 App 扫描二维码，验证完成后会自动继续登录。',
+      verificationComplete: '验证完成，正在继续登录…',
       neteaseLoginFailed: '网易云音乐登录失败。',
       neteaseConnected: '网易云音乐已连接',
       configure: '配置',
@@ -1059,6 +1062,10 @@ const resources = {
         'Scan with the Netease Cloud Music app. WeChat cannot complete authorization for this QR code.',
       neteaseSmsDescription:
         'Enter the phone number linked to your Netease Cloud Music account. Omit the “+” from the country code.',
+      neteaseVerificationTitle: 'Account verification required',
+      neteaseVerificationDescription:
+        'Scan with the Netease Cloud Music app signed in to the same account. Login will continue automatically.',
+      verificationComplete: 'Verification complete. Continuing login…',
       neteaseLoginFailed: 'Netease login failed.',
       neteaseConnected: 'Netease Cloud Music connected',
       configure: 'Configure',

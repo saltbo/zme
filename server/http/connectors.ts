@@ -46,6 +46,7 @@ const neteaseSmsLoginSchema = neteaseSmsCodeSchema.extend({
     .string()
     .trim()
     .regex(/^\d{4,8}$/),
+  verificationAttemptId: z.string().uuid().optional(),
 })
 
 const playlistParamsSchema = z.object({
@@ -87,8 +88,7 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.post('/connectors/netease/sms-login', zValidator('json', neteaseSmsLoginSchema), async (c) => {
-    const item = await loginNeteaseWithSms(c.get('deps'), c.env, c.get('user').id, c.req.valid('json'))
-    return c.json({ item })
+    return c.json(await loginNeteaseWithSms(c.get('deps'), c.env, c.get('user').id, c.req.valid('json')))
   })
 
   routes.patch(
