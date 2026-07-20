@@ -39,12 +39,12 @@ test.describe('mobile search regressions', () => {
     for (const viewport of MOBILE_VIEWPORTS) {
       await test.step(`release filters at ${viewport.width}px`, async () => {
         await page.setViewportSize(viewport)
-        await page.goto(`/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}/releases`)
+        await page.goto(BOOK_RELEASE_PATH)
 
-        await expect(page.getByRole('heading', { name: 'Kind of Blue', exact: true })).toBeVisible()
+        await expect(page.getByRole('heading', { name: 'Matilda', exact: true })).toBeVisible()
         await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
         expect(await visibleLocator(page.getByPlaceholder('Filter titles or indexers'))).toBeNull()
-        await expect(page.getByText('Miles Davis Kind of Blue 1959 FLAC')).toBeVisible()
+        await expect(page.getByText('Roald Dahl Matilda 1988 EPUB')).toBeVisible()
         await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
         await expectNoHorizontalOverflow(page)
 
@@ -66,21 +66,21 @@ test.describe('mobile search regressions', () => {
     await signIn(page)
     await stubReleaseSearchApis(page)
     await page.setViewportSize(DESKTOP_VIEWPORT)
-    await page.goto(`/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}/releases`)
+    await page.goto(BOOK_RELEASE_PATH)
 
-    await expect(page.getByRole('heading', { name: 'Kind of Blue', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Matilda', exact: true })).toBeVisible()
     await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByPlaceholder('Filter titles or indexers')).toBeVisible()
     const resultSummary = await visibleLocator(page.getByText('Showing 1 / 1 results'))
     if (!resultSummary) throw new Error('Expected a visible result summary in the page toolbar.')
     await expect(resultSummary).toBeVisible()
-    await expect(page.getByText('Miles Davis Kind of Blue 1959 FLAC')).toBeVisible()
+    await expect(page.getByText('Roald Dahl Matilda 1988 EPUB')).toBeVisible()
     await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
     await expectNoHorizontalOverflow(page)
   })
 
-  test('release search app back returns to music detail without leaving release search behind', async ({ page }) => {
+  test('release search app back returns to book detail without leaving release search behind', async ({ page }) => {
     await signIn(page)
     await stubResourceSearchApis(page)
     await stubReleaseSearchApis(page)
@@ -88,22 +88,23 @@ test.describe('mobile search regressions', () => {
     for (const viewport of [DESKTOP_VIEWPORT, ...MOBILE_VIEWPORTS]) {
       await test.step(`back stack from ${viewport.width}px`, async () => {
         await page.setViewportSize(viewport)
-        await page.goto('/music')
-        await expect(page.getByRole('heading', { name: 'Music' })).toBeVisible()
-        await page.goto(MUSIC_DETAIL_PATH)
-        await expect(musicDetailHeading(page)).toBeVisible()
+        await page.goto('/books')
+        await expect(page.getByRole('heading', { name: 'Books' })).toBeVisible()
+        await page.goto(BOOK_DETAIL_PATH)
+        await expect(bookDetailHeading(page)).toBeVisible()
 
-        await page.getByRole('button', { name: 'Search music' }).click()
-        await page.waitForURL((url) => url.pathname === MUSIC_RELEASE_PATH)
+        await page.getByRole('button', { name: 'Search downloads' }).click()
+        await page.getByRole('menuitem', { name: 'Ebook' }).click()
+        await page.waitForURL((url) => url.pathname === BOOK_RELEASE_PATH)
         await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
 
         await page.getByRole('button', { name: 'Back' }).click()
-        await page.waitForURL((url) => url.pathname === MUSIC_DETAIL_PATH)
-        await expect(musicDetailHeading(page)).toBeVisible()
+        await page.waitForURL((url) => url.pathname === BOOK_DETAIL_PATH)
+        await expect(bookDetailHeading(page)).toBeVisible()
 
         await page.goBack()
-        await page.waitForURL((url) => url.pathname === '/music')
-        expect(new URL(page.url()).pathname).toBe('/music')
+        await page.waitForURL((url) => url.pathname === '/books')
+        expect(new URL(page.url()).pathname).toBe('/books')
       })
     }
   })
@@ -129,6 +130,9 @@ async function stubResourceSearchApis(page: Page) {
   await page.route(/\/api\/music\/(?:discover|search)(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: emptyResourcePage() })
   })
+  await page.route(/\/api\/books\/(?:discover|search)(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: emptyResourcePage() })
+  })
 }
 
 async function stubReleaseSearchApis(page: Page) {
@@ -138,8 +142,8 @@ async function stubReleaseSearchApis(page: Page) {
   await page.route(/\/api\/downloaders(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { items: [] } })
   })
-  await page.route(/\/api\/music\/details(?:\?.*)?$/, async (route) => {
-    await route.fulfill({ json: { item: musicAlbumDetails() } })
+  await page.route(/\/api\/books\/[^/?]+(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ json: { item: bookDetails() } })
   })
   await page.route(/\/api\/indexers\/search(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { results: [indexerRelease()] } })
@@ -188,8 +192,8 @@ async function visibleLocator(locator: Locator) {
   return null
 }
 
-function musicDetailHeading(page: Page) {
-  return page.getByRole('heading', { name: 'Kind of Blue', exact: true }).last()
+function bookDetailHeading(page: Page) {
+  return page.getByRole('heading', { name: 'Matilda', exact: true }).last()
 }
 
 function emptyResourcePage() {
@@ -201,56 +205,35 @@ function emptyResourcePage() {
   }
 }
 
-const MUSIC_RELEASE_KEY = 'musicbrainz:release-group:89ad4ac3-39f7-470e-963a-56509c546377'
-const MUSIC_DETAIL_PATH = `/music/${encodeURIComponent(MUSIC_RELEASE_KEY)}`
-const MUSIC_RELEASE_PATH = `${MUSIC_DETAIL_PATH}/releases`
-const RELEASE_SEARCH_CONTEXT = 'Music / 1959 / Search query: Kind of Blue Miles Davis 1959 Vinyl'
+const BOOK_RELEASE_KEY = 'openlibrary:work:OL45883W'
+const BOOK_DETAIL_PATH = `/books/${encodeURIComponent(BOOK_RELEASE_KEY)}`
+const BOOK_RELEASE_PATH = `${BOOK_DETAIL_PATH}/releases/ebook`
+const RELEASE_SEARCH_CONTEXT = 'Ebook / 1988 / Search query: Matilda Roald Dahl 1988 ebook'
 
-function musicAlbumDetails() {
+function bookDetails() {
   return {
-    mediaKey: MUSIC_RELEASE_KEY,
-    provider: 'musicbrainz',
-    resourceType: 'release-group',
-    mbid: '89ad4ac3-39f7-470e-963a-56509c546377',
-    releaseGroupMbid: '89ad4ac3-39f7-470e-963a-56509c546377',
-    title: 'Kind of Blue',
-    artist: 'Miles Davis',
-    artists: [{ id: 'artist-1', name: 'Miles Davis', joinPhrase: '' }],
-    firstReleaseDate: '1959-08-17',
-    releaseYear: '1959',
-    releaseDate: '1959-08-17',
-    country: 'US',
-    primaryType: 'Album',
-    secondaryTypes: ['Jazz'],
-    disambiguation: null,
-    coverArt: { frontUrl: null, frontThumbnailUrl: null, backUrl: null, backThumbnailUrl: null },
-    detailMediaKey: 'musicbrainz:release:release-1',
-    releaseMbid: 'release-1',
-    preferredRelease: null,
-    releases: [
-      {
-        mediaKey: 'musicbrainz:release:release-1',
-        mbid: 'release-1',
-        title: 'Kind of Blue Legacy',
-        date: '1959-08-17',
-        country: 'US',
-        status: 'Official',
-        barcode: null,
-        formats: ['Vinyl'],
-      },
-    ],
-    barcode: null,
-    aliases: [{ name: 'Blue Sessions', locale: null, primary: false, type: null }],
-    formats: ['Vinyl'],
-    media: [],
+    mediaKey: BOOK_RELEASE_KEY,
+    title: 'Matilda',
+    authors: ['Roald Dahl'],
+    languages: ['eng'],
+    firstPublishYear: 1988,
+    coverUrl: null,
+    isbnCandidates: ['9780140328721'],
+    editionKeys: ['OL7353617M'],
+    aliases: ['Matilda, or, The Child Genius'],
+    description: 'A clever child loves books.',
+    covers: [],
+    workKey: BOOK_RELEASE_KEY,
+    editionKey: 'openlibrary:edition:OL7353617M',
+    editionCandidates: [],
   }
 }
 
 function indexerRelease() {
   return {
     id: 'release-1',
-    downloadTarget: 'music',
-    title: 'Miles Davis Kind of Blue 1959 FLAC',
+    downloadTarget: 'ebook',
+    title: 'Roald Dahl Matilda 1988 EPUB',
     fileName: null,
     indexer: 'Prowlarr',
     size: 1024 * 1024 * 700,
@@ -259,12 +242,12 @@ function indexerRelease() {
     files: 10,
     protocol: 'torrent',
     publishDate: '2026-07-01T00:00:00.000Z',
-    downloadUrl: 'https://example.test/kind-of-blue.torrent',
+    downloadUrl: 'https://example.test/matilda.torrent',
     magnetUrl: null,
     infoUrl: 'https://example.test/release-1',
     infoHash: null,
-    categories: ['Audio', 'Lossless'],
-    categoryIds: [3000, 3040],
+    categories: ['Books', 'Ebook'],
+    categoryIds: [7000, 7020],
     indexerFlags: [],
     imdbId: null,
     tmdbId: null,
