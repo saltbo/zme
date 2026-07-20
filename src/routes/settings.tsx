@@ -416,6 +416,12 @@ function NeteaseConnectorDialog({
   })
 
   useEffect(() => {
+    const nextQrUrl = login.data?.attempt.qrUrl
+    if (!attemptId || !nextQrUrl || nextQrUrl === qrUrl) return
+    setQrUrl(nextQrUrl)
+  }, [attemptId, login.data?.attempt.qrUrl, qrUrl])
+
+  useEffect(() => {
     if (!attemptId || !login.data?.connector) return
     void onChanged()
     setAttemptId(null)
@@ -439,6 +445,8 @@ function NeteaseConnectorDialog({
   const canSendSms = /^\d{1,4}$/.test(countryCode.trim()) && /^\d{5,20}$/.test(phone.trim())
   const canLoginWithSms = canSendSms && /^\d{4,8}$/.test(smsCode.trim())
   const verificationPending = loginMethod === 'sms' && Boolean(attemptId) && login.data?.attempt.status !== 'connected'
+  const qrVerificationPending =
+    loginMethod === 'qr' && Boolean(qrUrl?.startsWith('https://st.music.163.com/encrypt-pages'))
 
   function changeLoginMethod(values: string[]) {
     const method = values[0]
@@ -526,7 +534,9 @@ function NeteaseConnectorDialog({
 
             {loginMethod === 'qr' ? (
               <div className="flex flex-col items-center gap-4 text-center">
-                <p className="text-muted-foreground text-sm">{t('neteaseQrDescription')}</p>
+                <p className="text-muted-foreground text-sm">
+                  {qrVerificationPending ? t('neteaseVerificationTitle') : t('neteaseQrDescription')}
+                </p>
                 {qrUrl ? (
                   <div className="rounded-xl bg-white p-4">
                     <QRCodeSVG value={qrUrl} size={196} />
@@ -537,6 +547,9 @@ function NeteaseConnectorDialog({
                     {t('startQrLogin')}
                   </Button>
                 )}
+                {qrVerificationPending ? (
+                  <p className="text-muted-foreground text-sm">{t('neteaseVerificationDescription')}</p>
+                ) : null}
                 {login.data?.attempt.status === 'waiting_scan' ? (
                   <p className="text-muted-foreground text-sm">{t('waitingForScan')}</p>
                 ) : null}

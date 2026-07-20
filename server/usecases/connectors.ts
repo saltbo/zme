@@ -20,7 +20,14 @@ import type {
 import type { Deps } from './deps'
 import { saveLibraryState, setWatchedState } from './library'
 import { getActiveTmdbSource } from './media-sources'
-import type { ActiveMediaSource, ConnectedMusicAccount, ConnectorRecord, ImportedLibraryEntry } from './ports'
+import type {
+  ActiveMediaSource,
+  ConnectedMusicAccount,
+  ConnectorLoginAttemptRecord,
+  ConnectorRecord,
+  ImportedLibraryEntry,
+  MusicQrLoginResult,
+} from './ports'
 
 const CONNECTOR_DEFINITIONS = {
   douban: { authModes: ['profile'], capabilities: ['library.import'] },
@@ -106,6 +113,10 @@ export async function checkNeteaseLogin(
       riskVerification.qrCode,
       credentials,
     )
+    if (result.status === 'connected' && riskVerification.loginKey) {
+      const resumed = await deps.musicPlaylistConnectors.netease.checkQrLogin(riskVerification.loginKey, result.cookies)
+      return saveQrLoginResult(deps, env, userId, attempt, riskVerification.loginKey, resumed)
+    }
     await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
       status: result.status,
       credentialsEncrypted: await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies),
@@ -115,8 +126,35 @@ export async function checkNeteaseLogin(
   }
 
   const result = await deps.musicPlaylistConnectors.netease.checkQrLogin(attempt.externalKey, credentials)
+  return saveQrLoginResult(deps, env, userId, attempt, attempt.externalKey, result)
+}
+
+async function saveQrLoginResult(
+  deps: Deps,
+  env: Env,
+  userId: string,
+  attempt: ConnectorLoginAttemptRecord,
+  loginKey: string,
+  result: MusicQrLoginResult,
+): Promise<{ attempt: ConnectorLoginAttempt; connector: ConnectorSummary | null }> {
   const encrypted = await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies)
+  if (result.status === 'verification_required') {
+    const externalKey = encodeRiskVerification(result.verification, loginKey)
+    await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
+      externalKey,
+      status: 'waiting_scan',
+      expiresAt: result.verification.expiresAt,
+      credentialsEncrypted: encrypted,
+      updatedAt: new Date().toISOString(),
+    })
+    return {
+      attempt: toLoginAttempt({ ...attempt, externalKey, expiresAt: result.verification.expiresAt }, 'waiting_scan'),
+      connector: null,
+    }
+  }
+
   await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
+    externalKey: loginKey,
     status: result.status,
     credentialsEncrypted: encrypted,
     updatedAt: new Date().toISOString(),
@@ -430,17 +468,24 @@ function toLoginAttempt(
   }
 }
 
-function encodeRiskVerification(value: { qrCode: string; qrUrl: string }): string {
-  return `risk:${JSON.stringify(value)}`
+function encodeRiskVerification(value: { qrCode: string; qrUrl: string }, loginKey?: string): string {
+  return `risk:${JSON.stringify(loginKey ? { ...value, loginKey } : value)}`
 }
 
-function parseRiskVerification(value: string): { qrCode: string; qrUrl: string } | null {
+function parseRiskVerification(value: string): { qrCode: string; qrUrl: string; loginKey?: string } | null {
   if (!value.startsWith('risk:')) return null
-  const parsed = JSON.parse(value.slice('risk:'.length)) as { qrCode?: unknown; qrUrl?: unknown }
+  const parsed = JSON.parse(value.slice('risk:'.length)) as {
+    qrCode?: unknown
+    qrUrl?: unknown
+    loginKey?: unknown
+  }
   if (typeof parsed.qrCode !== 'string' || typeof parsed.qrUrl !== 'string') {
     throw new Error('Netease account verification data is invalid.')
   }
-  return { qrCode: parsed.qrCode, qrUrl: parsed.qrUrl }
+  if (parsed.loginKey !== undefined && typeof parsed.loginKey !== 'string') {
+    throw new Error('Netease account verification login key is invalid.')
+  }
+  return { qrCode: parsed.qrCode, qrUrl: parsed.qrUrl, loginKey: parsed.loginKey }
 }
 
 function normalizeDoubanProfileId(value: string): string {

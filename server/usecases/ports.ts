@@ -296,7 +296,9 @@ export interface ConnectorLoginAttemptsRepo {
   update(
     userId: string,
     id: string,
-    patch: Partial<Pick<ConnectorLoginAttemptRecord, 'credentialsEncrypted' | 'status' | 'updatedAt'>>,
+    patch: Partial<
+      Pick<ConnectorLoginAttemptRecord, 'credentialsEncrypted' | 'externalKey' | 'status' | 'expiresAt' | 'updatedAt'>
+    >,
   ): Promise<ConnectorLoginAttemptRecord | null>
 }
 
@@ -449,19 +451,18 @@ export type MusicSmsLoginResult =
       verification: { qrCode: string; qrUrl: string; expiresAt: string }
     }
 
+export type MusicQrLoginResult =
+  | { status: 'waiting_scan' | 'waiting_confirmation' | 'expired'; cookies: string[] }
+  | { status: 'connected'; cookies: string[]; account: ConnectedMusicAccount }
+  | {
+      status: 'verification_required'
+      cookies: string[]
+      verification: { qrCode: string; qrUrl: string; expiresAt: string }
+    }
+
 export interface MusicPlaylistConnector {
   beginQrLogin(): Promise<{ key: string; qrUrl: string; cookies: string[]; expiresAt: string }>
-  checkQrLogin(
-    key: string,
-    cookies: string[],
-  ): Promise<
-    | { status: 'waiting_scan' | 'waiting_confirmation' | 'expired'; cookies: string[] }
-    | {
-        status: 'connected'
-        cookies: string[]
-        account: ConnectedMusicAccount
-      }
-  >
+  checkQrLogin(key: string, cookies: string[]): Promise<MusicQrLoginResult>
   sendSmsCode(input: NeteaseSmsCodeInput): Promise<void>
   loginWithSms(input: NeteaseSmsLoginInput, cookies: string[]): Promise<MusicSmsLoginResult>
   checkRiskVerification(

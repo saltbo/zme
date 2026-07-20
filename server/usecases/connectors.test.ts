@@ -1,8 +1,8 @@
-import { decryptConnectorCredentials } from '@server/domain/connector-credentials'
+import { decryptConnectorCredentials, encryptConnectorCredentials } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import type { MediaSearchItem } from '@shared/types'
 import { describe, expect, it } from 'vitest'
-import { loginNeteaseWithSms, sendNeteaseSmsCode, syncConnector } from './connectors'
+import { checkNeteaseLogin, loginNeteaseWithSms, sendNeteaseSmsCode, syncConnector } from './connectors'
 import type { Deps } from './deps'
 import type { ConnectorLoginAttemptRecord, ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
 
@@ -295,5 +295,53 @@ describe('Netease SMS login', () => {
       'deviceId=device-1',
       'NMTID=nmtid-1',
     ])
+  })
+})
+
+describe('Netease QR login', () => {
+  it('stores a QR account verification challenge with the original login key', async () => {
+    const secret = 'test-connector-secret-with-32-chars!'
+    let attempt: ConnectorLoginAttemptRecord = {
+      id: 'attempt-1',
+      userId: 'user-1',
+      kind: 'netease',
+      externalKey: 'login-key-1',
+      credentialsEncrypted: await encryptConnectorCredentials(secret, ['MUSIC_A=anonymous-session']),
+      status: 'waiting_scan',
+      expiresAt: '2099-07-20T01:00:00.000Z',
+      createdAt: '2026-07-20T00:00:00.000Z',
+      updatedAt: '2026-07-20T00:00:00.000Z',
+    }
+    const deps = {
+      connectorLoginAttemptsRepo: {
+        get: async () => attempt,
+        update: async (_userId: string, _id: string, patch: Partial<ConnectorLoginAttemptRecord>) => {
+          attempt = { ...attempt, ...patch }
+          return attempt
+        },
+      },
+      musicPlaylistConnectors: {
+        netease: {
+          checkQrLogin: async () => ({
+            status: 'verification_required',
+            cookies: ['MUSIC_A=anonymous-session', 'deviceId=device-1'],
+            verification: {
+              qrCode: 'risk-qr-code',
+              qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+              expiresAt: '2099-07-20T01:05:00.000Z',
+            },
+          }),
+        },
+      },
+    } as never as Deps
+
+    const result = await checkNeteaseLogin(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', 'attempt-1')
+
+    expect(result.connector).toBeNull()
+    expect(result.attempt).toMatchObject({
+      qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+      status: 'waiting_scan',
+    })
+    expect(attempt.externalKey).toContain('"loginKey":"login-key-1"')
   })
 })

@@ -103,4 +103,39 @@ test.describe
       await expect(dialog.getByText('Account verification required')).toBeVisible()
       await expect(dialog.getByText(/scan with the Netease Cloud Music app/i)).toBeVisible()
     })
+
+    test('Netease QR login displays an account verification challenge', async ({ page }) => {
+      await page.goto('/login')
+      await page.fill('#login-email', ADMIN.email)
+      await page.fill('#login-password', ADMIN.password)
+      await page.getByRole('button', { name: 'Sign in' }).click()
+      await expect(page).not.toHaveURL(/\/login/)
+
+      const loginAttempt = {
+        id: '22222222-2222-4222-8222-222222222222',
+        kind: 'netease',
+        qrUrl: 'https://music.163.com/login?codekey=login-key',
+        status: 'waiting_scan',
+        expiresAt: '2099-07-21T00:00:00.000Z',
+      }
+      const verificationAttempt = {
+        ...loginAttempt,
+        qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+      }
+      await page.route('**/api/connectors/netease/login-attempts', (route) =>
+        route.fulfill({ json: { item: loginAttempt } }),
+      )
+      await page.route('**/api/connectors/netease/login-attempts/*/check', (route) =>
+        route.fulfill({ json: { attempt: verificationAttempt, connector: null } }),
+      )
+
+      await page.goto('/settings')
+      const neteaseCard = page.getByText('Netease Cloud Music', { exact: true }).locator('../../..')
+      await neteaseCard.getByRole('button', { name: 'Connect' }).click()
+      const dialog = page.getByRole('dialog', { name: 'Netease Cloud Music' })
+      await dialog.getByRole('button', { name: 'Generate login QR code' }).click()
+
+      await expect(dialog.getByText('Account verification required')).toBeVisible()
+      await expect(dialog.getByText(/signed in to the same account/i)).toBeVisible()
+    })
   })

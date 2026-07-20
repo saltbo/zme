@@ -1,4 +1,13 @@
-import { constants, createCipheriv, createHash, publicEncrypt } from 'node:crypto'
+import {
+  constants,
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  publicEncrypt,
+  randomBytes,
+} from 'node:crypto'
+import { gunzipSync } from 'node:zlib'
 import type { ImportedMusicPlaylist, ImportedMusicTrack, MusicPlaylistConnector } from '@server/usecases/ports'
 
 const NETEASE_BASE = 'https://music.163.com'
@@ -6,6 +15,10 @@ const NETEASE_INTERFACE_BASE = 'https://interface.music.163.com'
 const WEAPI_IV = '0102030405060708'
 const WEAPI_PRESET_KEY = '0CoJUm6Qyw8W8jud'
 const EAPI_KEY = 'e82ckenh8dichen8'
+const XEAPI_BASE = 'https://interface3.music.163.com'
+const XEAPI_STATIC_KEY = Buffer.from('ab1d5a430f6bb04a3f01e81ddd72bd916d5ce591248ac128714806d7f8fb1b84', 'hex')
+const XEAPI_SIGN_KEY = 'mUHCwVNWJbunMqAHf5MImuirT6plvs6VSFW62MGHstFQxhBGdEoIhLItH3djc4+FB/OKty3+lL2rGeoFBpVe5g=='
+const ANONYMOUS_ID_XOR_KEY = '3go8&$8*3*3h0k(2)2'
 const WEAPI_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB
 -----END PUBLIC KEY-----`
@@ -42,14 +55,20 @@ interface NeteaseRiskData {
   params?: { event_id?: string; sign?: string } | string
 }
 
+interface XeapiPublicKey {
+  publicKey: string
+  sk: string
+  version: string
+}
+
 export const neteasePlaylistConnector: MusicPlaylistConnector = {
   async beginQrLogin() {
-    const response = await weapiRequest<{
+    const response = await eapiRequest<{
       code?: number
       message?: string
       unikey?: string
       data?: { unikey?: string }
-    }>('/weapi/login/qrcode/unikey', { type: 3 }, [])
+    }>('/api/login/qrcode/unikey', { type: 3 }, [])
     const key = response.body.data?.unikey ?? response.body.unikey
     if (!key) {
       throw new Error(
@@ -65,17 +84,21 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
   },
 
   async checkQrLogin(key, cookies) {
-    const response = await weapiRequest<{ code?: number }>(
-      '/weapi/login/qrcode/client/login',
+    const sessionCookies = await ensureAnonymousSession(cookies)
+    const response = await eapiRequest<{ code?: number; message?: string; data?: NeteaseRiskData }>(
+      '/api/login/qrcode/client/login',
       { key, type: 3 },
-      cookies,
+      sessionCookies,
     )
-    const mergedCookies = mergeCookies(cookies, response.cookies)
+    const mergedCookies = mergeCookies(sessionCookies, response.cookies)
     if (response.body.code === 800) return { status: 'expired', cookies: mergedCookies }
     if (response.body.code === 801) return { status: 'waiting_scan', cookies: mergedCookies }
     if (response.body.code === 802) return { status: 'waiting_confirmation', cookies: mergedCookies }
-    if (response.body.code !== 803)
-      throw new Error(`Netease QR login failed with code ${response.body.code ?? 'unknown'}.`)
+    if ((response.body.code === -462 || response.body.code === 8821) && response.body.data) {
+      const verification = await createRiskVerification(response.body.data, mergedCookies)
+      return { status: 'verification_required', cookies: verification.cookies, verification: verification.challenge }
+    }
+    if (response.body.code !== 803) throw new Error(neteaseError('Netease QR login failed', response.body))
 
     const account = await getAccount(mergedCookies)
     return {
@@ -97,6 +120,7 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
   },
 
   async loginWithSms({ countryCode, phone, code }, cookies) {
+    const sessionCookies = await ensureAnonymousSession(cookies)
     const response = await eapiRequest<{ code?: number; message?: string; data?: NeteaseRiskData }>(
       '/api/w/login/cellphone',
       {
@@ -107,7 +131,7 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
         captcha: code,
         remember: 'true',
       },
-      cookies,
+      sessionCookies,
     )
     if ((response.body.code === -462 || response.body.code === 8860) && response.body.data) {
       const verification = await createRiskVerification(response.body.data, response.cookies)
@@ -263,7 +287,7 @@ async function weapiRequest<T>(path: string, data: Record<string, unknown>, cook
 
 async function eapiRequest<T>(path: string, data: Record<string, unknown>, cookies: string[]) {
   const contextCookies = mergeCookies(cookies, [
-    `deviceId=${readCookie(cookies, 'deviceId') ?? randomHex(16)}`,
+    `deviceId=${readCookie(cookies, 'deviceId') ?? randomDeviceId()}`,
     `NMTID=${readCookie(cookies, 'NMTID') ?? randomHex(16)}`,
     'os=pc',
     'appver=3.1.17.204416',
@@ -290,7 +314,7 @@ async function eapiRequest<T>(path: string, data: Record<string, unknown>, cooki
 }
 
 function createEapiHeader(cookies: string[]) {
-  return {
+  const header: Record<string, string> = {
     osver: 'Microsoft-Windows-10-Professional-build-19045-64bit',
     deviceId: readCookie(cookies, 'deviceId') ?? randomHex(16),
     os: 'pc',
@@ -303,16 +327,207 @@ function createEapiHeader(cookies: string[]) {
     channel: 'netease',
     requestId: `${Date.now()}_${String(Math.floor(Math.random() * 1000)).padStart(4, '0')}`,
   }
+  const musicU = readCookie(cookies, 'MUSIC_U')
+  const musicA = readCookie(cookies, 'MUSIC_A')
+  if (musicU) header.MUSIC_U = musicU
+  if (musicA) header.MUSIC_A = musicA
+  return header
 }
 
-function encryptEapi(path: string, data: Record<string, unknown>): string {
+export function encryptEapi(path: string, data: Record<string, unknown>): string {
   const text = JSON.stringify(data)
   const digest = createHash('md5').update(`nobody${path}use${text}md5forencrypt`).digest('hex')
   const plaintext = `${path}-36cd479b6b5-${text}-36cd479b6b5-${digest}`
-  const cipher = createCipheriv('aes-128-ecb', EAPI_KEY, null)
+  const cipher = createCipheriv('aes-128-ecb', EAPI_KEY, new Uint8Array(0))
   return Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
     .toString('hex')
     .toUpperCase()
+}
+
+async function ensureAnonymousSession(cookies: string[]): Promise<string[]> {
+  if (readCookie(cookies, 'MUSIC_A')) return cookies
+
+  const deviceId = readCookie(cookies, 'deviceId') ?? randomDeviceId()
+  const publicKey = await fetchXeapiPublicKey(deviceId)
+  const username = encodeAnonymousUsername(deviceId)
+  const response = await xeapiRequest<{ code?: number; message?: string }>(
+    '/api/register/anonimous',
+    { username },
+    deviceId,
+    publicKey,
+  )
+  const sessionCookies = mergeCookies(cookies, [`deviceId=${deviceId}`, ...response.cookies])
+  if (response.body.code !== 200 || !readCookie(sessionCookies, 'MUSIC_A')) {
+    throw new Error(neteaseError('Netease anonymous device registration failed', response.body))
+  }
+  return sessionCookies
+}
+
+async function fetchXeapiPublicKey(deviceId: string): Promise<XeapiPublicKey> {
+  const nonce = randomDigits(16)
+  const timestamp = String(Date.now())
+  const response = await fetch(`${NETEASE_INTERFACE_BASE}/api/gorilla/anti/crawler/security/key/get`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Cookie: `deviceId=${encodeURIComponent(deviceId)}`,
+      'User-Agent':
+        'NeteaseMusic/9.1.65.240927161425(9001065);Dalvik/2.1.0 (Linux; U; Android 14; 23013RK75C Build/UKQ1.230804.001)',
+    },
+    body: new URLSearchParams({
+      appVersion: '9.1.65',
+      currentKeyVersion: '',
+      deviceId,
+      nonce,
+      os: 'android',
+      requestType: 'active',
+      signature: signXeapi(timestamp, nonce),
+      t1: '',
+      t2: '',
+      timestamp,
+      uid: '',
+    }),
+  })
+  if (!response.ok) throw new Error(`Netease request failed: ${response.status}`)
+  const body = (await response.json()) as {
+    code?: number
+    data?: { encryptedData?: string; signature?: string; timestamp?: string | number }
+  }
+  const data = body.data
+  if (body.code !== 200 || !data?.encryptedData || !data.signature || data.timestamp === undefined) {
+    throw new Error('Netease XEAPI public key response is invalid.')
+  }
+  if (data.signature !== signXeapi(String(data.timestamp), nonce)) {
+    throw new Error('Netease XEAPI public key signature is invalid.')
+  }
+  const publicKey = JSON.parse(
+    aesEcbDecrypt(XEAPI_STATIC_KEY, Buffer.from(data.encryptedData, 'base64')).toString(),
+  ) as Partial<XeapiPublicKey>
+  if (!publicKey.publicKey || !publicKey.sk || !publicKey.version) {
+    throw new Error('Netease XEAPI public key is incomplete.')
+  }
+  return publicKey as XeapiPublicKey
+}
+
+async function xeapiRequest<T>(
+  path: string,
+  data: Record<string, string>,
+  deviceId: string,
+  publicKey: XeapiPublicKey,
+) {
+  const encrypted = await encryptXeapi(data, publicKey)
+  const buildver = String(Math.floor(Date.now() / 1000))
+  const response = await fetch(`${XEAPI_BASE}/xeapi/${path.slice('/api/'.length)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+      Cookie: `deviceId=${encodeURIComponent(deviceId)}; sDeviceId=${encodeURIComponent(deviceId)}; os=android; osver=14; appver=9.1.65; buildver=${buildver}`,
+      'User-Agent':
+        'NeteaseMusic/9.1.65.240927161425(9001065);Dalvik/2.1.0 (Linux; U; Android 14; 23013RK75C Build/UKQ1.230804.001)',
+      'X-Client-Enc-State': 'ENCRYPTED',
+      'x-aeapi': 'true',
+      'x-appver': '9.1.65',
+      'x-buildver': buildver,
+      'x-deviceid': deviceId,
+      'x-os': 'android',
+      'x-osver': '14',
+      'x-sdeviceid': deviceId,
+    },
+    body: new URLSearchParams(encrypted),
+  })
+  if (!response.ok) throw new Error(`Netease request failed: ${response.status}`)
+  const decrypted = aesEcbDecrypt(EAPI_KEY, Buffer.from(await response.arrayBuffer()))
+  const payload = decrypted[0] === 0x1f && decrypted[1] === 0x8b ? gunzipSync(decrypted) : decrypted
+  return { body: JSON.parse(payload.toString()) as T, cookies: readResponseCookies(response.headers) }
+}
+
+export async function encryptXeapi(data: Record<string, string>, publicKey: XeapiPublicKey) {
+  const body = new URLSearchParams(data).toString()
+  const plaintext = Buffer.from(
+    JSON.stringify({
+      body: Buffer.from(body).toString('base64'),
+      queryString: 'e_r=true',
+    }),
+  )
+  const dynamicKey = randomBytes(16)
+  const firstPass = aesEcbEncrypt(XEAPI_STATIC_KEY, plaintext)
+  const transformed = transformXeapiCiphertext(firstPass)
+  return {
+    B: aesEcbEncrypt(dynamicKey, transformed).toString('base64'),
+    S: (await encryptXeapiSessionKey(dynamicKey, publicKey)).toString('base64'),
+    R: aesEcbEncrypt(XEAPI_STATIC_KEY, Buffer.from(`${publicKey.version}|`)).toString('base64'),
+  }
+}
+
+async function encryptXeapiSessionKey(dynamicKey: Buffer, publicKey: XeapiPublicKey): Promise<Buffer> {
+  const peerKey = await crypto.subtle.importKey(
+    'raw',
+    Buffer.from(publicKey.publicKey, 'base64'),
+    { name: 'X25519' },
+    false,
+    [],
+  )
+  const ephemeral = (await crypto.subtle.generateKey({ name: 'X25519' }, true, ['deriveBits'])) as CryptoKeyPair
+  const ephemeralRaw = Buffer.from(await crypto.subtle.exportKey('raw', ephemeral.publicKey))
+  const sharedSecret = Buffer.from(
+    await crypto.subtle.deriveBits({ name: 'X25519', public: peerKey }, ephemeral.privateKey, 256),
+  )
+  const prk = createHmac('sha256', Buffer.alloc(32)).update(sharedSecret).digest()
+  const aesKey = createHmac('sha256', prk)
+    .update(Buffer.concat([ephemeralRaw, Buffer.from([1])]))
+    .digest()
+    .subarray(0, 16)
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-128-gcm', aesKey, iv)
+  const plaintext = Buffer.from(`${dynamicKey.toString('base64')}|android|${publicKey.sk}`)
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()])
+  return Buffer.concat([ephemeralRaw, iv, encrypted, cipher.getAuthTag()])
+}
+
+function transformXeapiCiphertext(ciphertext: Buffer): Buffer {
+  const random = randomBytes(16)
+  const xored = Buffer.alloc(ciphertext.length)
+  for (let index = 0; index < ciphertext.length; index += 1) {
+    xored[index] = ciphertext[index] ^ random[index & 0x0f]
+  }
+  const encoded = Buffer.from(xored.toString('base64'))
+  const rotation = encoded.length ? (random[0] & 0x0f) % encoded.length : 0
+  return Buffer.concat([random, encoded.subarray(rotation), encoded.subarray(0, rotation)])
+}
+
+function aesEcbEncrypt(key: string | Buffer, plaintext: Buffer): Buffer {
+  const cipher = createCipheriv(`aes-${Buffer.byteLength(key) * 8}-ecb`, key, new Uint8Array(0))
+  return Buffer.concat([cipher.update(plaintext), cipher.final()])
+}
+
+function aesEcbDecrypt(key: string | Buffer, ciphertext: Buffer): Buffer {
+  const decipher = createDecipheriv(`aes-${Buffer.byteLength(key) * 8}-ecb`, key, new Uint8Array(0))
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()])
+}
+
+function encodeAnonymousUsername(deviceId: string): string {
+  let xored = ''
+  for (let index = 0; index < deviceId.length; index += 1) {
+    xored += String.fromCharCode(
+      deviceId.charCodeAt(index) ^ ANONYMOUS_ID_XOR_KEY.charCodeAt(index % ANONYMOUS_ID_XOR_KEY.length),
+    )
+  }
+  const digest = createHash('md5').update(xored).digest('base64')
+  return Buffer.from(`${deviceId} ${digest}`).toString('base64')
+}
+
+function signXeapi(timestamp: string, nonce: string): string {
+  return createHmac('sha256', XEAPI_SIGN_KEY)
+    .update(timestamp + nonce)
+    .digest('base64')
+}
+
+function randomDeviceId(): string {
+  return randomHex(26).toUpperCase()
+}
+
+function randomDigits(length: number): string {
+  return [...crypto.getRandomValues(new Uint8Array(length))].map((value) => String(value % 10)).join('')
 }
 
 function readCookie(cookies: string[], name: string): string | null {
