@@ -14,15 +14,17 @@ import type {
   MediaSearchItem,
   MusicCollectionSummary,
   MusicPlaylistSyncResult,
+  NeteaseSmsCodeInput,
+  NeteaseSmsLoginInput,
 } from '@shared/types'
 import type { Deps } from './deps'
 import { saveLibraryState, setWatchedState } from './library'
 import { getActiveTmdbSource } from './media-sources'
-import type { ActiveMediaSource, ConnectorRecord, ImportedLibraryEntry } from './ports'
+import type { ActiveMediaSource, ConnectedMusicAccount, ConnectorRecord, ImportedLibraryEntry } from './ports'
 
 const CONNECTOR_DEFINITIONS = {
-  douban: { authMode: 'profile', capabilities: ['library.import'] },
-  netease: { authMode: 'qr', capabilities: ['music.playlists.read'] },
+  douban: { authModes: ['profile'], capabilities: ['library.import'] },
+  netease: { authModes: ['qr', 'sms'], capabilities: ['music.playlists.read'] },
 } as const
 
 export async function listConnectors(deps: Deps, userId: string): Promise<ConnectorSummary[]> {
@@ -110,18 +112,24 @@ export async function checkNeteaseLogin(
     return { attempt: toLoginAttempt(attempt, result.status), connector: null }
   }
 
-  const record = await deps.connectorsRepo.save(userId, 'netease', {
-    externalAccountId: result.account.externalAccountId,
-    displayName: result.account.displayName,
-    avatarUrl: result.account.avatarUrl,
-    settings: {},
-    credentialsEncrypted: encrypted,
-    status: 'connected',
-    enabled: true,
-  })
-  await syncConnector(deps, env, userId, record.id)
-  const synced = await deps.connectorsRepo.get(userId, record.id)
-  return { attempt: toLoginAttempt(attempt, 'connected'), connector: synced ? toSummary(synced) : toSummary(record) }
+  const connector = await saveConnectedNeteaseConnector(deps, env, userId, result.account, encrypted)
+  return { attempt: toLoginAttempt(attempt, 'connected'), connector }
+}
+
+export function sendNeteaseSmsCode(deps: Deps, input: NeteaseSmsCodeInput): Promise<void> {
+  return deps.musicPlaylistConnectors.netease.sendSmsCode(input)
+}
+
+export async function loginNeteaseWithSms(
+  deps: Deps,
+  env: Env,
+  userId: string,
+  input: NeteaseSmsLoginInput,
+): Promise<ConnectorSummary> {
+  validateConnectorCredentialsSecret(env.CONNECTOR_CREDENTIALS_SECRET)
+  const result = await deps.musicPlaylistConnectors.netease.loginWithSms(input)
+  const encrypted = await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies)
+  return saveConnectedNeteaseConnector(deps, env, userId, result.account, encrypted)
 }
 
 export async function syncConnector(deps: Deps, env: Env, userId: string, id: string): Promise<ConnectorSyncResult> {
@@ -269,6 +277,27 @@ async function syncNeteaseConnector(
   }
 }
 
+async function saveConnectedNeteaseConnector(
+  deps: Deps,
+  env: Env,
+  userId: string,
+  account: ConnectedMusicAccount,
+  credentialsEncrypted: string,
+): Promise<ConnectorSummary> {
+  const record = await deps.connectorsRepo.save(userId, 'netease', {
+    externalAccountId: account.externalAccountId,
+    displayName: account.displayName,
+    avatarUrl: account.avatarUrl,
+    settings: {},
+    credentialsEncrypted,
+    status: 'connected',
+    enabled: true,
+  })
+  await syncConnector(deps, env, userId, record.id)
+  const synced = await deps.connectorsRepo.get(userId, record.id)
+  return synced ? toSummary(synced) : toSummary(record)
+}
+
 async function importLibraryEntries(
   deps: Deps,
   userId: string,
@@ -321,7 +350,7 @@ function toSummary(record: ConnectorRecord): ConnectorSummary {
     displayName: record.displayName,
     avatarUrl: record.avatarUrl,
     externalAccountId: record.externalAccountId,
-    authMode: definition.authMode,
+    authModes: [...definition.authModes],
     capabilities: [...definition.capabilities],
     status: record.status,
     enabled: record.enabled,

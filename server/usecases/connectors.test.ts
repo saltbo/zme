@@ -1,7 +1,8 @@
+import { decryptConnectorCredentials } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import type { MediaSearchItem } from '@shared/types'
 import { describe, expect, it } from 'vitest'
-import { syncConnector } from './connectors'
+import { loginNeteaseWithSms, sendNeteaseSmsCode, syncConnector } from './connectors'
 import type { Deps } from './deps'
 import type { ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
 
@@ -157,5 +158,95 @@ describe('syncConnector', () => {
   it('fails when the connector is not configured', async () => {
     const deps = { connectorsRepo: { get: async () => null } } as never as Deps
     await expect(syncConnector(deps, env, 'user-1', 'connector-1')).rejects.toThrow('Connector was not found.')
+  })
+})
+
+describe('Netease SMS login', () => {
+  it('delegates SMS code delivery without persisting the recipient', async () => {
+    let received: { countryCode: string; phone: string } | null = null
+    const deps = {
+      musicPlaylistConnectors: {
+        netease: {
+          sendSmsCode: async (input: { countryCode: string; phone: string }) => {
+            received = input
+          },
+        },
+      },
+    } as never as Deps
+
+    await sendNeteaseSmsCode(deps, { countryCode: '86', phone: '13800138000' })
+
+    expect(received).toEqual({ countryCode: '86', phone: '13800138000' })
+  })
+
+  it('encrypts the returned session and saves the connected account', async () => {
+    const secret = 'test-connector-secret-with-32-chars!'
+    type SaveInput = Parameters<Deps['connectorsRepo']['save']>[2]
+    const saved: { input: SaveInput | null } = { input: null }
+    let record: ConnectorRecord | null = null
+    const deps = {
+      connectorsRepo: {
+        save: async (userId: string, kind: ConnectorRecord['kind'], input: SaveInput) => {
+          saved.input = input
+          record = {
+            id: 'netease-connector-1',
+            userId,
+            kind,
+            ...input,
+            lastSyncedAt: null,
+            lastError: null,
+            lastResult: null,
+            createdAt: '2026-07-20T00:00:00.000Z',
+            updatedAt: '2026-07-20T00:00:00.000Z',
+          }
+          return record
+        },
+        get: async () => record,
+        markSynced: async () => undefined,
+      },
+      musicPlaylistConnectors: {
+        netease: {
+          loginWithSms: async () => ({
+            cookies: ['MUSIC_U=session-value', '__csrf=csrf-value'],
+            account: {
+              externalAccountId: '42',
+              displayName: 'Music Fan',
+              avatarUrl: 'https://img.test/42.jpg',
+            },
+          }),
+          listPlaylists: async () => [],
+        },
+      },
+      musicCollectionsRepo: {
+        listForConnector: async () => [],
+        deleteMissingConnectorCollections: async () => undefined,
+      },
+    } as never as Deps
+
+    const result = await loginNeteaseWithSms(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', {
+      countryCode: '86',
+      phone: '13800138000',
+      code: '1234',
+    })
+
+    expect(result).toMatchObject({
+      kind: 'netease',
+      displayName: 'Music Fan',
+      authModes: ['qr', 'sms'],
+      status: 'connected',
+    })
+    expect(saved.input).toMatchObject({
+      externalAccountId: '42',
+      settings: {},
+      status: 'connected',
+      enabled: true,
+    })
+    if (!saved.input) throw new Error('The connector was not saved.')
+    const encryptedCredentials = saved.input.credentialsEncrypted
+    expect(encryptedCredentials).not.toBeNull()
+    expect(await decryptConnectorCredentials(secret, encryptedCredentials as string)).toEqual([
+      'MUSIC_U=session-value',
+      '__csrf=csrf-value',
+    ])
   })
 })

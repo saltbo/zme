@@ -262,12 +262,21 @@ export interface LibraryMediaPage {
 
 export type ConnectorKind = 'douban' | 'netease'
 export type ConnectorCapability = 'library.import' | 'music.playlists.read'
-export type ConnectorAuthMode = 'profile' | 'qr'
+export type ConnectorAuthMode = 'profile' | 'qr' | 'sms'
 export type ConnectorStatus = 'connected' | 'reauth_required' | 'error'
 
 export interface DoubanConnectorInput {
   profileId: string
   enabled: boolean
+}
+
+export interface NeteaseSmsCodeInput {
+  countryCode: string
+  phone: string
+}
+
+export interface NeteaseSmsLoginInput extends NeteaseSmsCodeInput {
+  code: string
 }
 
 export interface LibraryImportSyncResult {
@@ -294,7 +303,7 @@ export interface ConnectorSummary {
   displayName: string
   avatarUrl: string | null
   externalAccountId: string
-  authMode: ConnectorAuthMode
+  authModes: ConnectorAuthMode[]
   capabilities: ConnectorCapability[]
   status: ConnectorStatus
   enabled: boolean

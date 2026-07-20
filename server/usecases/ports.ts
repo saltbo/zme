@@ -36,6 +36,8 @@ import type {
   MusicDiscoveryInput,
   MusicLibraryTrack,
   MusicSearchItem,
+  NeteaseSmsCodeInput,
+  NeteaseSmsLoginInput,
   ResourcePage,
 } from '@shared/types'
 
@@ -433,6 +435,12 @@ export interface ImportedMusicPlaylist {
 
 export interface ImportedMusicTrack extends MusicTrackInput {}
 
+export interface ConnectedMusicAccount {
+  externalAccountId: string
+  displayName: string
+  avatarUrl: string | null
+}
+
 export interface MusicPlaylistConnector {
   beginQrLogin(): Promise<{ key: string; qrUrl: string; cookies: string[]; expiresAt: string }>
   checkQrLogin(
@@ -443,9 +451,11 @@ export interface MusicPlaylistConnector {
     | {
         status: 'connected'
         cookies: string[]
-        account: { externalAccountId: string; displayName: string; avatarUrl: string | null }
+        account: ConnectedMusicAccount
       }
   >
+  sendSmsCode(input: NeteaseSmsCodeInput): Promise<void>
+  loginWithSms(input: NeteaseSmsLoginInput): Promise<{ cookies: string[]; account: ConnectedMusicAccount }>
   listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
   listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
 }

@@ -4,6 +4,8 @@ import type {
   ConnectorSyncResult,
   DoubanConnectorInput,
   MusicCollectionSummary,
+  NeteaseSmsCodeInput,
+  NeteaseSmsLoginInput,
 } from '@shared/types'
 import { apiRequest } from './client'
 
@@ -51,6 +53,20 @@ export async function checkNeteaseLogin(id: string) {
     'Failed to check Netease login.',
     { method: 'POST' },
   )
+}
+
+export async function sendNeteaseSmsCode(input: NeteaseSmsCodeInput) {
+  return apiRequest<{ sent: true }>('/api/connectors/netease/sms-codes', 'Failed to send Netease SMS code.', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function loginNeteaseWithSms(input: NeteaseSmsLoginInput) {
+  return apiRequest<{ item: ConnectorSummary }>('/api/connectors/netease/sms-login', 'Netease SMS login failed.', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function listConnectorPlaylists(id: string) {

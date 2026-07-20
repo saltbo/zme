@@ -68,22 +68,43 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
     if (response.body.code !== 803)
       throw new Error(`Netease QR login failed with code ${response.body.code ?? 'unknown'}.`)
 
-    const accountResponse = await weapiRequest<{ profile?: NeteaseProfile }>(
-      '/weapi/w/nuser/account/get',
-      {},
-      mergedCookies,
-    )
-    const profile = accountResponse.body.profile
-    if (!profile?.userId || !profile.nickname) throw new Error('Netease account profile is unavailable.')
+    const account = await getAccount(mergedCookies)
     return {
       status: 'connected',
-      cookies: mergeCookies(mergedCookies, accountResponse.cookies),
-      account: {
-        externalAccountId: String(profile.userId),
-        displayName: profile.nickname,
-        avatarUrl: profile.avatarUrl ?? null,
-      },
+      cookies: account.cookies,
+      account: account.profile,
     }
+  },
+
+  async sendSmsCode({ countryCode, phone }) {
+    const response = await weapiRequest<{ code?: number; message?: string }>(
+      '/weapi/sms/captcha/sent',
+      { ctcode: countryCode, cellphone: phone, secrete: 'music_middleuser_pclogin' },
+      [],
+    )
+    if (response.body.code !== 200) {
+      throw new Error(neteaseError('Netease failed to send the SMS code', response.body))
+    }
+  },
+
+  async loginWithSms({ countryCode, phone, code }) {
+    const response = await weapiRequest<{ code?: number; message?: string }>(
+      '/weapi/w/login/cellphone',
+      {
+        type: '1',
+        https: 'true',
+        phone,
+        countrycode: countryCode,
+        captcha: code,
+        remember: 'true',
+      },
+      [],
+    )
+    if (response.body.code !== 200) {
+      throw new Error(neteaseError('Netease SMS login failed', response.body))
+    }
+    const account = await getAccount(response.cookies)
+    return { cookies: account.cookies, account: account.profile }
   },
 
   async listPlaylists(credentials) {
@@ -128,6 +149,24 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
     }
     return tracks
   },
+}
+
+async function getAccount(cookies: string[]) {
+  const response = await weapiRequest<{ profile?: NeteaseProfile }>('/weapi/w/nuser/account/get', {}, cookies)
+  const profile = response.body.profile
+  if (!profile?.userId || !profile.nickname) throw new Error('Netease account profile is unavailable.')
+  return {
+    cookies: mergeCookies(cookies, response.cookies),
+    profile: {
+      externalAccountId: String(profile.userId),
+      displayName: profile.nickname,
+      avatarUrl: profile.avatarUrl ?? null,
+    },
+  }
+}
+
+function neteaseError(prefix: string, response: { code?: number; message?: string }): string {
+  return `${prefix} (code ${response.code ?? 'unknown'}${response.message ? `: ${response.message}` : ''}).`
 }
 
 async function weapiRequest<T>(path: string, data: Record<string, unknown>, cookies: string[]) {

@@ -17,8 +17,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useAuth } from '@/contexts/auth'
 import {
   beginNeteaseLogin,
@@ -26,8 +28,10 @@ import {
   deleteConnector,
   listConnectorPlaylists,
   listConnectors,
+  loginNeteaseWithSms,
   saveDoubanConnector,
   selectConnectorPlaylist,
+  sendNeteaseSmsCode,
   syncConnector,
   updateConnector,
 } from '@/lib/api'
@@ -338,13 +342,37 @@ function NeteaseConnectorDialog({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
+  const [loginMethod, setLoginMethod] = useState<'qr' | 'sms'>('qr')
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [qrUrl, setQrUrl] = useState<string | null>(null)
+  const [countryCode, setCountryCode] = useState('86')
+  const [phone, setPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [smsSent, setSmsSent] = useState(false)
   const begin = useMutation({
     mutationFn: beginNeteaseLogin,
     onSuccess: ({ item }) => {
       setAttemptId(item.id)
       setQrUrl(item.qrUrl)
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('neteaseLoginFailed')),
+  })
+  const sendSms = useMutation({
+    mutationFn: () => sendNeteaseSmsCode({ countryCode: countryCode.trim(), phone: phone.trim() }),
+    onSuccess: () => {
+      setSmsSent(true)
+      toast.success(t('smsCodeSent'))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('smsCodeSendFailed')),
+  })
+  const smsLogin = useMutation({
+    mutationFn: () =>
+      loginNeteaseWithSms({ countryCode: countryCode.trim(), phone: phone.trim(), code: smsCode.trim() }),
+    onSuccess: async () => {
+      await onChanged()
+      setSmsCode('')
+      setSmsSent(false)
+      toast.success(t('neteaseConnected'))
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('neteaseLoginFailed')),
   })
@@ -380,8 +408,37 @@ function NeteaseConnectorDialog({
     toast.success(t('neteaseConnected'))
   }, [attemptId, login.data?.connector, onChanged, t])
 
+  const canSendSms = /^\d{1,4}$/.test(countryCode.trim()) && /^\d{5,20}$/.test(phone.trim())
+  const canLoginWithSms = canSendSms && /^\d{4,8}$/.test(smsCode.trim())
+
+  function changeLoginMethod(values: string[]) {
+    const method = values[0]
+    if (method !== 'qr' && method !== 'sms') return
+    setLoginMethod(method)
+    if (method === 'sms') {
+      setAttemptId(null)
+      setQrUrl(null)
+    }
+  }
+
+  function changeSmsRecipient(nextCountryCode: string, nextPhone: string) {
+    setCountryCode(nextCountryCode)
+    setPhone(nextPhone)
+    setSmsCode('')
+    setSmsSent(false)
+  }
+
+  function changeOpen(nextOpen: boolean) {
+    setOpen(nextOpen)
+    if (nextOpen) return
+    setAttemptId(null)
+    setQrUrl(null)
+    setSmsCode('')
+    setSmsSent(false)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger render={<Button variant={connector ? 'outline' : 'default'} />}>
         <Settings2 />
         {connector ? t('managePlaylists') : t('connect')}
@@ -419,39 +476,134 @@ function NeteaseConnectorDialog({
             ))}
           </div>
         ) : (
-          <div className="grid justify-items-center gap-4 py-4 text-center">
-            {qrUrl ? (
-              <div className="rounded-xl bg-white p-4">
-                <QRCodeSVG value={qrUrl} size={196} />
+          <div className="flex flex-col gap-5 py-2">
+            <ToggleGroup
+              className="grid w-full grid-cols-2"
+              variant="outline"
+              spacing={0}
+              value={[loginMethod]}
+              onValueChange={changeLoginMethod}
+            >
+              <ToggleGroupItem className="w-full" value="qr">
+                {t('qrCodeLogin')}
+              </ToggleGroupItem>
+              <ToggleGroupItem className="w-full" value="sms">
+                {t('smsCodeLogin')}
+              </ToggleGroupItem>
+            </ToggleGroup>
+
+            {loginMethod === 'qr' ? (
+              <div className="flex flex-col items-center gap-4 text-center">
+                <p className="text-muted-foreground text-sm">{t('neteaseQrDescription')}</p>
+                {qrUrl ? (
+                  <div className="rounded-xl bg-white p-4">
+                    <QRCodeSVG value={qrUrl} size={196} />
+                  </div>
+                ) : (
+                  <Button type="button" onClick={() => begin.mutate()} disabled={begin.isPending}>
+                    {begin.isPending ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                    {t('startQrLogin')}
+                  </Button>
+                )}
+                {login.data?.attempt.status === 'waiting_scan' ? (
+                  <p className="text-muted-foreground text-sm">{t('waitingForScan')}</p>
+                ) : null}
+                {login.data?.attempt.status === 'waiting_confirmation' ? (
+                  <p className="text-muted-foreground text-sm">{t('waitingForConfirmation')}</p>
+                ) : null}
+                {login.data?.attempt.status === 'expired' ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <p className="text-destructive text-sm">{t('qrCodeExpired')}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setAttemptId(null)
+                        setQrUrl(null)
+                        begin.mutate()
+                      }}
+                      disabled={begin.isPending}
+                    >
+                      {t('tryAgain')}
+                    </Button>
+                  </div>
+                ) : null}
+                {login.isError ? (
+                  <p className="text-destructive text-sm">
+                    {login.error instanceof Error ? login.error.message : t('neteaseLoginFailed')}
+                  </p>
+                ) : null}
               </div>
             ) : (
-              <Button onClick={() => begin.mutate()} disabled={begin.isPending}>
-                {begin.isPending ? <LoaderCircle className="animate-spin" /> : null}
-                {t('startQrLogin')}
-              </Button>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  smsLogin.mutate()
+                }}
+              >
+                <FieldGroup>
+                  <div className="grid grid-cols-[7rem_1fr] gap-3">
+                    <Field>
+                      <FieldLabel htmlFor="netease-country-code">{t('countryCode')}</FieldLabel>
+                      <Input
+                        id="netease-country-code"
+                        inputMode="numeric"
+                        autoComplete="tel-country-code"
+                        value={countryCode}
+                        onChange={(event) => changeSmsRecipient(event.target.value, phone)}
+                        placeholder="86"
+                        required
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor="netease-phone">{t('phoneNumber')}</FieldLabel>
+                      <Input
+                        id="netease-phone"
+                        inputMode="tel"
+                        autoComplete="tel-national"
+                        value={phone}
+                        onChange={(event) => changeSmsRecipient(countryCode, event.target.value)}
+                        placeholder={t('phoneNumberPlaceholder')}
+                        required
+                      />
+                    </Field>
+                  </div>
+                  <FieldDescription>{t('neteaseSmsDescription')}</FieldDescription>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => sendSms.mutate()}
+                    disabled={!canSendSms || sendSms.isPending || smsLogin.isPending}
+                  >
+                    {sendSms.isPending ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                    {smsSent ? t('resendSmsCode') : t('sendSmsCode')}
+                  </Button>
+                  {smsSent ? (
+                    <Field>
+                      <FieldLabel htmlFor="netease-sms-code">{t('smsCode')}</FieldLabel>
+                      <Input
+                        id="netease-sms-code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="[0-9]*"
+                        maxLength={8}
+                        value={smsCode}
+                        onChange={(event) => setSmsCode(event.target.value)}
+                        placeholder={t('smsCodePlaceholder')}
+                        required
+                        autoFocus
+                      />
+                    </Field>
+                  ) : null}
+                  <DialogFooter>
+                    <Button type="submit" disabled={!smsSent || !canLoginWithSms || smsLogin.isPending}>
+                      {smsLogin.isPending ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+                      {t('connect')}
+                    </Button>
+                  </DialogFooter>
+                </FieldGroup>
+              </form>
             )}
-            {login.data?.attempt.status === 'waiting_scan' ? (
-              <p className="text-muted-foreground text-sm">{t('waitingForScan')}</p>
-            ) : null}
-            {login.data?.attempt.status === 'waiting_confirmation' ? (
-              <p className="text-muted-foreground text-sm">{t('waitingForConfirmation')}</p>
-            ) : null}
-            {login.data?.attempt.status === 'expired' ? (
-              <div className="grid justify-items-center gap-2">
-                <p className="text-destructive text-sm">{t('qrCodeExpired')}</p>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setAttemptId(null)
-                    setQrUrl(null)
-                    begin.mutate()
-                  }}
-                  disabled={begin.isPending}
-                >
-                  {t('tryAgain')}
-                </Button>
-              </div>
-            ) : null}
           </div>
         )}
       </DialogContent>

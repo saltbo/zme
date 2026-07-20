@@ -5,8 +5,10 @@ import {
   deleteConnector,
   listConnectorPlaylists,
   listConnectors,
+  loginNeteaseWithSms,
   saveDoubanConnector,
   selectConnectorPlaylist,
+  sendNeteaseSmsCode,
   syncConnector,
   updateConnector,
 } from '@server/usecases/connectors'
@@ -26,6 +28,24 @@ const connectorPatchSchema = z.object({
 
 const loginAttemptParamsSchema = z.object({
   id: z.string().uuid(),
+})
+
+const neteaseSmsCodeSchema = z.object({
+  countryCode: z
+    .string()
+    .trim()
+    .regex(/^\d{1,4}$/),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\d{5,20}$/),
+})
+
+const neteaseSmsLoginSchema = neteaseSmsCodeSchema.extend({
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{4,8}$/),
 })
 
 const playlistParamsSchema = z.object({
@@ -60,6 +80,16 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
       return c.json(await checkNeteaseLogin(c.get('deps'), c.env, c.get('user').id, c.req.valid('param').id))
     },
   )
+
+  routes.post('/connectors/netease/sms-codes', zValidator('json', neteaseSmsCodeSchema), async (c) => {
+    await sendNeteaseSmsCode(c.get('deps'), c.req.valid('json'))
+    return c.json({ sent: true })
+  })
+
+  routes.post('/connectors/netease/sms-login', zValidator('json', neteaseSmsLoginSchema), async (c) => {
+    const item = await loginNeteaseWithSms(c.get('deps'), c.env, c.get('user').id, c.req.valid('json'))
+    return c.json({ item })
+  })
 
   routes.patch(
     '/connectors/:id',
