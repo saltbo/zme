@@ -129,7 +129,7 @@ export const connectors = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    kind: text('kind', { enum: ['douban', 'netease'] }).notNull(),
+    kind: text('kind').notNull(),
     externalAccountId: text('external_account_id').notNull(),
     displayName: text('display_name').notNull().default(''),
     avatarUrl: text('avatar_url'),
@@ -153,7 +153,7 @@ export const connectorLoginAttempts = sqliteTable('connector_login_attempts', {
   userId: text('user_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
-  kind: text('kind', { enum: ['netease'] }).notNull(),
+  kind: text('kind').notNull(),
   externalKey: text('external_key').notNull(),
   credentialsEncrypted: text('credentials_encrypted'),
   status: text('status', { enum: ['waiting_scan', 'waiting_confirmation', 'connected', 'expired'] })
@@ -173,7 +173,7 @@ export const musicCollections = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     connectorId: text('connector_id').references(() => connectors.id, { onDelete: 'cascade' }),
     kind: text('kind', { enum: ['playlist', 'album', 'favorites'] }).notNull(),
-    provider: text('provider', { enum: ['netease', 'musicbrainz', 'zme'] }).notNull(),
+    provider: text('provider').notNull(),
     externalId: text('external_id').notNull(),
     title: text('title').notNull(),
     description: text('description'),
@@ -195,19 +195,11 @@ export const musicTracks = sqliteTable(
   'music_tracks',
   {
     id: text('id').primaryKey(),
-    provider: text('provider', { enum: ['netease', 'musicbrainz'] }).notNull(),
+    provider: text('provider').notNull(),
     externalId: text('external_id').notNull(),
     mediaKey: text('media_key').notNull(),
     title: text('title').notNull(),
     artistsJson: text('artists_json').notNull().default('[]'),
-    albumTitle: text('album_title'),
-    albumExternalId: text('album_external_id'),
-    albumArtistsJson: text('album_artists_json').notNull().default('[]'),
-    albumReleaseDate: text('album_release_date'),
-    albumReleaseType: text('album_release_type'),
-    albumMetadataUpdatedAt: text('album_metadata_updated_at'),
-    discNumber: integer('disc_number'),
-    trackNumber: integer('track_number'),
     coverUrl: text('cover_url'),
     durationMs: integer('duration_ms'),
     isrcsJson: text('isrcs_json').notNull().default('[]'),
@@ -220,6 +212,47 @@ export const musicTracks = sqliteTable(
   ],
 )
 
+export const musicReleases = sqliteTable(
+  'music_releases',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider').notNull(),
+    externalId: text('external_id').notNull(),
+    title: text('title').notNull(),
+    artistsJson: text('artists_json').notNull().default('[]'),
+    releaseDate: text('release_date'),
+    releaseType: text('release_type', {
+      enum: ['album', 'single', 'ep', 'compilation', 'soundtrack', 'live', 'broadcast', 'other', 'unknown'],
+    })
+      .notNull()
+      .default('unknown'),
+    providerReleaseType: text('provider_release_type'),
+    coverUrl: text('cover_url'),
+    metadataUpdatedAt: text('metadata_updated_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [uniqueIndex('music_releases_provider_external_idx').on(table.provider, table.externalId)],
+)
+
+export const musicReleaseTracks = sqliteTable(
+  'music_release_tracks',
+  {
+    id: text('id').primaryKey(),
+    releaseId: text('release_id')
+      .notNull()
+      .references(() => musicReleases.id, { onDelete: 'cascade' }),
+    trackId: text('track_id')
+      .notNull()
+      .references(() => musicTracks.id, { onDelete: 'cascade' }),
+    discNumber: integer('disc_number'),
+    trackNumber: integer('track_number'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [uniqueIndex('music_release_tracks_release_track_idx').on(table.releaseId, table.trackId)],
+)
+
 export const musicCollectionTracks = sqliteTable(
   'music_collection_tracks',
   {
@@ -229,6 +262,7 @@ export const musicCollectionTracks = sqliteTable(
     trackId: text('track_id')
       .notNull()
       .references(() => musicTracks.id, { onDelete: 'cascade' }),
+    releaseTrackId: text('release_track_id').references(() => musicReleaseTracks.id, { onDelete: 'set null' }),
     position: integer('position').notNull(),
     addedAt: text('added_at'),
   },
@@ -392,6 +426,8 @@ export type Connector = typeof connectors.$inferSelect
 export type ConnectorLoginAttempt = typeof connectorLoginAttempts.$inferSelect
 export type MusicCollection = typeof musicCollections.$inferSelect
 export type MusicTrackRow = typeof musicTracks.$inferSelect
+export type MusicReleaseRow = typeof musicReleases.$inferSelect
+export type MusicReleaseTrackRow = typeof musicReleaseTracks.$inferSelect
 export type MusicDownloadKey = typeof musicDownloadKeys.$inferSelect
 export type MediaSubscription = typeof mediaSubscriptions.$inferSelect
 export type DownloadRecord = typeof downloadRecords.$inferSelect

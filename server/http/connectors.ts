@@ -1,17 +1,19 @@
 import { zValidator } from '@hono/zod-validator'
 import {
-  beginNeteaseLogin,
-  checkNeteaseLogin,
   deleteConnector,
   enqueueConnectorSync,
   listConnectorPlaylists,
   listConnectors,
-  loginNeteaseWithSms,
   saveConnectorPlaylistSelection,
   saveDoubanConnector,
-  sendNeteaseSmsCode,
   updateConnector,
 } from '@server/usecases/connectors'
+import {
+  beginNeteaseLogin,
+  checkNeteaseLogin,
+  loginNeteaseWithSms,
+  sendNeteaseSmsCode,
+} from '@server/usecases/music-connectors/netease'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'

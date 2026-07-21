@@ -12,11 +12,13 @@ describe('download metadata', () => {
       buildMusicDownloadSubdirectory({
         title: 'Track',
         artists: ['Track Artist'],
-        albumTitle: 'Album',
-        albumArtists: ['Album Artist'],
-        albumReleaseDate: '2024-03-02',
-        discNumber: 1,
-        trackNumber: 3,
+        release: {
+          title: 'Album',
+          artists: ['Album Artist'],
+          releaseDate: '2024-03-02',
+          discNumber: 1,
+          trackNumber: 3,
+        },
       }),
     ).toBe('Album Artist/Album (2024)')
   })
@@ -26,13 +28,9 @@ describe('download metadata', () => {
       buildMusicDownloadSubdirectory({
         title: 'Track',
         artists: [],
-        albumTitle: null,
-        albumArtists: [],
-        albumReleaseDate: null,
-        discNumber: null,
-        trackNumber: null,
+        release: null,
       }),
-    ).toBe('Unknown Artist/Unknown Album')
+    ).toBe('Unknown Artist/Unknown Release')
   })
 
   it('sanitizes filesystem-sensitive path components', () => {
@@ -40,11 +38,13 @@ describe('download metadata', () => {
       buildMusicDownloadSubdirectory({
         title: 'Track',
         artists: ['Guest'],
-        albumTitle: 'Hits: Vol. 1. ',
-        albumArtists: ['AC/DC'],
-        albumReleaseDate: null,
-        discNumber: 1,
-        trackNumber: 1,
+        release: {
+          title: 'Hits: Vol. 1. ',
+          artists: ['AC/DC'],
+          releaseDate: null,
+          discNumber: 1,
+          trackNumber: 1,
+        },
       }),
     ).toBe('AC_DC/Hits_ Vol. 1')
     expect(sanitizeDownloadPathComponent('... ', 'Unknown', 120)).toBe('Unknown')
@@ -56,11 +56,13 @@ describe('download metadata', () => {
         {
           title: 'Track: One',
           artists: ['Track Artist'],
-          albumTitle: 'Compilation',
-          albumArtists: ['Various Artists'],
-          albumReleaseDate: '2023',
-          discNumber: 2,
-          trackNumber: 7,
+          release: {
+            title: 'Compilation',
+            artists: ['Various Artists'],
+            releaseDate: '2023',
+            discNumber: 2,
+            trackNumber: 7,
+          },
         },
         'FLAC',
       ),

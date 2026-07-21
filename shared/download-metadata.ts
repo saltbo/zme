@@ -60,27 +60,29 @@ export function isValidDownloadSubdirectory(value: string): boolean {
 export interface MusicDownloadMetadata {
   title: string
   artists: string[]
-  albumTitle: string | null
-  albumArtists: string[]
-  albumReleaseDate: string | null
-  discNumber: number | null
-  trackNumber: number | null
+  release: {
+    title: string
+    artists: string[]
+    releaseDate: string | null
+    discNumber: number | null
+    trackNumber: number | null
+  } | null
 }
 
 export function buildMusicDownloadSubdirectory(metadata: MusicDownloadMetadata): string {
-  const artistCredit = metadata.albumArtists.length > 0 ? metadata.albumArtists : metadata.artists
+  const artistCredit = metadata.release?.artists.length ? metadata.release.artists : metadata.artists
   const artist = sanitizeDownloadPathComponent(artistCredit.join(', '), 'Unknown Artist', 120)
-  const albumTitle = sanitizeDownloadPathComponent(metadata.albumTitle ?? '', 'Unknown Album', 100)
-  const year = releaseYear(metadata.albumReleaseDate)
-  const album = year && !albumTitle.endsWith(`(${year})`) ? `${albumTitle} (${year})` : albumTitle
-  return `${artist}/${album}`
+  const releaseTitle = sanitizeDownloadPathComponent(metadata.release?.title ?? '', 'Unknown Release', 100)
+  const year = releaseYear(metadata.release?.releaseDate ?? null)
+  const release = year && !releaseTitle.endsWith(`(${year})`) ? `${releaseTitle} (${year})` : releaseTitle
+  return `${artist}/${release}`
 }
 
 export function buildMusicDownloadFilename(metadata: MusicDownloadMetadata, extension: string): string {
-  const position = trackPosition(metadata.discNumber, metadata.trackNumber)
+  const position = trackPosition(metadata.release?.discNumber ?? null, metadata.release?.trackNumber ?? null)
   const trackArtist = metadata.artists.join(', ')
-  const albumArtist = metadata.albumArtists.join(', ')
-  const artistPrefix = trackArtist && albumArtist && trackArtist !== albumArtist ? `${trackArtist} - ` : ''
+  const releaseArtist = metadata.release?.artists.join(', ') ?? ''
+  const artistPrefix = trackArtist && releaseArtist && trackArtist !== releaseArtist ? `${trackArtist} - ` : ''
   const fallback = trackArtist ? `${trackArtist} - ${metadata.title}` : metadata.title
   const basename = sanitizeDownloadPathComponent(
     position ? `${position} ${artistPrefix}${metadata.title}` : fallback,

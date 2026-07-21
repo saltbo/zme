@@ -260,7 +260,7 @@ export interface LibraryMediaPage {
   totalPages: number
 }
 
-export type ConnectorKind = 'douban' | 'netease'
+export type ConnectorKind = string
 export type ConnectorCapability = 'library.import' | 'music.playlists.read' | 'music.tracks.download'
 export type ConnectorAuthMode = 'profile' | 'qr' | 'sms'
 export type ConnectorStatus = 'connected' | 'reauth_required' | 'error'
@@ -319,14 +319,24 @@ export type ConnectorLoginStatus = 'waiting_scan' | 'waiting_confirmation' | 'co
 
 export interface ConnectorLoginAttempt {
   id: string
-  kind: 'netease'
+  kind: ConnectorKind
   qrUrl: string
   status: ConnectorLoginStatus
   expiresAt: string
 }
 
 export type MusicCollectionKind = 'playlist' | 'album' | 'favorites'
-export type MusicCollectionProvider = 'netease' | 'musicbrainz' | 'zme'
+export type MusicCollectionProvider = string
+export type MusicReleaseKind =
+  | 'album'
+  | 'single'
+  | 'ep'
+  | 'compilation'
+  | 'soundtrack'
+  | 'live'
+  | 'broadcast'
+  | 'other'
+  | 'unknown'
 export type MusicDownloadStatus = 'available' | 'unavailable' | 'unknown'
 export type MusicAvailabilityReason =
   | 'membership_required'
@@ -388,20 +398,28 @@ export interface MusicCollectionSummary {
   updatedAt: string
 }
 
+export interface MusicLibraryRelease {
+  id: string
+  provider: string
+  externalId: string
+  title: string
+  artists: string[]
+  releaseDate: string | null
+  releaseType: MusicReleaseKind
+  providerReleaseType: string | null
+  coverUrl: string | null
+  discNumber: number | null
+  trackNumber: number | null
+}
+
 export interface MusicLibraryTrack {
   id: string
-  provider: 'netease' | 'musicbrainz'
+  provider: string
   externalId: string
   mediaKey: string
   title: string
   artists: string[]
-  albumTitle: string | null
-  albumExternalId: string | null
-  albumArtists: string[]
-  albumReleaseDate: string | null
-  albumReleaseType: string | null
-  discNumber: number | null
-  trackNumber: number | null
+  release: MusicLibraryRelease | null
   coverUrl: string | null
   durationMs: number | null
   isrcs: string[]
@@ -435,6 +453,7 @@ export type MusicDownloadQuality = 'standard' | 'exhigh' | 'lossless' | 'hires'
 
 export interface MusicTrackDownloadInput {
   downloaderId: string
+  releaseId?: string
   quality?: MusicDownloadQuality
   force?: boolean
 }

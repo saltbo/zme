@@ -13,6 +13,7 @@ import type {
   MusicDiscoveryRange,
   MusicFavoriteTrackInput,
   MusicGenre,
+  MusicReleaseKind,
   MusicReleaseType,
   MusicSearchItem,
   MusicTrackSearchItem,
@@ -1427,13 +1428,21 @@ function MusicTrackCard({ item }: { item: MusicTrackSearchItem }) {
     mediaKey: item.mediaKey,
     title: item.title,
     artists: item.artists.map((artist) => artist.name),
-    albumTitle: item.albumTitle,
-    albumExternalId: item.releaseMbid,
-    albumArtists: item.artists.map((artist) => artist.name),
-    albumReleaseDate: null,
-    albumReleaseType: null,
-    discNumber: null,
-    trackNumber: null,
+    release: item.releaseMbid
+      ? {
+          id: `musicbrainz:${item.releaseMbid}`,
+          provider: 'musicbrainz',
+          externalId: item.releaseMbid,
+          title: item.albumTitle ?? item.title,
+          artists: item.artists.map((artist) => artist.name),
+          releaseDate: null,
+          releaseType: 'unknown',
+          providerReleaseType: null,
+          coverUrl: item.coverArt.frontThumbnailUrl ?? item.coverArt.frontUrl,
+          discNumber: null,
+          trackNumber: null,
+        }
+      : null,
     coverUrl: item.coverArt.frontThumbnailUrl ?? item.coverArt.frontUrl,
     durationMs: item.durationMs,
     isrcs: item.isrcs,
@@ -1642,17 +1651,32 @@ function toFavoriteTrackInput(
     mediaKey: track.recordingMediaKey ?? `musicbrainz:recording:${externalId}`,
     title: track.title,
     artists: album.artist ? [album.artist] : [],
-    albumTitle: album.title,
-    albumExternalId: album.releaseGroupMbid,
-    albumArtists: album.artist ? [album.artist] : [],
-    albumReleaseDate: album.releaseDate ?? album.firstReleaseDate,
-    albumReleaseType: album.primaryType,
-    discNumber: mediumPosition,
-    trackNumber: trackPosition,
+    release: {
+      id: `musicbrainz:${album.releaseGroupMbid}`,
+      provider: 'musicbrainz',
+      externalId: album.releaseGroupMbid,
+      title: album.title,
+      artists: album.artist ? [album.artist] : [],
+      releaseDate: album.releaseDate ?? album.firstReleaseDate,
+      releaseType: normalizeReleaseType(album.primaryType),
+      providerReleaseType: album.primaryType,
+      coverUrl: album.coverArt.frontThumbnailUrl ?? album.coverArt.frontUrl,
+      discNumber: mediumPosition,
+      trackNumber: trackPosition,
+    },
     coverUrl: album.coverArt.frontThumbnailUrl ?? album.coverArt.frontUrl,
     durationMs: track.lengthMs,
     isrcs: track.isrcs,
   }
+}
+
+function normalizeReleaseType(value: string | null): MusicReleaseKind {
+  const normalized = value?.trim().toLowerCase()
+  if (normalized === 'album') return 'album'
+  if (normalized === 'single') return 'single'
+  if (normalized === 'ep') return 'ep'
+  if (normalized === 'broadcast') return 'broadcast'
+  return normalized ? 'other' : 'unknown'
 }
 
 function FavoriteSongButton({

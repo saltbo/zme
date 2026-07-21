@@ -5,7 +5,7 @@ import type { Deps } from './deps'
 import { processDownloadDispatch } from './download-dispatch'
 import type { DownloadRecordRecord } from './ports'
 
-const laneKey = 'netease:connector-1'
+const laneKey = 'music:connector-1'
 
 function downloadRecord(id: string, resourceKey: string): DownloadRecordRecord {
   return {
@@ -16,7 +16,7 @@ function downloadRecord(id: string, resourceKey: string): DownloadRecordRecord {
     laneKey,
     generation: 1,
     downloaderId: 'downloader-1',
-    config: { preferredQuality: 'exhigh', resolvedQuality: null },
+    config: { preferredQuality: 'exhigh', resolvedQuality: null, releaseId: null },
     status: 'queued',
     attemptCount: 0,
     externalTaskId: null,
@@ -81,13 +81,7 @@ describe('download dispatch lanes', () => {
           mediaKey,
           title: `Track ${mediaKey.at(-1)}`,
           artists: ['Artist'],
-          albumTitle: null,
-          albumExternalId: null,
-          albumArtists: [],
-          albumReleaseDate: null,
-          albumReleaseType: null,
-          discNumber: null,
-          trackNumber: null,
+          release: null,
           coverUrl: null,
           durationMs: null,
           isrcs: [],
@@ -113,18 +107,30 @@ describe('download dispatch lanes', () => {
           updatedAt: '2026-07-20T00:00:00.000Z',
         }),
       },
-      musicResourceResolvers: {
-        netease: {
-          resolve: async () => ({
-            url: 'https://m701.music.126.net/audio.mp3',
-            headers: {},
-            quality: 'exhigh' as const,
-            extension: 'mp3',
-            contentType: 'audio/mpeg',
-            contentLength: 2048,
-          }),
-        },
-      },
+      musicConnectors: new Map([
+        [
+          'netease',
+          {
+            definition: {
+              kind: 'netease',
+              authModes: ['qr', 'sms'],
+              capabilities: ['music.playlists.read', 'music.tracks.download'],
+              dispatchIntervalSeconds: 10,
+            },
+            auth: {},
+            open: () => ({
+              resolve: async () => ({
+                url: 'https://m701.music.126.net/audio.mp3',
+                headers: {},
+                quality: 'exhigh' as const,
+                extension: 'mp3',
+                contentType: 'audio/mpeg',
+                contentLength: 2048,
+              }),
+            }),
+          },
+        ],
+      ]),
       musicDownloadKeysRepo: { create: async () => undefined, revoke: async () => undefined },
       downloadersRepo: {
         getEnabled: async () => ({

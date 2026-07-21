@@ -3,6 +3,7 @@ import type {
   MusicCollectionDetails,
   MusicCollectionSummary,
   MusicFavoriteTrackInput,
+  MusicReleaseKind,
 } from '@shared/types'
 import type { Deps } from './deps'
 import { getMusicCollectionWithSubscription } from './media-subscriptions'
@@ -21,7 +22,7 @@ export function getMusicCollection(deps: Deps, userId: string, id: string): Prom
 }
 
 export async function removeMusicCollection(deps: Deps, userId: string, id: string): Promise<boolean> {
-  const collection = await deps.musicCollectionsRepo.getDetails(userId, id)
+  const collection = await deps.musicCollectionsRepo.get(userId, id)
   if (!collection) return false
   const subscription = await deps.mediaSubscriptionsRepo.find(userId, 'music_collection', id)
   if (subscription?.enabled) {
@@ -29,7 +30,7 @@ export async function removeMusicCollection(deps: Deps, userId: string, id: stri
     await deps.mediaSubscriptionsRepo.disable(userId, subscription.id, now)
     await deps.downloadRecordsRepo.cancelUnwantedForSubscription(subscription.id, now)
   }
-  if (collection.provider === 'netease') {
+  if (collection.connectorId) {
     await deps.musicCollectionsRepo.setLibraryAdded(userId, id, null)
     await deps.musicCollectionsRepo.replaceTracks(id, [])
     return true
@@ -108,19 +109,24 @@ function albumTracks(album: MusicAlbumDetails, addedAt: string): MusicTrackInput
     medium.tracks.map((track) => {
       const externalId = track.recordingMbid ?? `${album.releaseGroupMbid}:${medium.position}:${track.position}`
       return {
-        provider: 'musicbrainz' as const,
+        provider: 'musicbrainz',
         externalId,
         mediaKey: track.recordingMediaKey ?? `musicbrainz:recording:${externalId}`,
         title: track.title,
         artists: album.artist ? [album.artist] : [],
-        albumTitle: album.title,
-        albumExternalId: album.releaseGroupMbid,
-        albumArtists: album.artist ? [album.artist] : [],
-        albumReleaseDate: album.releaseDate ?? album.firstReleaseDate,
-        albumReleaseType: album.primaryType,
-        albumMetadataUpdatedAt: addedAt,
-        discNumber: medium.position,
-        trackNumber: track.position,
+        release: {
+          provider: 'musicbrainz',
+          externalId: album.releaseGroupMbid,
+          title: album.title,
+          artists: album.artist ? [album.artist] : [],
+          releaseDate: album.releaseDate ?? album.firstReleaseDate,
+          releaseType: normalizeMusicBrainzReleaseType(album.primaryType),
+          providerReleaseType: album.primaryType,
+          coverUrl: album.coverArt.frontThumbnailUrl ?? album.coverArt.frontUrl,
+          metadataUpdatedAt: addedAt,
+          discNumber: medium.position,
+          trackNumber: track.position,
+        },
         coverUrl: album.coverArt.frontThumbnailUrl ?? album.coverArt.frontUrl,
         durationMs: track.lengthMs,
         isrcs: track.isrcs,
@@ -137,16 +143,32 @@ function toTrackInput(track: MusicCollectionDetails['tracks'][number]): MusicTra
     mediaKey: track.mediaKey,
     title: track.title,
     artists: track.artists,
-    albumTitle: track.albumTitle,
-    albumExternalId: track.albumExternalId,
-    albumArtists: track.albumArtists,
-    albumReleaseDate: track.albumReleaseDate,
-    albumReleaseType: track.albumReleaseType,
-    discNumber: track.discNumber,
-    trackNumber: track.trackNumber,
+    release: track.release
+      ? {
+          provider: track.release.provider,
+          externalId: track.release.externalId,
+          title: track.release.title,
+          artists: track.release.artists,
+          releaseDate: track.release.releaseDate,
+          releaseType: track.release.releaseType,
+          providerReleaseType: track.release.providerReleaseType,
+          coverUrl: track.release.coverUrl,
+          discNumber: track.release.discNumber,
+          trackNumber: track.release.trackNumber,
+        }
+      : null,
     coverUrl: track.coverUrl,
     durationMs: track.durationMs,
     isrcs: track.isrcs,
     addedAt: track.addedAt,
   }
+}
+
+function normalizeMusicBrainzReleaseType(value: string | null): MusicReleaseKind {
+  const normalized = value?.trim().toLowerCase()
+  if (normalized === 'album') return 'album'
+  if (normalized === 'single') return 'single'
+  if (normalized === 'ep') return 'ep'
+  if (normalized === 'broadcast') return 'broadcast'
+  return normalized ? 'other' : 'unknown'
 }

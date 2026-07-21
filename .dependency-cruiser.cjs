@@ -47,6 +47,20 @@ module.exports = {
       to: { path: '^server/(http|composition)' },
     },
     {
+      name: 'netease-connector-is-isolated',
+      comment: 'A provider implementation may not import another provider implementation or the connector registry.',
+      severity: 'error',
+      from: { path: '^server/adapters/music-connectors/netease' },
+      to: { path: '^server/adapters/music-connectors/(?!netease(?:/|$))' },
+    },
+    {
+      name: 'netease-connector-ui-is-isolated',
+      comment: 'A provider UI may not import another provider UI or the connector UI registry.',
+      severity: 'error',
+      from: { path: '^src/features/music-connectors/netease' },
+      to: { path: '^src/features/music-connectors/(?!netease(?:/|$))' },
+    },
+    {
       name: 'drizzle-only-in-repos',
       comment:
         'Persistence is confined to adapters/repos/ and db/. server/auth is the better-auth integration: it owns its own tables and is consumed directly by the delivery layer.',

@@ -1,12 +1,7 @@
-import {
-  decryptConnectorCredentials,
-  encryptConnectorCredentials,
-  validateConnectorCredentialsSecret,
-} from '@server/domain/connector-credentials'
+import { decryptConnectorPayload } from '@server/domain/connector-credentials'
 import { chooseBestMatch } from '@server/domain/douban-match'
 import type { Env } from '@server/env'
 import type {
-  ConnectorLoginAttempt,
   ConnectorSummary,
   ConnectorSyncResult,
   DoubanConnectorInput,
@@ -14,8 +9,6 @@ import type {
   MediaSearchItem,
   MusicCollectionSummary,
   MusicPlaylistSyncResult,
-  NeteaseSmsCodeInput,
-  NeteaseSmsLoginInput,
 } from '@shared/types'
 import type { Deps } from './deps'
 import { saveLibraryState, setWatchedState } from './library'
@@ -23,27 +16,25 @@ import { getActiveTmdbSource } from './media-sources'
 import { evaluateMusicCollectionSubscription } from './media-subscriptions'
 import type {
   ActiveMediaSource,
-  ConnectedMusicAccount,
-  ConnectorLoginAttemptRecord,
   ConnectorRecord,
   ImportedLibraryEntry,
   ImportedMusicTrack,
-  MusicAlbumMetadata,
-  MusicQrLoginResult,
+  MusicConnectorModule,
+  MusicConnectorSession,
+  MusicReleaseMetadata,
 } from './ports'
 
 const CONNECTOR_DEFINITIONS = {
   douban: { authModes: ['profile'], capabilities: ['library.import'] },
-  netease: { authModes: ['qr', 'sms'], capabilities: ['music.playlists.read', 'music.tracks.download'] },
 } as const
 const MUSIC_AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000
 const MUSIC_AVAILABILITY_CHECK_PAGE_SIZE = 500
-const MUSIC_ALBUM_METADATA_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const MUSIC_RELEASE_METADATA_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 export type ConnectorSyncTrigger = 'scheduled' | 'manual' | 'login'
 
 export async function listConnectors(deps: Deps, userId: string): Promise<ConnectorSummary[]> {
-  return (await deps.connectorsRepo.list(userId)).map(toSummary)
+  return (await deps.connectorsRepo.list(userId)).map((record) => toConnectorSummary(deps, record))
 }
 
 export async function saveDoubanConnector(
@@ -61,7 +52,7 @@ export async function saveDoubanConnector(
     status: 'connected',
     enabled: input.enabled,
   })
-  return toSummary(record)
+  return toConnectorSummary(deps, record)
 }
 
 export async function updateConnector(
@@ -71,165 +62,11 @@ export async function updateConnector(
   input: { enabled?: boolean },
 ): Promise<ConnectorSummary | null> {
   const record = await deps.connectorsRepo.updateState(userId, id, input)
-  return record ? toSummary(record) : null
+  return record ? toConnectorSummary(deps, record) : null
 }
 
 export function deleteConnector(deps: Deps, userId: string, id: string): Promise<boolean> {
   return deps.connectorsRepo.delete(userId, id)
-}
-
-export async function beginNeteaseLogin(deps: Deps, env: Env, userId: string): Promise<ConnectorLoginAttempt> {
-  validateConnectorCredentialsSecret(env.CONNECTOR_CREDENTIALS_SECRET)
-  const login = await deps.musicPlaylistConnectors.netease.beginQrLogin()
-  const now = new Date().toISOString()
-  const id = crypto.randomUUID()
-  await deps.connectorLoginAttemptsRepo.create({
-    id,
-    userId,
-    kind: 'netease',
-    externalKey: login.key,
-    credentialsEncrypted: await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, login.cookies),
-    status: 'waiting_scan',
-    expiresAt: login.expiresAt,
-    createdAt: now,
-    updatedAt: now,
-  })
-  return { id, kind: 'netease', qrUrl: login.qrUrl, status: 'waiting_scan', expiresAt: login.expiresAt }
-}
-
-export async function checkNeteaseLogin(
-  deps: Deps,
-  env: Env,
-  userId: string,
-  attemptId: string,
-): Promise<{ attempt: ConnectorLoginAttempt; connector: ConnectorSummary | null }> {
-  const attempt = await deps.connectorLoginAttemptsRepo.get(userId, attemptId)
-  if (!attempt) throw new Error('Connector login attempt was not found.')
-  if (Date.parse(attempt.expiresAt) <= Date.now()) {
-    await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
-      status: 'expired',
-      updatedAt: new Date().toISOString(),
-    })
-    return { attempt: toLoginAttempt(attempt, 'expired'), connector: null }
-  }
-  if (!attempt.credentialsEncrypted) throw new Error('Connector login attempt has no credentials.')
-
-  const credentials = await decryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, attempt.credentialsEncrypted)
-  const riskVerification = parseRiskVerification(attempt.externalKey)
-  if (riskVerification) {
-    const result = await deps.musicPlaylistConnectors.netease.checkRiskVerification(
-      riskVerification.qrCode,
-      credentials,
-    )
-    if (result.status === 'connected' && riskVerification.loginKey) {
-      const resumed = await deps.musicPlaylistConnectors.netease.checkQrLogin(riskVerification.loginKey, result.cookies)
-      return saveQrLoginResult(deps, env, userId, attempt, riskVerification.loginKey, resumed)
-    }
-    await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
-      status: result.status,
-      credentialsEncrypted: await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies),
-      updatedAt: new Date().toISOString(),
-    })
-    return { attempt: toLoginAttempt(attempt, result.status), connector: null }
-  }
-
-  const result = await deps.musicPlaylistConnectors.netease.checkQrLogin(attempt.externalKey, credentials)
-  return saveQrLoginResult(deps, env, userId, attempt, attempt.externalKey, result)
-}
-
-async function saveQrLoginResult(
-  deps: Deps,
-  env: Env,
-  userId: string,
-  attempt: ConnectorLoginAttemptRecord,
-  loginKey: string,
-  result: MusicQrLoginResult,
-): Promise<{ attempt: ConnectorLoginAttempt; connector: ConnectorSummary | null }> {
-  const encrypted = await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies)
-  if (result.status === 'verification_required') {
-    const externalKey = encodeRiskVerification(result.verification, loginKey)
-    await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
-      externalKey,
-      status: 'waiting_scan',
-      expiresAt: result.verification.expiresAt,
-      credentialsEncrypted: encrypted,
-      updatedAt: new Date().toISOString(),
-    })
-    return {
-      attempt: toLoginAttempt({ ...attempt, externalKey, expiresAt: result.verification.expiresAt }, 'waiting_scan'),
-      connector: null,
-    }
-  }
-
-  await deps.connectorLoginAttemptsRepo.update(userId, attempt.id, {
-    externalKey: loginKey,
-    status: result.status,
-    credentialsEncrypted: encrypted,
-    updatedAt: new Date().toISOString(),
-  })
-
-  if (result.status !== 'connected') {
-    return { attempt: toLoginAttempt(attempt, result.status), connector: null }
-  }
-
-  const connector = await saveConnectedNeteaseConnector(deps, env, userId, result.account, encrypted)
-  return { attempt: toLoginAttempt(attempt, 'connected'), connector }
-}
-
-export function sendNeteaseSmsCode(deps: Deps, input: NeteaseSmsCodeInput): Promise<void> {
-  return deps.musicPlaylistConnectors.netease.sendSmsCode(input)
-}
-
-export async function loginNeteaseWithSms(
-  deps: Deps,
-  env: Env,
-  userId: string,
-  input: NeteaseSmsLoginInput,
-): Promise<{ connector: ConnectorSummary | null; verification: ConnectorLoginAttempt | null }> {
-  validateConnectorCredentialsSecret(env.CONNECTOR_CREDENTIALS_SECRET)
-  let credentials: string[] = []
-  if (input.verificationAttemptId) {
-    const attempt = await deps.connectorLoginAttemptsRepo.get(userId, input.verificationAttemptId)
-    if (!attempt || !parseRiskVerification(attempt.externalKey)) {
-      throw new Error('Netease account verification attempt was not found.')
-    }
-    if (attempt.status !== 'connected' || Date.parse(attempt.expiresAt) <= Date.now()) {
-      throw new Error('Netease account verification is not complete.')
-    }
-    if (!attempt.credentialsEncrypted) throw new Error('Netease account verification has no credentials.')
-    credentials = await decryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, attempt.credentialsEncrypted)
-  }
-
-  const result = await deps.musicPlaylistConnectors.netease.loginWithSms(input, credentials)
-  const encrypted = await encryptConnectorCredentials(env.CONNECTOR_CREDENTIALS_SECRET, result.cookies)
-  if (result.status === 'verification_required') {
-    const now = new Date().toISOString()
-    const id = crypto.randomUUID()
-    await deps.connectorLoginAttemptsRepo.create({
-      id,
-      userId,
-      kind: 'netease',
-      externalKey: encodeRiskVerification(result.verification),
-      credentialsEncrypted: encrypted,
-      status: 'waiting_scan',
-      expiresAt: result.verification.expiresAt,
-      createdAt: now,
-      updatedAt: now,
-    })
-    return {
-      connector: null,
-      verification: {
-        id,
-        kind: 'netease',
-        qrUrl: result.verification.qrUrl,
-        status: 'waiting_scan',
-        expiresAt: result.verification.expiresAt,
-      },
-    }
-  }
-
-  const connector = await saveConnectedNeteaseConnector(deps, env, userId, result.account, encrypted)
-  return { connector, verification: null }
 }
 
 export async function syncConnector(
@@ -245,13 +82,13 @@ export async function syncConnector(
     const result =
       connector.kind === 'douban'
         ? await syncDoubanConnector(deps, connector)
-        : await syncNeteaseConnector(deps, env, connector, trigger !== 'scheduled')
+        : await syncMusicConnector(deps, env, connector, trigger !== 'scheduled')
     await deps.connectorsRepo.markSynced(connector.id, result, null)
     return result
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Connector sync failed.'
     await deps.connectorsRepo.markSynced(connector.id, null, message)
-    if (connector.kind === 'netease' && /expired|session|login/i.test(message)) {
+    if (connector.kind !== 'douban' && /expired|session|login/i.test(message)) {
       await deps.connectorsRepo.updateState(userId, connector.id, { status: 'reauth_required' })
     }
     throw error
@@ -303,7 +140,9 @@ export async function saveConnectorPlaylistSelection(
   selectedPlaylistIds: string[],
 ): Promise<{ selectedPlaylists: number }> {
   const connector = await deps.connectorsRepo.get(userId, connectorId)
-  if (connector?.kind !== 'netease') throw new Error('Netease connector was not found.')
+  if (!connector || connector.kind === 'douban' || !deps.musicConnectors.has(connector.kind)) {
+    throw new Error('Music connector was not found.')
+  }
   const collections = await deps.musicCollectionsRepo.listForConnector(userId, connectorId)
   const knownIds = new Set(collections.map((item) => item.id))
   if (selectedPlaylistIds.some((id) => !knownIds.has(id))) throw new Error('Connector playlist was not found.')
@@ -320,18 +159,18 @@ async function syncDoubanConnector(deps: Deps, connector: ConnectorRecord): Prom
   return importLibraryEntries(deps, connector.userId, entries, tmdb)
 }
 
-async function syncNeteaseConnector(
+async function syncMusicConnector(
   deps: Deps,
   env: Env,
   connector: ConnectorRecord,
   forceRefresh: boolean,
 ): Promise<MusicPlaylistSyncResult> {
-  if (!connector.credentialsEncrypted) throw new Error('Netease connector has no credentials.')
-  const credentials = await decryptConnectorCredentials(
-    env.CONNECTOR_CREDENTIALS_SECRET,
-    connector.credentialsEncrypted,
+  if (!connector.credentialsEncrypted) throw new Error(`${connector.kind} connector has no credentials.`)
+  const module = getMusicConnector(deps, connector.kind)
+  const session = module.open(
+    await decryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, connector.credentialsEncrypted),
   )
-  const remotePlaylists = await deps.musicPlaylistConnectors.netease.listPlaylists(credentials)
+  const remotePlaylists = await session.listPlaylists()
   const existing = await deps.musicCollectionsRepo.listForConnector(connector.userId, connector.id)
   const selectedCollections: Array<{ id: string; externalId: string; tracks: ImportedMusicTrack[] }> = []
   for (const playlist of remotePlaylists) {
@@ -339,7 +178,7 @@ async function syncNeteaseConnector(
     const collection = await deps.musicCollectionsRepo.upsert(connector.userId, {
       connectorId: connector.id,
       kind: 'playlist',
-      provider: 'netease',
+      provider: connector.kind,
       externalId: playlist.externalId,
       title: playlist.title,
       description: playlist.description,
@@ -355,11 +194,12 @@ async function syncNeteaseConnector(
   }
 
   for (const collection of selectedCollections) {
-    collection.tracks = await deps.musicPlaylistConnectors.netease.listTracks(credentials, collection.externalId)
+    collection.tracks = await session.listTracks(collection.externalId)
   }
-  const hydratedTracks = await hydrateNeteaseAlbumMetadata(
+  const hydratedTracks = await hydrateReleaseMetadata(
     deps,
-    credentials,
+    module,
+    session,
     selectedCollections.flatMap((collection) => collection.tracks),
     forceRefresh,
   )
@@ -377,7 +217,7 @@ async function syncNeteaseConnector(
     connector.id,
     remotePlaylists.map((item) => item.externalId),
   )
-  await refreshNeteaseTrackAvailability(deps, connector, credentials, forceRefresh)
+  await refreshTrackAvailability(deps, connector, session, forceRefresh)
   for (const collection of selectedCollections) {
     await evaluateMusicCollectionSubscription(deps, connector.userId, collection.id)
   }
@@ -389,52 +229,61 @@ async function syncNeteaseConnector(
   }
 }
 
-async function hydrateNeteaseAlbumMetadata(
+async function hydrateReleaseMetadata(
   deps: Deps,
-  credentials: string[],
+  module: MusicConnectorModule,
+  session: MusicConnectorSession,
   tracks: ImportedMusicTrack[],
   force: boolean,
 ): Promise<ImportedMusicTrack[]> {
-  const albumIds = [...new Set(tracks.flatMap((track) => (track.albumExternalId ? [track.albumExternalId] : [])))]
-  if (albumIds.length === 0) return tracks
+  const releaseIds = [...new Set(tracks.flatMap((track) => (track.release ? [track.release.externalId] : [])))]
+  if (releaseIds.length === 0) return tracks
   const staleBefore = force
     ? new Date().toISOString()
-    : new Date(Date.now() - MUSIC_ALBUM_METADATA_TTL_MS).toISOString()
-  const cached = await deps.musicCollectionsRepo.listAlbumMetadata('netease', albumIds, staleBefore)
-  const metadata = new Map(cached.map((album) => [album.externalId, album]))
-  const missingIds = albumIds.filter((id) => !metadata.has(id))
+    : new Date(Date.now() - MUSIC_RELEASE_METADATA_TTL_MS).toISOString()
+  const cached = await deps.musicCollectionsRepo.listReleaseMetadata(module.definition.kind, releaseIds, staleBefore)
+  const metadata = new Map(cached.map((release) => [release.externalId, release]))
+  const missingIds = releaseIds.filter((id) => !metadata.has(id))
   const updatedAt = new Date().toISOString()
-  const imported = await deps.musicPlaylistConnectors.netease.getAlbums(credentials, missingIds)
-  for (const album of imported) {
-    metadata.set(album.externalId, { provider: 'netease', ...album, updatedAt })
+  const imported = await session.getReleases(missingIds)
+  for (const release of imported) {
+    metadata.set(release.externalId, { provider: module.definition.kind, ...release, updatedAt })
   }
 
   const unresolvedIds = missingIds.filter((id) => !metadata.has(id))
   if (unresolvedIds.length > 0) {
-    throw new Error(`Netease did not return album metadata for ${unresolvedIds.join(', ')}.`)
+    throw new Error(`${module.definition.kind} did not return release metadata for ${unresolvedIds.join(', ')}.`)
   }
-  return tracks.map((track) => applyAlbumMetadata(track, metadata))
+  return tracks.map((track) => applyReleaseMetadata(track, metadata))
 }
 
-function applyAlbumMetadata(track: ImportedMusicTrack, metadata: Map<string, MusicAlbumMetadata>): ImportedMusicTrack {
-  if (!track.albumExternalId) return track
-  const album = metadata.get(track.albumExternalId)
-  if (!album) return track
+function applyReleaseMetadata(
+  track: ImportedMusicTrack,
+  metadata: Map<string, MusicReleaseMetadata>,
+): ImportedMusicTrack {
+  if (!track.release) return track
+  const release = metadata.get(track.release.externalId)
+  if (!release) return track
   return {
     ...track,
-    albumTitle: album.title,
-    albumArtists: album.artists,
-    albumReleaseDate: album.releaseDate,
-    albumReleaseType: album.releaseType,
-    albumMetadataUpdatedAt: album.updatedAt,
-    coverUrl: album.coverUrl ?? track.coverUrl,
+    release: {
+      ...track.release,
+      title: release.title,
+      artists: release.artists,
+      releaseDate: release.releaseDate,
+      releaseType: release.releaseType,
+      providerReleaseType: release.providerReleaseType,
+      coverUrl: release.coverUrl,
+      metadataUpdatedAt: release.updatedAt,
+    },
+    coverUrl: release.coverUrl ?? track.coverUrl,
   }
 }
 
-async function refreshNeteaseTrackAvailability(
+async function refreshTrackAvailability(
   deps: Deps,
   connector: ConnectorRecord,
-  credentials: string[],
+  session: MusicConnectorSession,
   force: boolean,
 ): Promise<void> {
   const now = new Date()
@@ -451,10 +300,7 @@ async function refreshNeteaseTrackAvailability(
     )
     if (candidates.length === 0) return
 
-    const result = await deps.musicPlaylistConnectors.netease.checkTrackAvailability(
-      credentials,
-      candidates.map((track) => track.externalId),
-    )
+    const result = await session.checkTrackAvailability(candidates.map((track) => track.externalId))
     const checkedAt = new Date().toISOString()
     await deps.musicCollectionsRepo.setTrackAvailabilities(
       connector.userId,
@@ -485,27 +331,6 @@ async function refreshNeteaseTrackAvailability(
       return
     }
   }
-}
-
-async function saveConnectedNeteaseConnector(
-  deps: Deps,
-  env: Env,
-  userId: string,
-  account: ConnectedMusicAccount,
-  credentialsEncrypted: string,
-): Promise<ConnectorSummary> {
-  const record = await deps.connectorsRepo.save(userId, 'netease', {
-    externalAccountId: account.externalAccountId,
-    displayName: account.displayName,
-    avatarUrl: account.avatarUrl,
-    settings: {},
-    credentialsEncrypted,
-    status: 'connected',
-    enabled: true,
-  })
-  await syncConnector(deps, env, userId, record.id, 'login')
-  const synced = await deps.connectorsRepo.get(userId, record.id)
-  return synced ? toSummary(synced) : toSummary(record)
 }
 
 async function importLibraryEntries(
@@ -552,8 +377,9 @@ async function matchImportedEntry(
   return null
 }
 
-function toSummary(record: ConnectorRecord): ConnectorSummary {
-  const definition = CONNECTOR_DEFINITIONS[record.kind]
+export function toConnectorSummary(deps: Deps, record: ConnectorRecord): ConnectorSummary {
+  const definition =
+    record.kind === 'douban' ? CONNECTOR_DEFINITIONS.douban : getMusicConnector(deps, record.kind).definition
   return {
     id: record.id,
     kind: record.kind,
@@ -572,38 +398,10 @@ function toSummary(record: ConnectorRecord): ConnectorSummary {
   }
 }
 
-function toLoginAttempt(
-  record: { id: string; kind: 'netease'; externalKey: string; expiresAt: string },
-  status: ConnectorLoginAttempt['status'],
-): ConnectorLoginAttempt {
-  const riskVerification = parseRiskVerification(record.externalKey)
-  return {
-    id: record.id,
-    kind: record.kind,
-    qrUrl: riskVerification?.qrUrl ?? `https://music.163.com/login?codekey=${encodeURIComponent(record.externalKey)}`,
-    status,
-    expiresAt: record.expiresAt,
-  }
-}
-
-function encodeRiskVerification(value: { qrCode: string; qrUrl: string }, loginKey?: string): string {
-  return `risk:${JSON.stringify(loginKey ? { ...value, loginKey } : value)}`
-}
-
-function parseRiskVerification(value: string): { qrCode: string; qrUrl: string; loginKey?: string } | null {
-  if (!value.startsWith('risk:')) return null
-  const parsed = JSON.parse(value.slice('risk:'.length)) as {
-    qrCode?: unknown
-    qrUrl?: unknown
-    loginKey?: unknown
-  }
-  if (typeof parsed.qrCode !== 'string' || typeof parsed.qrUrl !== 'string') {
-    throw new Error('Netease account verification data is invalid.')
-  }
-  if (parsed.loginKey !== undefined && typeof parsed.loginKey !== 'string') {
-    throw new Error('Netease account verification login key is invalid.')
-  }
-  return { qrCode: parsed.qrCode, qrUrl: parsed.qrUrl, loginKey: parsed.loginKey }
+function getMusicConnector(deps: Deps, kind: string): MusicConnectorModule {
+  const module = deps.musicConnectors.get(kind)
+  if (!module) throw new Error(`Unsupported music connector: ${kind}.`)
+  return module
 }
 
 function normalizeDoubanProfileId(value: string): string {

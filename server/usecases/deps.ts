@@ -18,10 +18,9 @@ import type {
   MediaSourcesRepo,
   MediaSubscriptionsRepo,
   MusicCollectionsRepo,
+  MusicConnectorModule,
   MusicDownloadKeysRepo,
-  MusicPlaylistConnector,
   MusicProvider,
-  MusicResourceResolver,
   UsersRepo,
 } from './ports'
 
@@ -47,6 +46,5 @@ export interface Deps {
   bookProvider: BookProvider
   musicProvider: MusicProvider
   libraryImporters: { douban: LibraryEntryImporter }
-  musicPlaylistConnectors: { netease: MusicPlaylistConnector }
-  musicResourceResolvers: { netease: MusicResourceResolver }
+  musicConnectors: ReadonlyMap<string, MusicConnectorModule>
 }

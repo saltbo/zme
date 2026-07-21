@@ -351,6 +351,8 @@ function toSubscription(row: typeof mediaSubscriptions.$inferSelect): MediaSubsc
 }
 
 function toDownloadRecord(row: typeof downloadRecords.$inferSelect): DownloadRecordRecord {
+  const storedConfig = JSON.parse(row.configJson) as Partial<DownloadRecordRecord['config']>
+  if (!storedConfig.preferredQuality) throw new Error(`Download record ${row.id} has invalid config.`)
   return {
     id: row.id,
     userId: row.userId,
@@ -359,7 +361,11 @@ function toDownloadRecord(row: typeof downloadRecords.$inferSelect): DownloadRec
     laneKey: row.laneKey,
     generation: row.generation,
     downloaderId: row.downloaderId,
-    config: JSON.parse(row.configJson) as DownloadRecordRecord['config'],
+    config: {
+      preferredQuality: storedConfig.preferredQuality,
+      resolvedQuality: storedConfig.resolvedQuality ?? null,
+      releaseId: storedConfig.releaseId ?? null,
+    },
     status: row.status,
     attemptCount: row.attemptCount,
     externalTaskId: row.externalTaskId,

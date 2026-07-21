@@ -1,4 +1,4 @@
-import { encryptEapi, encryptXeapi } from '@server/adapters/providers/netease'
+import { encryptEapi, encryptXeapi } from '@server/adapters/music-connectors/netease'
 import { describe, expect, it } from 'vitest'
 
 describe('Netease EAPI crypto in workerd', () => {

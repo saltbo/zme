@@ -4,7 +4,6 @@ import { parseMusicLaneKey } from './media-subscriptions'
 import { dispatchMusicDownloadRecord } from './music-downloads'
 import { MusicResourceUnavailableError } from './ports'
 
-const MUSIC_DISPATCH_INTERVAL_SECONDS = 10
 const LANE_LEASE_MS = 5 * 60_000
 const RISK_PAUSE_MS = 6 * 60 * 60 * 1000
 const MAX_ATTEMPTS = 3
@@ -45,7 +44,11 @@ export async function processDownloadDispatch(
     return { retryAfterSeconds: null }
   }
 
-  let nextDelaySeconds = MUSIC_DISPATCH_INTERVAL_SECONDS
+  const connector = await deps.connectorsRepo.get(record.userId, connectorId)
+  if (!connector) throw new Error(`Download dispatch connector was not found: ${connectorId}`)
+  const musicConnector = deps.musicConnectors.get(connector.kind)
+  if (!musicConnector) throw new Error(`Unsupported music connector: ${connector.kind}`)
+  let nextDelaySeconds = musicConnector.definition.dispatchIntervalSeconds
   try {
     if (!(await deps.downloadRecordsRepo.isWanted(record.id))) {
       await deps.downloadRecordsRepo.update(record.id, record.generation, {

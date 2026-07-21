@@ -35,13 +35,7 @@ const tracks: MusicCollectionDetails['tracks'] = [
     mediaKey: 'netease:track:remote-track-1',
     title: 'Available Track',
     artists: ['Artist'],
-    albumTitle: null,
-    albumExternalId: null,
-    albumArtists: [],
-    albumReleaseDate: null,
-    albumReleaseType: null,
-    discNumber: null,
-    trackNumber: null,
+    release: null,
     coverUrl: null,
     durationMs: null,
     isrcs: [],
@@ -60,13 +54,7 @@ const tracks: MusicCollectionDetails['tracks'] = [
     mediaKey: 'netease:track:remote-track-2',
     title: 'Unavailable Track',
     artists: ['Artist'],
-    albumTitle: null,
-    albumExternalId: null,
-    albumArtists: [],
-    albumReleaseDate: null,
-    albumReleaseType: null,
-    discNumber: null,
-    trackNumber: null,
+    release: null,
     coverUrl: null,
     durationMs: null,
     isrcs: [],
@@ -103,6 +91,22 @@ function createFixture() {
       }),
     },
     downloaderGateways: { zpan: { supportedSourceTypes: ['magnet', 'torrent_url', 'http'] } },
+    musicConnectors: new Map([
+      [
+        'netease',
+        {
+          definition: {
+            kind: 'netease',
+            authModes: ['qr', 'sms'],
+            capabilities: ['music.playlists.read', 'music.tracks.download'],
+            dispatchIntervalSeconds: 10,
+          },
+        },
+      ],
+    ]),
+    connectorsRepo: {
+      get: async () => ({ enabled: true, status: 'connected' }),
+    },
     mediaSubscriptionsRepo: {
       find: async () => subscription,
       upsertMusicCollection: async (
@@ -186,7 +190,7 @@ describe('music collection subscriptions', () => {
     expect(fixture.records.map((record) => record.config.preferredQuality)).toEqual(['hires', 'hires'])
     expect(fixture.links.size).toBe(2)
     expect(fixture.wake).toHaveBeenCalledOnce()
-    expect(fixture.wake).toHaveBeenCalledWith('netease:connector-1')
+    expect(fixture.wake).toHaveBeenCalledWith('music:connector-1')
     expect(fixture.markEvaluated).toHaveBeenCalledOnce()
   })
 

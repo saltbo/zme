@@ -53,8 +53,16 @@ export async function enableMusicCollectionSubscription(
 ): Promise<MusicSubscriptionMutationResult> {
   const collection = await deps.musicCollectionsRepo.get(userId, collectionId)
   if (!collection?.libraryAddedAt) throw new MusicSubscriptionError('Music collection was not found.', 404)
-  if (collection.kind !== 'playlist' || collection.provider !== 'netease' || !collection.connectorId) {
-    throw new MusicSubscriptionError('Automatic downloads are only available for synced Netease playlists.', 400)
+  if (
+    collection.kind !== 'playlist' ||
+    !collection.connectorId ||
+    !deps.musicConnectors.get(collection.provider)?.definition.capabilities.includes('music.tracks.download')
+  ) {
+    throw new MusicSubscriptionError('Automatic downloads are only available for downloadable synced playlists.', 400)
+  }
+  const connector = await deps.connectorsRepo.get(userId, collection.connectorId)
+  if (!connector?.enabled || connector.status !== 'connected') {
+    throw new MusicSubscriptionError('Music connector is not available.', 409)
   }
   await requireHttpDownloader(deps, userId, input.downloaderId)
 
@@ -89,7 +97,13 @@ export async function evaluateMusicCollectionSubscription(
   const subscription = await deps.mediaSubscriptionsRepo.find(userId, 'music_collection', collectionId)
   if (!subscription?.enabled) return
   const collection = await deps.musicCollectionsRepo.get(userId, collectionId)
-  if (!collection?.connectorId || collection.provider !== 'netease' || collection.kind !== 'playlist') return
+  if (
+    !collection?.connectorId ||
+    collection.kind !== 'playlist' ||
+    !deps.musicConnectors.get(collection.provider)?.definition.capabilities.includes('music.tracks.download')
+  ) {
+    return
+  }
   await evaluateMusicSubscription(deps, subscription, collection.connectorId)
 }
 
@@ -126,6 +140,7 @@ async function evaluateMusicSubscription(
       config: {
         preferredQuality: AUTOMATIC_MUSIC_DOWNLOAD_QUALITY,
         resolvedQuality: null,
+        releaseId: track.release?.id ?? null,
       },
       status,
       attemptCount: 0,
@@ -162,6 +177,7 @@ async function evaluateMusicSubscription(
           config: {
             preferredQuality: AUTOMATIC_MUSIC_DOWNLOAD_QUALITY,
             resolvedQuality: null,
+            releaseId: track.release?.id ?? null,
           },
           status: track.downloadStatus === 'unavailable' ? 'waiting_source' : 'queued',
           attemptCount: 0,
@@ -200,11 +216,11 @@ async function requireHttpDownloader(deps: Deps, userId: string, downloaderId: s
 }
 
 export function musicLaneKey(connectorId: string) {
-  return `netease:${connectorId}`
+  return `music:${connectorId}`
 }
 
 export function parseMusicLaneKey(laneKey: string): string | null {
-  const prefix = 'netease:'
+  const prefix = 'music:'
   return laneKey.startsWith(prefix) && laneKey.length > prefix.length ? laneKey.slice(prefix.length) : null
 }
 

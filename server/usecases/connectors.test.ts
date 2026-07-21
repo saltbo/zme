@@ -2,15 +2,9 @@ import { decryptConnectorCredentials, encryptConnectorCredentials } from '@serve
 import type { Env } from '@server/env'
 import type { MediaSearchItem, MusicCollectionSummary } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  checkNeteaseLogin,
-  enqueueConnectorSync,
-  loginNeteaseWithSms,
-  saveConnectorPlaylistSelection,
-  sendNeteaseSmsCode,
-  syncConnector,
-} from './connectors'
+import { enqueueConnectorSync, saveConnectorPlaylistSelection, syncConnector } from './connectors'
 import type { Deps } from './deps'
+import { checkNeteaseLogin, loginNeteaseWithSms, sendNeteaseSmsCode } from './music-connectors/netease'
 import type {
   ConnectorLoginAttemptRecord,
   ConnectorRecord,
@@ -39,6 +33,19 @@ const connectorRecord: ConnectorRecord = {
 
 afterEach(() => vi.restoreAllMocks())
 
+function neteaseModule(input: { auth?: Record<string, unknown>; session?: Record<string, unknown> } = {}) {
+  return {
+    definition: {
+      kind: 'netease',
+      authModes: ['qr', 'sms'],
+      capabilities: ['music.playlists.read', 'music.tracks.download'],
+      dispatchIntervalSeconds: 10,
+    },
+    auth: input.auth ?? {},
+    open: () => input.session ?? {},
+  }
+}
+
 function musicTrackRecord(id: string, externalId: string): MusicTrackRecord {
   return {
     id,
@@ -47,13 +54,7 @@ function musicTrackRecord(id: string, externalId: string): MusicTrackRecord {
     mediaKey: `netease:track:${externalId}`,
     title: externalId,
     artists: ['Artist'],
-    albumTitle: null,
-    albumExternalId: null,
-    albumArtists: [],
-    albumReleaseDate: null,
-    albumReleaseType: null,
-    discNumber: null,
-    trackNumber: null,
+    release: null,
     coverUrl: null,
     durationMs: null,
     isrcs: [],
@@ -224,13 +225,14 @@ describe('syncConnector', () => {
     const availabilityChecks: string[][] = []
     const availabilityUpdates: unknown[] = []
     const availabilityClears: string[] = []
-    const getAlbums = vi.fn(async () => [
+    const getReleases = vi.fn(async () => [
       {
         externalId: 'album-1',
         title: 'Canonical Album',
         artists: ['Album Artist'],
         releaseDate: '2024-03-02',
-        releaseType: 'Album',
+        releaseType: 'album',
+        providerReleaseType: 'Album',
         coverUrl: 'https://img.test/album.jpg',
       },
     ])
@@ -243,51 +245,61 @@ describe('syncConnector', () => {
         }),
         markSynced: async () => undefined,
       },
-      musicPlaylistConnectors: {
-        netease: {
-          listPlaylists: async () => remotePlaylists,
-          listTracks: async (_credentials: string[], playlistId: string) => {
-            fetchedTrackPlaylists.push(playlistId)
-            return [
-              {
-                provider: 'netease' as const,
-                externalId: `track-${playlistId}`,
-                mediaKey: `netease:track:${playlistId}`,
-                title: `Track ${playlistId}`,
-                artists: ['Artist'],
-                albumTitle: 'Compact Album Name',
-                albumExternalId: 'album-1',
-                albumArtists: [],
-                albumReleaseDate: null,
-                albumReleaseType: null,
-                albumMetadataUpdatedAt: null,
-                discNumber: 1,
-                trackNumber: 2,
-                coverUrl: null,
-                durationMs: null,
-                isrcs: [],
+      musicConnectors: new Map([
+        [
+          'netease',
+          neteaseModule({
+            session: {
+              listPlaylists: async () => remotePlaylists,
+              listTracks: async (playlistId: string) => {
+                fetchedTrackPlaylists.push(playlistId)
+                return [
+                  {
+                    provider: 'netease' as const,
+                    externalId: `track-${playlistId}`,
+                    mediaKey: `netease:track:${playlistId}`,
+                    title: `Track ${playlistId}`,
+                    artists: ['Artist'],
+                    release: {
+                      provider: 'netease',
+                      externalId: 'album-1',
+                      title: 'Compact Album Name',
+                      artists: [],
+                      releaseDate: null,
+                      releaseType: 'unknown',
+                      providerReleaseType: null,
+                      coverUrl: null,
+                      metadataUpdatedAt: null,
+                      discNumber: 1,
+                      trackNumber: 2,
+                    },
+                    coverUrl: null,
+                    durationMs: null,
+                    isrcs: [],
+                  },
+                ]
               },
-            ]
-          },
-          getAlbums,
-          checkTrackAvailability: async (_credentials: string[], trackIds: string[]) => {
-            availabilityChecks.push(trackIds)
-            return {
-              results: new Map([
-                [
-                  trackIds[0] ?? '',
-                  { status: 'available' as const, reason: null, providerCode: '200', providerDetails: {} },
-                ],
-              ]),
-              interrupted: {
-                reason: 'rate_limited' as const,
-                providerCode: '429',
-                message: 'Netease request failed: 429',
+              getReleases,
+              checkTrackAvailability: async (trackIds: string[]) => {
+                availabilityChecks.push(trackIds)
+                return {
+                  results: new Map([
+                    [
+                      trackIds[0] ?? '',
+                      { status: 'available' as const, reason: null, providerCode: '200', providerDetails: {} },
+                    ],
+                  ]),
+                  interrupted: {
+                    reason: 'rate_limited' as const,
+                    providerCode: '429',
+                    message: 'Netease request failed: 429',
+                  },
+                }
               },
-            }
-          },
-        },
-      },
+            },
+          }),
+        ],
+      ]),
       musicCollectionsRepo: {
         listForConnector: async () => existing,
         upsert: async (userId: string, input: Parameters<Deps['musicCollectionsRepo']['upsert']>[1]) => ({
@@ -299,7 +311,7 @@ describe('syncConnector', () => {
           replacedCollections.push(collectionId)
           replacedTracks.push(playlistTracks)
         },
-        listAlbumMetadata: async () => [],
+        listReleaseMetadata: async () => [],
         updateSnapshot: async () => existing[0],
         deleteMissingConnectorCollections: async () => undefined,
         clearTrackAvailabilities: async (connectorId: string) => {
@@ -326,17 +338,20 @@ describe('syncConnector', () => {
 
     expect(fetchedTrackPlaylists).toEqual(['remote-1', 'remote-2'])
     expect(replacedCollections).toEqual(['playlist-1', 'playlist-2'])
-    expect(getAlbums).toHaveBeenCalledOnce()
-    expect(getAlbums).toHaveBeenCalledWith(['MUSIC_U=session-value'], ['album-1'])
+    expect(getReleases).toHaveBeenCalledOnce()
+    expect(getReleases).toHaveBeenCalledWith(['album-1'])
     expect(replacedTracks[0]?.[0]).toMatchObject({
-      albumTitle: 'Canonical Album',
-      albumArtists: ['Album Artist'],
-      albumReleaseDate: '2024-03-02',
-      albumReleaseType: 'Album',
-      discNumber: 1,
-      trackNumber: 2,
+      release: {
+        title: 'Canonical Album',
+        artists: ['Album Artist'],
+        releaseDate: '2024-03-02',
+        releaseType: 'album',
+        providerReleaseType: 'Album',
+        discNumber: 1,
+        trackNumber: 2,
+        metadataUpdatedAt: expect.any(String),
+      },
       coverUrl: 'https://img.test/album.jpg',
-      albumMetadataUpdatedAt: expect.any(String),
     })
     expect(availabilityClears).toEqual(['connector-1'])
     expect(availabilityChecks).toEqual([['track-remote-1', 'track-remote-2']])
@@ -400,13 +415,7 @@ describe('saveConnectorPlaylistSelection', () => {
           throw new Error('Playlist selection must not synchronize tracks.')
         },
       },
-      musicPlaylistConnectors: {
-        netease: {
-          listTracks: async () => {
-            throw new Error('Playlist selection must not call Netease.')
-          },
-        },
-      },
+      musicConnectors: new Map([['netease', neteaseModule()]]),
       connectorSyncQueue: { enqueue },
     } as never as Deps
 
@@ -424,6 +433,7 @@ describe('saveConnectorPlaylistSelection', () => {
     const deps = {
       connectorsRepo: { get: async () => ({ ...connectorRecord, kind: 'netease' as const }) },
       musicCollectionsRepo: { listForConnector: async () => [], setLibrarySelections },
+      musicConnectors: new Map([['netease', neteaseModule()]]),
       connectorSyncQueue: { enqueue },
     } as never as Deps
 
@@ -453,13 +463,20 @@ describe('Netease SMS login', () => {
   it('delegates SMS code delivery without persisting the recipient', async () => {
     let received: { countryCode: string; phone: string } | null = null
     const deps = {
-      musicPlaylistConnectors: {
-        netease: {
-          sendSmsCode: async (input: { countryCode: string; phone: string }) => {
-            received = input
-          },
-        },
-      },
+      musicConnectors: new Map([
+        [
+          'netease',
+          neteaseModule({
+            auth: {
+              sms: {
+                sendSmsCode: async (input: { countryCode: string; phone: string }) => {
+                  received = input
+                },
+              },
+            },
+          }),
+        ],
+      ]),
     } as never as Deps
 
     await sendNeteaseSmsCode(deps, { countryCode: '86', phone: '13800138000' })
@@ -493,20 +510,27 @@ describe('Netease SMS login', () => {
         get: async () => record,
         markSynced: async () => undefined,
       },
-      musicPlaylistConnectors: {
-        netease: {
-          loginWithSms: async () => ({
-            status: 'connected',
-            cookies: ['MUSIC_U=session-value', '__csrf=csrf-value'],
-            account: {
-              externalAccountId: '42',
-              displayName: 'Music Fan',
-              avatarUrl: 'https://img.test/42.jpg',
+      musicConnectors: new Map([
+        [
+          'netease',
+          neteaseModule({
+            auth: {
+              sms: {
+                loginWithSms: async () => ({
+                  status: 'connected',
+                  cookies: ['MUSIC_U=session-value', '__csrf=csrf-value'],
+                  account: {
+                    externalAccountId: '42',
+                    displayName: 'Music Fan',
+                    avatarUrl: 'https://img.test/42.jpg',
+                  },
+                }),
+              },
             },
+            session: { listPlaylists: async () => [] },
           }),
-          listPlaylists: async () => [],
-        },
-      },
+        ],
+      ]),
       musicCollectionsRepo: {
         listForConnector: async () => [],
         deleteMissingConnectorCollections: async () => undefined,
@@ -552,19 +576,26 @@ describe('Netease SMS login', () => {
           created.attempt = attempt
         },
       },
-      musicPlaylistConnectors: {
-        netease: {
-          loginWithSms: async () => ({
-            status: 'verification_required',
-            cookies: ['deviceId=device-1', 'NMTID=nmtid-1'],
-            verification: {
-              qrCode: 'risk-qr-code',
-              qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
-              expiresAt: '2026-07-20T01:05:00.000Z',
+      musicConnectors: new Map([
+        [
+          'netease',
+          neteaseModule({
+            auth: {
+              sms: {
+                loginWithSms: async () => ({
+                  status: 'verification_required',
+                  cookies: ['deviceId=device-1', 'NMTID=nmtid-1'],
+                  verification: {
+                    qrCode: 'risk-qr-code',
+                    qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+                    expiresAt: '2026-07-20T01:05:00.000Z',
+                  },
+                }),
+              },
             },
           }),
-        },
-      },
+        ],
+      ]),
     } as never as Deps
 
     const result = await loginNeteaseWithSms(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', {
@@ -611,19 +642,26 @@ describe('Netease QR login', () => {
           return attempt
         },
       },
-      musicPlaylistConnectors: {
-        netease: {
-          checkQrLogin: async () => ({
-            status: 'verification_required',
-            cookies: ['MUSIC_A=anonymous-session', 'deviceId=device-1'],
-            verification: {
-              qrCode: 'risk-qr-code',
-              qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
-              expiresAt: '2099-07-20T01:05:00.000Z',
+      musicConnectors: new Map([
+        [
+          'netease',
+          neteaseModule({
+            auth: {
+              qr: {
+                checkQrLogin: async () => ({
+                  status: 'verification_required',
+                  cookies: ['MUSIC_A=anonymous-session', 'deviceId=device-1'],
+                  verification: {
+                    qrCode: 'risk-qr-code',
+                    qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+                    expiresAt: '2099-07-20T01:05:00.000Z',
+                  },
+                }),
+              },
             },
           }),
-        },
-      },
+        ],
+      ]),
     } as never as Deps
 
     const result = await checkNeteaseLogin(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', 'attempt-1')

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { discoverMusicAlbums, getMusicAlbumDetails, searchMusicAlbums } from './music'
+import { discoverMusicAlbums, getMusicAlbumDetails, searchMusicAlbums } from '.'
 
 const releaseGroupMbid = 'f5093c06-23e3-404f-aeaa-40f72885ee3a'
 const releaseMbid = '59211ea4-fb59-49dd-a69e-83d1666a1aa5'

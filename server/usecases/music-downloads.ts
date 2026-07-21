@@ -1,8 +1,4 @@
-import {
-  decryptConnectorCredentials,
-  decryptConnectorPayload,
-  encryptConnectorPayload,
-} from '@server/domain/connector-credentials'
+import { decryptConnectorPayload, encryptConnectorPayload } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import { buildMusicDownloadFilename, buildMusicDownloadSubdirectory } from '@shared/download-metadata'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
@@ -37,15 +33,16 @@ export async function submitMusicTrackDownload(
   trackId: string,
   input: MusicTrackDownloadInput,
 ): Promise<CreateDownloadResult> {
-  const track = await deps.musicCollectionsRepo.getLibraryTrack(userId, trackId)
+  const track = await deps.musicCollectionsRepo.getLibraryTrack(userId, trackId, input.releaseId)
   if (!track) throw new MusicDownloadError('Music track was not found in the library.', 404)
-  if (track.provider !== 'netease') {
+  const module = deps.musicConnectors.get(track.provider)
+  if (!module?.definition.capabilities.includes('music.tracks.download')) {
     throw new MusicDownloadError('This music provider does not support direct downloads.', 400)
   }
 
-  const connector = await deps.connectorsRepo.findByKind(userId, 'netease')
+  const connector = await deps.connectorsRepo.findByKind(userId, track.provider)
   if (!connector?.enabled || connector.status !== 'connected' || !connector.credentialsEncrypted) {
-    throw new MusicDownloadError('The Netease connector is not available.', 409)
+    throw new MusicDownloadError(`The ${track.provider} connector is not available.`, 409)
   }
   const downloader = await deps.downloadersRepo.getEnabled(userId, input.downloaderId)
   if (!downloader) throw new MusicDownloadError('Downloader is not available.', 404)
@@ -68,7 +65,7 @@ export async function submitMusicTrackDownload(
       laneKey,
       generation: 1,
       downloaderId: input.downloaderId,
-      config: { preferredQuality: quality, resolvedQuality: null },
+      config: { preferredQuality: quality, resolvedQuality: null, releaseId: track.release?.id ?? null },
       status: 'queued',
       attemptCount: 0,
       externalTaskId: null,
@@ -105,7 +102,7 @@ export async function submitMusicTrackDownload(
         laneKey,
         generation: current.generation + 1,
         downloaderId: input.downloaderId,
-        config: { preferredQuality: quality, resolvedQuality: null },
+        config: { preferredQuality: quality, resolvedQuality: null, releaseId: track.release?.id ?? null },
         status: 'queued',
         attemptCount: 0,
         externalTaskId: null,
@@ -129,12 +126,12 @@ export async function dispatchMusicDownloadRecord(
   record: DownloadRecordRecord,
   connectorId: string,
 ): Promise<void> {
-  const track = await deps.musicCollectionsRepo.getTrackByMediaKey(record.resourceKey)
+  const track = await deps.musicCollectionsRepo.getTrackByMediaKey(record.resourceKey, record.config.releaseId)
   if (!track) throw new MusicDownloadError('Music track was not found.', 404)
   if (!record.downloaderId) throw new MusicDownloadError('Downloader is not available.', 404)
   const connector = await deps.connectorsRepo.get(record.userId, connectorId)
   if (!connector?.enabled || connector.status !== 'connected' || !connector.credentialsEncrypted) {
-    throw new MusicDownloadError('The Netease connector is not available.', 409)
+    throw new MusicDownloadError(`The ${track.provider} connector is not available.`, 409)
   }
 
   let resource: ResolvedMusicResource
@@ -157,6 +154,7 @@ export async function dispatchMusicDownloadRecord(
 
   const key = createAccessKey()
   const now = new Date()
+  const filename = buildMusicDownloadFilename(track, resource.extension)
   const access = {
     id: crypto.randomUUID(),
     keyHash: await hashAccessKey(key),
@@ -165,7 +163,7 @@ export async function dispatchMusicDownloadRecord(
     trackId: track.id,
     downloaderId: record.downloaderId,
     quality: resource.quality,
-    resourceEncrypted: await encryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, resource),
+    resourceEncrypted: await encryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, { resource, filename }),
     expiresAt: new Date(now.getTime() + MUSIC_DOWNLOAD_KEY_TTL_MS).toISOString(),
     revokedAt: null,
     createdAt: now.toISOString(),
@@ -184,7 +182,7 @@ export async function dispatchMusicDownloadRecord(
       downloaderId: record.downloaderId,
       sourceType: 'http',
       uri: downloadUrl.toString(),
-      title: buildMusicDownloadFilename(track, resource.extension),
+      title: filename,
       category: 'zme:music',
       targetSubdirectory: buildMusicDownloadSubdirectory(track),
       tags: [
@@ -225,20 +223,22 @@ export async function resolveMusicTrackDownload(
 
   const track = await deps.musicCollectionsRepo.getTrack(access.trackId)
   if (!track) throw new MusicDownloadError('Music track was not found.', 404)
-  if (track.provider !== 'netease') {
+  const module = deps.musicConnectors.get(track.provider)
+  if (!module?.definition.capabilities.includes('music.tracks.download')) {
     throw new MusicDownloadError('This music provider does not support direct downloads.', 400)
   }
 
   if (access.resourceEncrypted) {
-    const resource = parseResolvedMusicResource(
+    const stored = parseStoredMusicResource(
       await decryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, access.resourceEncrypted),
+      track,
     )
-    return { resource, filename: buildMusicDownloadFilename(track, resource.extension) }
+    return stored
   }
 
   const connector = await deps.connectorsRepo.get(access.userId, access.connectorId)
   if (!connector?.enabled || connector.status !== 'connected' || !connector.credentialsEncrypted) {
-    throw new MusicDownloadError('The Netease connector is not available.', 409)
+    throw new MusicDownloadError(`The ${track.provider} connector is not available.`, 409)
   }
 
   try {
@@ -282,12 +282,11 @@ async function resolveTrackResource(
   connector: ConnectorRecord,
   quality: MusicDownloadQuality,
 ): Promise<ResolvedMusicResource> {
-  if (!connector.credentialsEncrypted) throw new Error('Netease connector has no credentials.')
-  const credentials = await decryptConnectorCredentials(
-    env.CONNECTOR_CREDENTIALS_SECRET,
-    connector.credentialsEncrypted,
-  )
-  return deps.musicResourceResolvers.netease.resolve(credentials, {
+  if (!connector.credentialsEncrypted) throw new Error(`${connector.kind} connector has no credentials.`)
+  const module = deps.musicConnectors.get(connector.kind)
+  if (!module) throw new Error(`Unsupported music connector: ${connector.kind}.`)
+  const credentials = await decryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, connector.credentialsEncrypted)
+  return module.open(credentials).resolve({
     trackId: track.externalId,
     quality,
   })
@@ -332,6 +331,19 @@ function parseResolvedMusicResource(value: unknown): ResolvedMusicResource {
     throw new Error('Stored music resource is invalid.')
   }
   return value as ResolvedMusicResource
+}
+
+function parseStoredMusicResource(
+  value: unknown,
+  track: MusicTrackRecord,
+): { resource: ResolvedMusicResource; filename: string } {
+  if (typeof value === 'object' && value !== null && 'resource' in value && 'filename' in value) {
+    const stored = value as { resource: unknown; filename: unknown }
+    if (typeof stored.filename !== 'string' || !stored.filename) throw new Error('Stored music filename is invalid.')
+    return { resource: parseResolvedMusicResource(stored.resource), filename: stored.filename }
+  }
+  const resource = parseResolvedMusicResource(value)
+  return { resource, filename: buildMusicDownloadFilename(track, resource.extension) }
 }
 
 function qualityFallbacks(preferred: MusicDownloadQuality): MusicDownloadQuality[] {

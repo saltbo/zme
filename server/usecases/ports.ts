@@ -2,6 +2,8 @@ import type {
   BookDetails,
   BookDiscoveryInput,
   BookSearchItem,
+  ConnectorAuthMode,
+  ConnectorCapability,
   ConnectorKind,
   ConnectorStatus,
   ConnectorSyncResult,
@@ -38,7 +40,9 @@ import type {
   MusicDiscoveryInput,
   MusicDownloadQuality,
   MusicDownloadStatus,
+  MusicLibraryRelease,
   MusicLibraryTrack,
+  MusicReleaseKind,
   MusicSearchItem,
   NeteaseSmsCodeInput,
   NeteaseSmsLoginInput,
@@ -286,7 +290,7 @@ export interface ConnectorsRepo {
 export interface ConnectorLoginAttemptRecord {
   id: string
   userId: string
-  kind: 'netease'
+  kind: string
   externalKey: string
   credentialsEncrypted: string | null
   status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'
@@ -312,6 +316,12 @@ export interface MusicCollectionRecord extends MusicCollectionSummary {
   connectorId: string | null
 }
 
+export interface MusicReleaseInput extends Omit<MusicLibraryRelease, 'id' | 'discNumber' | 'trackNumber'> {
+  discNumber: number | null
+  trackNumber: number | null
+  metadataUpdatedAt?: string | null
+}
+
 export interface MusicTrackInput
   extends Omit<
     MusicLibraryTrack,
@@ -323,18 +333,20 @@ export interface MusicTrackInput
     | 'downloadProviderCode'
     | 'downloadCheckedAt'
     | 'downloadRecord'
+    | 'release'
   > {
+  release: MusicReleaseInput | null
   addedAt?: string | null
-  albumMetadataUpdatedAt?: string | null
 }
 
-export interface MusicAlbumMetadata {
-  provider: MusicTrackInput['provider']
+export interface MusicReleaseMetadata {
+  provider: string
   externalId: string
   title: string
   artists: string[]
   releaseDate: string | null
-  releaseType: string | null
+  releaseType: MusicReleaseKind
+  providerReleaseType: string | null
   coverUrl: string | null
   updatedAt: string
 }
@@ -366,9 +378,9 @@ export interface MusicCollectionsRepo {
   listForConnector(userId: string, connectorId: string): Promise<MusicCollectionSummary[]>
   get(userId: string, id: string): Promise<MusicCollectionRecord | null>
   getDetails(userId: string, id: string): Promise<MusicCollectionDetails | null>
-  getLibraryTrack(userId: string, id: string): Promise<MusicTrackRecord | null>
+  getLibraryTrack(userId: string, id: string, releaseId?: string | null): Promise<MusicTrackRecord | null>
   getTrack(id: string): Promise<MusicTrackRecord | null>
-  getTrackByMediaKey(mediaKey: string): Promise<MusicTrackRecord | null>
+  getTrackByMediaKey(mediaKey: string, releaseId?: string | null): Promise<MusicTrackRecord | null>
   find(userId: string, provider: MusicCollectionProvider, externalId: string): Promise<MusicCollectionRecord | null>
   upsert(
     userId: string,
@@ -400,11 +412,7 @@ export interface MusicCollectionsRepo {
     input: { trackCount: number; lastSyncedAt: string },
   ): Promise<MusicCollectionRecord | null>
   replaceTracks(collectionId: string, tracks: MusicTrackInput[]): Promise<void>
-  listAlbumMetadata(
-    provider: MusicTrackInput['provider'],
-    externalIds: string[],
-    staleBefore: string,
-  ): Promise<MusicAlbumMetadata[]>
+  listReleaseMetadata(provider: string, externalIds: string[], staleBefore: string): Promise<MusicReleaseMetadata[]>
   listTracksForAvailabilityCheck(
     userId: string,
     connectorId: string,
@@ -462,6 +470,7 @@ export interface MediaSubscriptionsRepo {
 export interface DownloadRecordConfig {
   preferredQuality: MusicDownloadQuality
   resolvedQuality: MusicDownloadQuality | null
+  releaseId: string | null
 }
 
 export interface DownloadRecordRecord {
@@ -650,12 +659,13 @@ export interface ImportedMusicPlaylist {
 
 export interface ImportedMusicTrack extends MusicTrackInput {}
 
-export interface ImportedMusicAlbum {
+export interface ImportedMusicRelease {
   externalId: string
   title: string
   artists: string[]
   releaseDate: string | null
-  releaseType: string | null
+  releaseType: MusicReleaseKind
+  providerReleaseType: string | null
   coverUrl: string | null
 }
 
@@ -682,19 +692,48 @@ export type MusicQrLoginResult =
       verification: { qrCode: string; qrUrl: string; expiresAt: string }
     }
 
-export interface MusicPlaylistConnector {
+export interface MusicConnectorQrAuth {
   beginQrLogin(): Promise<{ key: string; qrUrl: string; cookies: string[]; expiresAt: string }>
   checkQrLogin(key: string, cookies: string[]): Promise<MusicQrLoginResult>
+}
+
+export interface MusicConnectorSmsAuth {
   sendSmsCode(input: NeteaseSmsCodeInput): Promise<void>
   loginWithSms(input: NeteaseSmsLoginInput, cookies: string[]): Promise<MusicSmsLoginResult>
+}
+
+export interface MusicConnectorVerificationAuth {
   checkRiskVerification(
     qrCode: string,
     cookies: string[],
   ): Promise<{ status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'; cookies: string[] }>
-  listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
-  listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
-  getAlbums(credentials: string[], albumIds: string[]): Promise<ImportedMusicAlbum[]>
-  checkTrackAvailability(credentials: string[], trackIds: string[]): Promise<MusicTrackAvailabilityCheckResult>
+}
+
+export interface MusicConnectorAuth {
+  qr?: MusicConnectorQrAuth
+  sms?: MusicConnectorSmsAuth
+  verification?: MusicConnectorVerificationAuth
+}
+
+export interface MusicConnectorSession {
+  listPlaylists(): Promise<ImportedMusicPlaylist[]>
+  listTracks(playlistId: string): Promise<ImportedMusicTrack[]>
+  getReleases(releaseIds: string[]): Promise<ImportedMusicRelease[]>
+  checkTrackAvailability(trackIds: string[]): Promise<MusicTrackAvailabilityCheckResult>
+  resolve(input: { trackId: string; quality: MusicDownloadQuality }): Promise<ResolvedMusicResource>
+}
+
+export interface MusicConnectorDefinition {
+  kind: string
+  authModes: readonly ConnectorAuthMode[]
+  capabilities: readonly ConnectorCapability[]
+  dispatchIntervalSeconds: number
+}
+
+export interface MusicConnectorModule {
+  definition: MusicConnectorDefinition
+  auth: MusicConnectorAuth
+  open(credentials: unknown): MusicConnectorSession
 }
 
 export interface MusicTrackAvailabilityCheckResult {
@@ -725,13 +764,6 @@ export interface ResolvedMusicResource {
   extension: string
   contentType: string | null
   contentLength: number | null
-}
-
-export interface MusicResourceResolver {
-  resolve(
-    credentials: string[],
-    input: { trackId: string; quality: MusicDownloadQuality },
-  ): Promise<ResolvedMusicResource>
 }
 
 export class MusicResourceUnavailableError extends Error {

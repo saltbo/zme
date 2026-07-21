@@ -16,6 +16,7 @@ const downloadKeyQuerySchema = z.object({
 
 const submitMusicDownloadSchema = z.object({
   downloaderId: z.string().trim().min(1),
+  releaseId: z.string().trim().min(1).optional(),
   quality: z.enum(['standard', 'exhigh', 'lossless', 'hires']).optional(),
   force: z.boolean().optional(),
 })

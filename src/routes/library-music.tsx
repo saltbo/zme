@@ -46,11 +46,13 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { findMusicConnectorUiModule } from '@/features/music-connectors/registry'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
 import {
   disableMusicCollectionSubscription,
   enableMusicCollectionSubscription,
   getMusicCollection,
+  listConnectors,
   listMusicCollections,
   removeMusicCollection,
   submitMusicTrackDownload,
@@ -102,6 +104,10 @@ export function MusicCollectionDetailPage() {
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const queryClient = useQueryClient()
   const downloaders = useDownloaders()
+  const connectors = useQuery({
+    queryKey: queryKeys.connectors.root,
+    queryFn: async () => (await listConnectors()).items,
+  })
   const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false)
   const [subscriptionDownloaderId, setSubscriptionDownloaderId] = useState('')
   const collection = useQuery({
@@ -163,7 +169,17 @@ export function MusicCollectionDetailPage() {
     (downloader) => downloader.enabled && downloader.supportedSourceTypes.includes('http'),
   )
   const title = item.kind === 'favorites' ? t('favoriteSongs') : item.title
-  const canSubscribe = item.kind === 'playlist' && item.provider === 'netease'
+  const downloadableProviders = new Set(
+    connectors.data
+      ?.filter(
+        (connector) =>
+          connector.enabled &&
+          connector.status === 'connected' &&
+          connector.capabilities.includes('music.tracks.download'),
+      )
+      .map((connector) => connector.kind),
+  )
+  const canSubscribe = item.kind === 'playlist' && downloadableProviders.has(item.provider)
 
   function openSubscriptionDialog() {
     const downloaderId = item.subscription?.downloaderId ?? httpDownloaders[0]?.id ?? ''
@@ -214,13 +230,13 @@ export function MusicCollectionDetailPage() {
                 <div className="truncate font-medium text-sm">{track.title}</div>
                 <div className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
                   <span className="truncate">{track.artists.join(', ') || t('unknownArtist')}</span>
-                  {track.provider === 'netease' && track.downloadStatus === 'unavailable' ? (
+                  {downloadableProviders.has(track.provider) && track.downloadStatus === 'unavailable' ? (
                     <span className="shrink-0 text-destructive">
                       {track.downloadReason
                         ? t(musicAvailabilityReasonKeys[track.downloadReason])
                         : t('musicTrackUnavailable')}
                     </span>
-                  ) : track.provider === 'netease' && track.downloadStatus === 'unknown' ? (
+                  ) : downloadableProviders.has(track.provider) && track.downloadStatus === 'unknown' ? (
                     <span className="shrink-0">
                       {track.downloadReason
                         ? t(musicAvailabilityReasonKeys[track.downloadReason])
@@ -235,6 +251,7 @@ export function MusicCollectionDetailPage() {
               </span>
               <MusicTrackDownloadButton
                 track={track}
+                supported={downloadableProviders.has(track.provider)}
                 downloaders={httpDownloaders}
                 loadingDownloaders={downloaders.isLoading}
                 onSettled={() => queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })}
@@ -270,8 +287,8 @@ function MusicCollectionHero({
 }) {
   const { t } = useTranslation()
   const collectionType = item.kind === 'album' ? t('album') : t('playlist')
-  const provider =
-    item.provider === 'netease' ? t('neteaseMusic') : item.provider === 'musicbrainz' ? 'MusicBrainz' : 'ZME'
+  const connectorUi = findMusicConnectorUiModule(item.provider)
+  const provider = connectorUi ? t(connectorUi.titleKey) : item.provider === 'musicbrainz' ? 'MusicBrainz' : 'ZME'
   const owner = item.ownerName ?? t('unknownArtist')
 
   return (
@@ -511,11 +528,13 @@ function CollectionFact({ icon, label, value }: { icon: ReactNode; label: string
 
 function MusicTrackDownloadButton({
   track,
+  supported,
   downloaders,
   loadingDownloaders,
   onSettled,
 }: {
   track: MusicLibraryTrack
+  supported: boolean
   downloaders: DownloaderSummary[]
   loadingDownloaders: boolean
   onSettled: () => Promise<unknown>
@@ -523,7 +542,6 @@ function MusicTrackDownloadButton({
   const { t } = useTranslation()
   const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
   const [redownloadTarget, setRedownloadTarget] = useState<DownloaderSummary | null>(null)
-  const supported = track.provider === 'netease'
   const available = supported && track.downloadStatus !== 'unavailable'
   const submitting = submittingDownloaderId !== null
   const dispatching = ['queued', 'resolving', 'submitting'].includes(track.downloadRecord?.status ?? '')
@@ -540,7 +558,11 @@ function MusicTrackDownloadButton({
   async function handleDownload(downloader: DownloaderSummary, force = false) {
     setSubmittingDownloaderId(downloader.id)
     try {
-      await submitMusicTrackDownload(track.id, { downloaderId: downloader.id, force })
+      await submitMusicTrackDownload(track.id, {
+        downloaderId: downloader.id,
+        releaseId: track.release?.id,
+        force,
+      })
       toast.success(t('downloadQueued'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))

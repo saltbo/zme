@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { neteaseMusicResourceResolver, neteasePlaylistConnector } from './netease'
+import { neteaseMusicConnector } from '.'
+
+const neteaseQrAuth = neteaseMusicConnector.auth.qr!
+const neteaseSmsAuth = neteaseMusicConnector.auth.sms!
+const neteaseVerificationAuth = neteaseMusicConnector.auth.verification!
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -15,7 +19,7 @@ describe('Netease playlist connector', () => {
       ),
     )
 
-    const result = await neteasePlaylistConnector.beginQrLogin()
+    const result = await neteaseQrAuth.beginQrLogin()
 
     expect(result).toMatchObject({
       key: 'qr-key-1',
@@ -40,7 +44,7 @@ describe('Netease playlist connector', () => {
     )
 
     await expect(
-      neteasePlaylistConnector.checkQrLogin('qr-key-1', [
+      neteaseQrAuth.checkQrLogin('qr-key-1', [
         'deviceId=device-1',
         'NMTID=cookie-value',
         'MUSIC_A=anonymous-session',
@@ -88,7 +92,7 @@ describe('Netease playlist connector', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await neteasePlaylistConnector.checkQrLogin('qr-key-1', ['MUSIC_A=anonymous-session'])
+    const result = await neteaseQrAuth.checkQrLogin('qr-key-1', ['MUSIC_A=anonymous-session'])
 
     expect(result).toMatchObject({
       status: 'verification_required',
@@ -105,9 +109,7 @@ describe('Netease playlist connector', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(neteasePlaylistConnector.sendSmsCode({ countryCode: '86', phone: '13800138000' })).resolves.toBe(
-      undefined,
-    )
+    await expect(neteaseSmsAuth.sendSmsCode({ countryCode: '86', phone: '13800138000' })).resolves.toBe(undefined)
     expect(fetchMock).toHaveBeenCalledWith(
       'https://music.163.com/weapi/sms/captcha/sent',
       expect.objectContaining({ method: 'POST' }),
@@ -134,10 +136,9 @@ describe('Netease playlist connector', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await neteasePlaylistConnector.loginWithSms(
-      { countryCode: '86', phone: '13800138000', code: '1234' },
-      ['MUSIC_A=anonymous-session'],
-    )
+    const result = await neteaseSmsAuth.loginWithSms({ countryCode: '86', phone: '13800138000', code: '1234' }, [
+      'MUSIC_A=anonymous-session',
+    ])
     expect(result).toMatchObject({
       status: 'connected',
       account: {
@@ -190,10 +191,9 @@ describe('Netease playlist connector', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await neteasePlaylistConnector.loginWithSms(
-      { countryCode: '86', phone: '13800138000', code: '1234' },
-      ['MUSIC_A=anonymous-session'],
-    )
+    const result = await neteaseSmsAuth.loginWithSms({ countryCode: '86', phone: '13800138000', code: '1234' }, [
+      'MUSIC_A=anonymous-session',
+    ])
 
     expect(result).toMatchObject({
       status: 'verification_required',
@@ -219,12 +219,12 @@ describe('Netease playlist connector', () => {
       ),
     )
 
-    await expect(
-      neteasePlaylistConnector.checkRiskVerification('risk-qr-code', ['deviceId=device-1']),
-    ).resolves.toEqual({
-      status: 'connected',
-      cookies: ['deviceId=device-1'],
-    })
+    await expect(neteaseVerificationAuth.checkRiskVerification('risk-qr-code', ['deviceId=device-1'])).resolves.toEqual(
+      {
+        status: 'connected',
+        cookies: ['deviceId=device-1'],
+      },
+    )
   })
 
   it('surfaces Netease SMS errors', async () => {
@@ -238,7 +238,7 @@ describe('Netease playlist connector', () => {
       ),
     )
 
-    await expect(neteasePlaylistConnector.sendSmsCode({ countryCode: '86', phone: '13800138000' })).rejects.toThrow(
+    await expect(neteaseSmsAuth.sendSmsCode({ countryCode: '86', phone: '13800138000' })).rejects.toThrow(
       'Netease failed to send the SMS code (code 503: Verification attempts exceeded).',
     )
   })
@@ -284,14 +284,12 @@ describe('Netease playlist connector', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await neteasePlaylistConnector.listTracks(['MUSIC_U=session-value'], 'playlist-1')
-    const availability = await neteasePlaylistConnector.checkTrackAvailability(
-      ['MUSIC_U=session-value'],
-      ['123', '456'],
-    )
+    const session = neteaseMusicConnector.open(['MUSIC_U=session-value'])
+    const result = await session.listTracks('playlist-1')
+    const availability = await session.checkTrackAvailability(['123', '456'])
 
     expect(result).toHaveLength(2)
-    expect(result[0]).toMatchObject({ externalId: '123', discNumber: 2, trackNumber: 7 })
+    expect(result[0]).toMatchObject({ externalId: '123', release: { discNumber: 2, trackNumber: 7 } })
     expect(result[1]).toMatchObject({ externalId: '456' })
     expect(availability.results).toEqual(
       new Map([
@@ -343,13 +341,14 @@ describe('Netease playlist connector', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(neteasePlaylistConnector.getAlbums(['MUSIC_U=session-value'], ['34888233'])).resolves.toEqual([
+    await expect(neteaseMusicConnector.open(['MUSIC_U=session-value']).getReleases(['34888233'])).resolves.toEqual([
       {
         externalId: '34888233',
         title: '翁梓铭',
         artists: ['翁梓铭'],
         releaseDate: '2016-09-19',
-        releaseType: '专辑',
+        releaseType: 'album',
+        providerReleaseType: '专辑',
         coverUrl: 'https://p1.music.126.net/album.jpg',
       },
     ])
@@ -382,7 +381,7 @@ describe('Netease playlist connector', () => {
       .mockResolvedValueOnce(new Response(null, { status: 429 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await neteasePlaylistConnector.checkTrackAvailability(['MUSIC_U=session-value'], trackIds)
+    const result = await neteaseMusicConnector.open(['MUSIC_U=session-value']).checkTrackAvailability(trackIds)
 
     expect(result.results.size).toBe(100)
     expect(result.interrupted).toEqual({
@@ -418,7 +417,7 @@ describe('Netease music resource resolver', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(
-      neteaseMusicResourceResolver.resolve(['MUSIC_U=session-value'], { trackId: '123', quality: 'exhigh' }),
+      neteaseMusicConnector.open(['MUSIC_U=session-value']).resolve({ trackId: '123', quality: 'exhigh' }),
     ).resolves.toEqual({
       url: 'https://m701.music.126.net/audio.mp3',
       headers: {
@@ -463,7 +462,7 @@ describe('Netease music resource resolver', () => {
     )
 
     await expect(
-      neteaseMusicResourceResolver.resolve(['MUSIC_U=session-value'], { trackId: '123', quality: 'exhigh' }),
+      neteaseMusicConnector.open(['MUSIC_U=session-value']).resolve({ trackId: '123', quality: 'exhigh' }),
     ).rejects.toThrow('Netease only returned a trial preview for this track.')
   })
 })

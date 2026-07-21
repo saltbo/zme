@@ -1,9 +1,9 @@
 import { downloaderGateways, downloadTaskGateways } from './adapters/gateways/downloaders'
 import { indexerGateways } from './adapters/gateways/indexers'
+import { musicBrainzMusicProvider } from './adapters/music-catalogs/musicbrainz'
+import { createMusicConnectorRegistry } from './adapters/music-connectors/registry'
 import { openLibraryBookProvider } from './adapters/providers/books'
 import { doubanLibraryImporter } from './adapters/providers/douban'
-import { musicBrainzMusicProvider } from './adapters/providers/music'
-import { neteaseMusicResourceResolver, neteasePlaylistConnector } from './adapters/providers/netease'
 import { tmdbMediaProvider } from './adapters/providers/tmdb'
 import { createConnectorLoginAttemptsRepo } from './adapters/repos/connector-login-attempts'
 import { createConnectorsRepo } from './adapters/repos/connectors'
@@ -57,7 +57,6 @@ export function createDeps(env: Env): Deps {
     bookProvider: openLibraryBookProvider,
     musicProvider: musicBrainzMusicProvider,
     libraryImporters: { douban: doubanLibraryImporter },
-    musicPlaylistConnectors: { netease: neteasePlaylistConnector },
-    musicResourceResolvers: { netease: neteaseMusicResourceResolver },
+    musicConnectors: createMusicConnectorRegistry(),
   }
 }

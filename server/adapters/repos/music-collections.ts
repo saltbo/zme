@@ -1,9 +1,16 @@
 import type { createDb } from '@server/db/client'
-import { musicCollections, musicCollectionTracks, musicTrackAvailability, musicTracks } from '@server/db/schema'
+import {
+  musicCollections,
+  musicCollectionTracks,
+  musicReleases,
+  musicReleaseTracks,
+  musicTrackAvailability,
+  musicTracks,
+} from '@server/db/schema'
 import type {
-  MusicAlbumMetadata,
   MusicCollectionRecord,
   MusicCollectionsRepo,
+  MusicReleaseMetadata,
   MusicTrackRecord,
 } from '@server/usecases/ports'
 import type { MusicCollectionDetails, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
@@ -11,7 +18,7 @@ import { and, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-o
 
 type Db = ReturnType<typeof createDb>
 const D1_MAX_BOUND_PARAMETERS = 100
-const MUSIC_COLLECTION_TRACK_PARAMETERS = 4
+const MUSIC_COLLECTION_TRACK_PARAMETERS = 5
 const MUSIC_TRACK_AVAILABILITY_PARAMETERS = 9
 
 export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
@@ -78,9 +85,17 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       if (!collection) return null
 
       const rows = await db
-        .select({ relation: musicCollectionTracks, track: musicTracks, availability: musicTrackAvailability })
+        .select({
+          relation: musicCollectionTracks,
+          track: musicTracks,
+          releaseTrack: musicReleaseTracks,
+          release: musicReleases,
+          availability: musicTrackAvailability,
+        })
         .from(musicCollectionTracks)
         .innerJoin(musicTracks, eq(musicCollectionTracks.trackId, musicTracks.id))
+        .leftJoin(musicReleaseTracks, eq(musicCollectionTracks.releaseTrackId, musicReleaseTracks.id))
+        .leftJoin(musicReleases, eq(musicReleaseTracks.releaseId, musicReleases.id))
         .leftJoin(
           musicTrackAvailability,
           and(
@@ -94,9 +109,11 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       return {
         ...toSummary(collection),
         subscription: null,
-        tracks: rows.map(({ relation, track, availability }) =>
+        tracks: rows.map(({ relation, track, release, releaseTrack, availability }) =>
           toTrack(
             track,
+            release,
+            releaseTrack,
             relation.position,
             relation.addedAt,
             availability?.status,
@@ -108,27 +125,46 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       } satisfies MusicCollectionDetails
     },
 
-    async getLibraryTrack(userId, id) {
+    async getLibraryTrack(userId, id, releaseId) {
       const rows = await db
-        .select({ track: musicTracks })
+        .select({ track: musicTracks, release: musicReleases, releaseTrack: musicReleaseTracks })
         .from(musicCollectionTracks)
         .innerJoin(musicTracks, eq(musicCollectionTracks.trackId, musicTracks.id))
+        .leftJoin(musicReleaseTracks, eq(musicCollectionTracks.releaseTrackId, musicReleaseTracks.id))
+        .leftJoin(musicReleases, eq(musicReleaseTracks.releaseId, musicReleases.id))
         .innerJoin(musicCollections, eq(musicCollectionTracks.collectionId, musicCollections.id))
         .where(
-          and(eq(musicTracks.id, id), eq(musicCollections.userId, userId), isNotNull(musicCollections.libraryAddedAt)),
+          and(
+            eq(musicTracks.id, id),
+            eq(musicCollections.userId, userId),
+            isNotNull(musicCollections.libraryAddedAt),
+            releaseId ? eq(musicReleases.id, releaseId) : undefined,
+          ),
         )
         .limit(1)
-      return rows[0] ? toTrackRecord(rows[0].track) : null
+      return rows[0] ? toTrackRecord(rows[0].track, rows[0].release, rows[0].releaseTrack) : null
     },
 
     async getTrack(id) {
-      const rows = await db.select().from(musicTracks).where(eq(musicTracks.id, id)).limit(1)
-      return rows[0] ? toTrackRecord(rows[0]) : null
+      const rows = await db
+        .select({ track: musicTracks, release: musicReleases, releaseTrack: musicReleaseTracks })
+        .from(musicTracks)
+        .leftJoin(musicReleaseTracks, eq(musicReleaseTracks.trackId, musicTracks.id))
+        .leftJoin(musicReleases, eq(musicReleaseTracks.releaseId, musicReleases.id))
+        .where(eq(musicTracks.id, id))
+        .limit(1)
+      return rows[0] ? toTrackRecord(rows[0].track, rows[0].release, rows[0].releaseTrack) : null
     },
 
-    async getTrackByMediaKey(mediaKey) {
-      const rows = await db.select().from(musicTracks).where(eq(musicTracks.mediaKey, mediaKey)).limit(1)
-      return rows[0] ? toTrackRecord(rows[0]) : null
+    async getTrackByMediaKey(mediaKey, releaseId) {
+      const rows = await db
+        .select({ track: musicTracks, release: musicReleases, releaseTrack: musicReleaseTracks })
+        .from(musicTracks)
+        .leftJoin(musicReleaseTracks, eq(musicReleaseTracks.trackId, musicTracks.id))
+        .leftJoin(musicReleases, eq(musicReleaseTracks.releaseId, musicReleases.id))
+        .where(and(eq(musicTracks.mediaKey, mediaKey), releaseId ? eq(musicReleases.id, releaseId) : undefined))
+        .limit(1)
+      return rows[0] ? toTrackRecord(rows[0].track, rows[0].release, rows[0].releaseTrack) : null
     },
 
     async find(userId, provider, externalId) {
@@ -211,14 +247,6 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
               mediaKey: input.mediaKey,
               title: input.title,
               artistsJson: JSON.stringify(input.artists),
-              albumTitle: input.albumTitle,
-              albumExternalId: input.albumExternalId,
-              albumArtistsJson: JSON.stringify(input.albumArtists),
-              albumReleaseDate: input.albumReleaseDate,
-              albumReleaseType: input.albumReleaseType,
-              albumMetadataUpdatedAt: input.albumMetadataUpdatedAt ?? existing.albumMetadataUpdatedAt,
-              discNumber: input.discNumber,
-              trackNumber: input.trackNumber,
               coverUrl: input.coverUrl,
               durationMs: input.durationMs,
               isrcsJson: JSON.stringify(input.isrcs),
@@ -233,14 +261,6 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
             mediaKey: input.mediaKey,
             title: input.title,
             artistsJson: JSON.stringify(input.artists),
-            albumTitle: input.albumTitle,
-            albumExternalId: input.albumExternalId,
-            albumArtistsJson: JSON.stringify(input.albumArtists),
-            albumReleaseDate: input.albumReleaseDate,
-            albumReleaseType: input.albumReleaseType,
-            albumMetadataUpdatedAt: input.albumMetadataUpdatedAt ?? null,
-            discNumber: input.discNumber,
-            trackNumber: input.trackNumber,
             coverUrl: input.coverUrl,
             durationMs: input.durationMs,
             isrcsJson: JSON.stringify(input.isrcs),
@@ -248,9 +268,85 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
             updatedAt: now,
           })
         }
+        let releaseTrackId: string | null = null
+        if (input.release) {
+          if (input.release.provider !== input.provider) {
+            throw new Error('Music track and release providers must match.')
+          }
+          const releaseRows = await db
+            .select()
+            .from(musicReleases)
+            .where(
+              and(
+                eq(musicReleases.provider, input.release.provider),
+                eq(musicReleases.externalId, input.release.externalId),
+              ),
+            )
+            .limit(1)
+          const existingRelease = releaseRows[0]
+          const releaseId = existingRelease?.id ?? crypto.randomUUID()
+          if (existingRelease) {
+            await db
+              .update(musicReleases)
+              .set({
+                title: input.release.title,
+                artistsJson: JSON.stringify(input.release.artists),
+                releaseDate: input.release.releaseDate,
+                releaseType: input.release.releaseType,
+                providerReleaseType: input.release.providerReleaseType,
+                coverUrl: input.release.coverUrl,
+                metadataUpdatedAt: input.release.metadataUpdatedAt ?? existingRelease.metadataUpdatedAt,
+                updatedAt: now,
+              })
+              .where(eq(musicReleases.id, releaseId))
+          } else {
+            await db.insert(musicReleases).values({
+              id: releaseId,
+              provider: input.release.provider,
+              externalId: input.release.externalId,
+              title: input.release.title,
+              artistsJson: JSON.stringify(input.release.artists),
+              releaseDate: input.release.releaseDate,
+              releaseType: input.release.releaseType,
+              providerReleaseType: input.release.providerReleaseType,
+              coverUrl: input.release.coverUrl,
+              metadataUpdatedAt: input.release.metadataUpdatedAt ?? null,
+              createdAt: now,
+              updatedAt: now,
+            })
+          }
+          const releaseTrackRows = await db
+            .select()
+            .from(musicReleaseTracks)
+            .where(and(eq(musicReleaseTracks.releaseId, releaseId), eq(musicReleaseTracks.trackId, trackId)))
+            .limit(1)
+          const existingReleaseTrack = releaseTrackRows[0]
+          releaseTrackId = existingReleaseTrack?.id ?? crypto.randomUUID()
+          if (existingReleaseTrack) {
+            await db
+              .update(musicReleaseTracks)
+              .set({
+                discNumber: input.release.discNumber,
+                trackNumber: input.release.trackNumber,
+                updatedAt: now,
+              })
+              .where(eq(musicReleaseTracks.id, releaseTrackId))
+          } else {
+            await db.insert(musicReleaseTracks).values({
+              id: releaseTrackId,
+              releaseId,
+              trackId,
+              discNumber: input.release.discNumber,
+              trackNumber: input.release.trackNumber,
+              createdAt: now,
+              updatedAt: now,
+            })
+          }
+        }
         relations.push({
           collectionId,
           trackId,
+          releaseTrackId,
           position: index + 1,
           addedAt: input.addedAt ?? null,
         })
@@ -266,30 +362,31 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       }
     },
 
-    async listAlbumMetadata(provider, externalIds, staleBefore) {
-      const metadata = new Map<string, MusicAlbumMetadata>()
+    async listReleaseMetadata(provider, externalIds, staleBefore) {
+      const metadata = new Map<string, MusicReleaseMetadata>()
       for (const ids of chunks([...new Set(externalIds)], D1_MAX_BOUND_PARAMETERS - 2)) {
         const rows = await db
           .select()
-          .from(musicTracks)
+          .from(musicReleases)
           .where(
             and(
-              eq(musicTracks.provider, provider),
-              inArray(musicTracks.albumExternalId, ids),
-              gt(musicTracks.albumMetadataUpdatedAt, staleBefore),
+              eq(musicReleases.provider, provider),
+              inArray(musicReleases.externalId, ids),
+              gt(musicReleases.metadataUpdatedAt, staleBefore),
             ),
           )
         for (const row of rows) {
-          if (!row.albumExternalId || !row.albumMetadataUpdatedAt || metadata.has(row.albumExternalId)) continue
-          metadata.set(row.albumExternalId, {
+          if (!row.metadataUpdatedAt || metadata.has(row.externalId)) continue
+          metadata.set(row.externalId, {
             provider: row.provider,
-            externalId: row.albumExternalId,
-            title: row.albumTitle ?? '',
-            artists: JSON.parse(row.albumArtistsJson) as string[],
-            releaseDate: row.albumReleaseDate,
-            releaseType: row.albumReleaseType,
+            externalId: row.externalId,
+            title: row.title,
+            artists: JSON.parse(row.artistsJson) as string[],
+            releaseDate: row.releaseDate,
+            releaseType: row.releaseType,
+            providerReleaseType: row.providerReleaseType,
             coverUrl: row.coverUrl,
-            updatedAt: row.albumMetadataUpdatedAt,
+            updatedAt: row.metadataUpdatedAt,
           })
         }
       }
@@ -315,7 +412,6 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
             eq(musicCollections.userId, userId),
             eq(musicCollections.connectorId, connectorId),
             isNotNull(musicCollections.libraryAddedAt),
-            eq(musicTracks.provider, 'netease'),
             or(
               isNull(musicTrackAvailability.trackId),
               isNull(musicTrackAvailability.checkedAt),
@@ -324,7 +420,7 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
           ),
         )
         .limit(limit)
-      return rows.map(({ track }) => toTrackRecord(track))
+      return rows.map(({ track }) => toTrackRecord(track, null, null))
     },
 
     async setTrackAvailabilities(userId, connectorId, updates) {
@@ -411,6 +507,8 @@ function toSummary(row: typeof musicCollections.$inferSelect): MusicCollectionSu
 
 function toTrack(
   row: typeof musicTracks.$inferSelect,
+  release: typeof musicReleases.$inferSelect | null,
+  releaseTrack: typeof musicReleaseTracks.$inferSelect | null,
   position: number,
   addedAt: string | null,
   downloadStatus: 'available' | 'unavailable' | 'unknown' | undefined,
@@ -419,7 +517,7 @@ function toTrack(
   downloadCheckedAt: string | null | undefined,
 ): MusicLibraryTrack {
   return {
-    ...toTrackRecord(row),
+    ...toTrackRecord(row, release, releaseTrack),
     downloadStatus: downloadStatus ?? 'unknown',
     downloadReason: downloadReason ?? null,
     downloadProviderCode: downloadProviderCode ?? null,
@@ -430,7 +528,11 @@ function toTrack(
   }
 }
 
-function toTrackRecord(row: typeof musicTracks.$inferSelect): MusicTrackRecord {
+function toTrackRecord(
+  row: typeof musicTracks.$inferSelect,
+  release: typeof musicReleases.$inferSelect | null,
+  releaseTrack: typeof musicReleaseTracks.$inferSelect | null,
+): MusicTrackRecord {
   return {
     id: row.id,
     provider: row.provider,
@@ -438,13 +540,22 @@ function toTrackRecord(row: typeof musicTracks.$inferSelect): MusicTrackRecord {
     mediaKey: row.mediaKey,
     title: row.title,
     artists: JSON.parse(row.artistsJson) as string[],
-    albumTitle: row.albumTitle,
-    albumExternalId: row.albumExternalId,
-    albumArtists: JSON.parse(row.albumArtistsJson) as string[],
-    albumReleaseDate: row.albumReleaseDate,
-    albumReleaseType: row.albumReleaseType,
-    discNumber: row.discNumber,
-    trackNumber: row.trackNumber,
+    release:
+      release && releaseTrack
+        ? {
+            id: release.id,
+            provider: release.provider,
+            externalId: release.externalId,
+            title: release.title,
+            artists: JSON.parse(release.artistsJson) as string[],
+            releaseDate: release.releaseDate,
+            releaseType: release.releaseType,
+            providerReleaseType: release.providerReleaseType,
+            coverUrl: release.coverUrl,
+            discNumber: releaseTrack.discNumber,
+            trackNumber: releaseTrack.trackNumber,
+          }
+        : null,
     coverUrl: row.coverUrl,
     durationMs: row.durationMs,
     isrcs: JSON.parse(row.isrcsJson) as string[],

@@ -25,13 +25,19 @@ const track: MusicTrackRecord = {
   mediaKey: 'netease:track:123',
   title: 'Track Name',
   artists: ['Artist'],
-  albumTitle: 'Album',
-  albumExternalId: 'album-1',
-  albumArtists: ['Artist'],
-  albumReleaseDate: '2024-03-02',
-  albumReleaseType: 'Album',
-  discNumber: 1,
-  trackNumber: 3,
+  release: {
+    id: 'release-1',
+    provider: 'netease',
+    externalId: 'album-1',
+    title: 'Album',
+    artists: ['Artist'],
+    releaseDate: '2024-03-02',
+    releaseType: 'album',
+    providerReleaseType: '专辑',
+    coverUrl: null,
+    discNumber: 1,
+    trackNumber: 3,
+  },
   coverUrl: null,
   durationMs: 180_000,
   isrcs: [],
@@ -60,10 +66,10 @@ const queuedRecord: DownloadRecordRecord = {
   userId: 'user-1',
   resourceKind: 'music_track',
   resourceKey: track.mediaKey,
-  laneKey: 'netease:connector-1',
+  laneKey: 'music:connector-1',
   generation: 1,
   downloaderId: 'downloader-1',
-  config: { preferredQuality: 'exhigh', resolvedQuality: null },
+  config: { preferredQuality: 'exhigh', resolvedQuality: null, releaseId: 'release-1' },
   status: 'queued',
   attemptCount: 0,
   externalTaskId: null,
@@ -93,13 +99,34 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+function musicConnectors(resolve: (...args: never[]) => unknown) {
+  return new Map([
+    [
+      'netease',
+      {
+        definition: {
+          kind: 'netease',
+          authModes: ['qr', 'sms'],
+          capabilities: ['music.playlists.read', 'music.tracks.download'],
+          dispatchIntervalSeconds: 10,
+        },
+        auth: {},
+        open: (credentials: unknown) => ({
+          resolve: (input: unknown) => resolve(credentials as never, input as never),
+        }),
+      },
+    ],
+  ])
+}
+
 describe('music downloads', () => {
   it('persists a manual request and only wakes the connector lane', async () => {
     const records: DownloadRecordRecord[] = []
     const wake = vi.fn(async () => undefined)
     const resolve = vi.fn()
+    const getLibraryTrack = vi.fn(async () => track)
     const deps = {
-      musicCollectionsRepo: { getLibraryTrack: async () => track },
+      musicCollectionsRepo: { getLibraryTrack },
       connectorsRepo: { findByKind: async () => connector },
       downloadersRepo: { getEnabled: async () => downloader },
       downloaderGateways: {
@@ -113,11 +140,14 @@ describe('music downloads', () => {
         },
       },
       downloadDispatchQueue: { wake },
-      musicResourceResolvers: { netease: { resolve } },
+      musicConnectors: musicConnectors(resolve),
     } as never as Deps
 
     await expect(
-      submitMusicTrackDownload(deps, 'user-1', 'track-1', { downloaderId: 'downloader-1' }),
+      submitMusicTrackDownload(deps, 'user-1', 'track-1', {
+        downloaderId: 'downloader-1',
+        releaseId: 'release-1',
+      }),
     ).resolves.toMatchObject({
       downloaderId: 'downloader-1',
       downloadRecordId: expect.any(String),
@@ -128,12 +158,13 @@ describe('music downloads', () => {
     expect(records[0]).toMatchObject({
       resourceKind: 'music_track',
       resourceKey: 'netease:track:123',
-      laneKey: 'netease:connector-1',
+      laneKey: 'music:connector-1',
       status: 'queued',
       manualRequestedAt: expect.any(String),
     })
     expect(wake).toHaveBeenCalledOnce()
-    expect(wake).toHaveBeenCalledWith('netease:connector-1')
+    expect(wake).toHaveBeenCalledWith('music:connector-1')
+    expect(getLibraryTrack).toHaveBeenCalledWith('user-1', 'track-1', 'release-1')
     expect(resolve).not.toHaveBeenCalled()
   })
 
@@ -157,6 +188,7 @@ describe('music downloads', () => {
       downloaderGateways: { zpan: { supportedSourceTypes: ['http'] } },
       downloadRecordsRepo: { listByResourceKeys: async () => [record], update },
       downloadDispatchQueue: { wake },
+      musicConnectors: musicConnectors(vi.fn()),
     } as never as Deps
 
     await expect(
@@ -168,7 +200,7 @@ describe('music downloads', () => {
       submitMusicTrackDownload(deps, 'user-1', 'track-1', { downloaderId: 'downloader-1', force: true }),
     ).resolves.toMatchObject({ status: 'queued' })
     expect(record).toMatchObject({ generation: 2, status: 'queued', attemptCount: 0 })
-    expect(wake).toHaveBeenCalledWith('netease:connector-1')
+    expect(wake).toHaveBeenCalledWith('music:connector-1')
   })
 
   it('resolves once in the consumer, stores an encrypted source, and submits the permanent ZME URL', async () => {
@@ -201,18 +233,14 @@ describe('music downloads', () => {
       downloaderGateways: {
         zpan: { supportedSourceTypes: ['magnet', 'torrent_url', 'http'], submit },
       },
-      musicResourceResolvers: {
-        netease: {
-          resolve: async () => ({
-            url: 'https://m701.music.126.net/audio.mp3',
-            headers: {},
-            quality: 'exhigh',
-            extension: 'mp3',
-            contentType: 'audio/mpeg',
-            contentLength: 4096,
-          }),
-        },
-      },
+      musicConnectors: musicConnectors(async () => ({
+        url: 'https://m701.music.126.net/audio.mp3',
+        headers: {},
+        quality: 'exhigh',
+        extension: 'mp3',
+        contentType: 'audio/mpeg',
+        contentLength: 4096,
+      })),
     } as never as Deps
 
     await dispatchMusicDownloadRecord(
@@ -273,7 +301,7 @@ describe('music downloads', () => {
       musicDownloadKeysRepo: { getByHash: async () => access },
       musicCollectionsRepo: { getTrack: async () => track },
       connectorsRepo: { get: getConnector },
-      musicResourceResolvers: { netease: { resolve } },
+      musicConnectors: musicConnectors(resolve),
     } as never as Deps
 
     await expect(resolveMusicTrackDownload(deps, env, 'track-1', 'temporary-key')).resolves.toEqual({
@@ -319,7 +347,7 @@ describe('music downloads', () => {
           submit: async () => ({ externalTaskId: null }),
         },
       },
-      musicResourceResolvers: { netease: { resolve } },
+      musicConnectors: musicConnectors(resolve),
     } as never as Deps
 
     const dispatched = dispatchMusicDownloadRecord(
