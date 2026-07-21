@@ -272,7 +272,6 @@ export function listConnectorPlaylists(
 
 export async function selectConnectorPlaylist(
   deps: Deps,
-  env: Env,
   userId: string,
   connectorId: string,
   playlistId: string,
@@ -291,24 +290,7 @@ export async function selectConnectorPlaylist(
     selected ? new Date().toISOString() : null,
   )
   if (!updated) throw new Error('Connector playlist disappeared during update.')
-  if (!selected) {
-    await deps.musicCollectionsRepo.replaceTracks(collection.id, [])
-    return updated
-  }
-
-  if (!connector.credentialsEncrypted) throw new Error('Netease connector has no credentials.')
-  const credentials = await decryptConnectorCredentials(
-    env.CONNECTOR_CREDENTIALS_SECRET,
-    connector.credentialsEncrypted,
-  )
-  const tracks = await deps.musicPlaylistConnectors.netease.listTracks(credentials, collection.externalId)
-  await deps.musicCollectionsRepo.replaceTracks(collection.id, tracks)
-  const snapshot = await deps.musicCollectionsRepo.updateSnapshot(userId, collection.id, {
-    trackCount: tracks.length,
-    lastSyncedAt: new Date().toISOString(),
-  })
-  if (!snapshot) throw new Error('Connector playlist disappeared during sync.')
-  return snapshot
+  return updated
 }
 
 async function syncDoubanConnector(deps: Deps, connector: ConnectorRecord): Promise<LibraryImportSyncResult> {

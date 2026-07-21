@@ -1,8 +1,14 @@
 import { decryptConnectorCredentials, encryptConnectorCredentials } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
-import type { MediaSearchItem } from '@shared/types'
+import type { MediaSearchItem, MusicCollectionSummary } from '@shared/types'
 import { describe, expect, it } from 'vitest'
-import { checkNeteaseLogin, loginNeteaseWithSms, sendNeteaseSmsCode, syncConnector } from './connectors'
+import {
+  checkNeteaseLogin,
+  loginNeteaseWithSms,
+  selectConnectorPlaylist,
+  sendNeteaseSmsCode,
+  syncConnector,
+} from './connectors'
 import type { Deps } from './deps'
 import type { ConnectorLoginAttemptRecord, ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
 
@@ -158,6 +164,139 @@ describe('syncConnector', () => {
   it('fails when the connector is not configured', async () => {
     const deps = { connectorsRepo: { get: async () => null } } as never as Deps
     await expect(syncConnector(deps, env, 'user-1', 'connector-1')).rejects.toThrow('Connector was not found.')
+  })
+
+  it('synchronizes tracks only for selected Netease playlists', async () => {
+    const secret = 'test-connector-secret-with-32-chars!'
+    const remotePlaylists = ['remote-1', 'remote-2', 'remote-3'].map((externalId, index) => ({
+      externalId,
+      title: `Playlist ${index + 1}`,
+      description: null,
+      coverUrl: null,
+      ownerName: 'Music Fan',
+      trackCount: 1,
+      remoteUpdatedAt: null,
+    }))
+    const existing = remotePlaylists.map((playlist, index) => ({
+      id: `playlist-${index + 1}`,
+      kind: 'playlist' as const,
+      provider: 'netease' as const,
+      ...playlist,
+      libraryAddedAt: index < 2 ? '2026-07-20T00:00:00.000Z' : null,
+      lastSyncedAt: null,
+      createdAt: '2026-07-20T00:00:00.000Z',
+      updatedAt: '2026-07-20T00:00:00.000Z',
+    }))
+    const fetchedTrackPlaylists: string[] = []
+    const replacedCollections: string[] = []
+    const deps = {
+      connectorsRepo: {
+        get: async () => ({
+          ...connectorRecord,
+          kind: 'netease' as const,
+          credentialsEncrypted: await encryptConnectorCredentials(secret, ['MUSIC_U=session-value']),
+        }),
+        markSynced: async () => undefined,
+      },
+      musicPlaylistConnectors: {
+        netease: {
+          listPlaylists: async () => remotePlaylists,
+          listTracks: async (_credentials: string[], playlistId: string) => {
+            fetchedTrackPlaylists.push(playlistId)
+            return [
+              {
+                provider: 'netease' as const,
+                externalId: `track-${playlistId}`,
+                mediaKey: `netease:track:${playlistId}`,
+                title: `Track ${playlistId}`,
+                artists: ['Artist'],
+                albumTitle: null,
+                albumExternalId: null,
+                coverUrl: null,
+                durationMs: null,
+                isrcs: [],
+              },
+            ]
+          },
+        },
+      },
+      musicCollectionsRepo: {
+        listForConnector: async () => existing,
+        upsert: async (userId: string, input: Parameters<Deps['musicCollectionsRepo']['upsert']>[1]) => ({
+          id: existing.find((item) => item.externalId === input.externalId)?.id ?? 'unexpected-playlist',
+          userId,
+          ...input,
+        }),
+        replaceTracks: async (collectionId: string) => {
+          replacedCollections.push(collectionId)
+        },
+        updateSnapshot: async () => existing[0],
+        deleteMissingConnectorCollections: async () => undefined,
+      },
+    } as never as Deps
+
+    const result = await syncConnector(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', 'connector-1')
+
+    expect(fetchedTrackPlaylists).toEqual(['remote-1', 'remote-2'])
+    expect(replacedCollections).toEqual(['playlist-1', 'playlist-2'])
+    expect(result).toEqual({
+      capability: 'music.playlists.read',
+      playlists: 3,
+      selectedPlaylists: 2,
+      tracks: 2,
+    })
+  })
+})
+
+describe('selectConnectorPlaylist', () => {
+  it('only updates the library selection and leaves track synchronization to connector sync', async () => {
+    const playlist: MusicCollectionSummary = {
+      id: 'playlist-1',
+      kind: 'playlist',
+      provider: 'netease',
+      externalId: 'remote-playlist-1',
+      title: 'Daily Mix',
+      description: null,
+      coverUrl: null,
+      ownerName: 'Music Fan',
+      trackCount: 35,
+      libraryAddedAt: null,
+      remoteUpdatedAt: null,
+      lastSyncedAt: null,
+      createdAt: '2026-07-20T00:00:00.000Z',
+      updatedAt: '2026-07-20T00:00:00.000Z',
+    }
+    let libraryAddedAt: string | null = null
+    const deps = {
+      connectorsRepo: {
+        get: async () => ({ ...connectorRecord, kind: 'netease' as const }),
+      },
+      musicCollectionsRepo: {
+        listForConnector: async () => [playlist],
+        setLibraryAdded: async (_userId: string, _id: string, value: string | null) => {
+          libraryAddedAt = value
+          return { ...playlist, userId: 'user-1', connectorId: 'connector-1', libraryAddedAt: value }
+        },
+        replaceTracks: async () => {
+          throw new Error('Playlist selection must not synchronize tracks.')
+        },
+      },
+      musicPlaylistConnectors: {
+        netease: {
+          listTracks: async () => {
+            throw new Error('Playlist selection must not call Netease.')
+          },
+        },
+      },
+    } as never as Deps
+
+    const selected = await selectConnectorPlaylist(deps, 'user-1', 'connector-1', 'playlist-1', true)
+    expect(libraryAddedAt).not.toBeNull()
+    expect(selected.libraryAddedAt).toBe(libraryAddedAt)
+
+    const deselected = await selectConnectorPlaylist(deps, 'user-1', 'connector-1', 'playlist-1', false)
+    expect(libraryAddedAt).toBeNull()
+    expect(deselected.libraryAddedAt).toBeNull()
   })
 })
 

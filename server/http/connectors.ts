@@ -127,7 +127,6 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
       const params = c.req.valid('param')
       const item = await selectConnectorPlaylist(
         c.get('deps'),
-        c.env,
         c.get('user').id,
         params.id,
         params.playlistId,
