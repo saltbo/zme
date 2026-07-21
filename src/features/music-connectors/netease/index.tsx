@@ -1,8 +1,8 @@
-import type { ConnectorSummary } from '@shared/types'
+import type { ConnectorAuthChallenge, ConnectorLoginResult, ConnectorSummary } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Music2, Settings2 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -20,12 +20,10 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
-  beginNeteaseLogin,
-  checkNeteaseLogin,
+  continueConnectorLogin,
   listConnectorPlaylists,
-  loginNeteaseWithSms,
   saveConnectorPlaylistSelection,
-  sendNeteaseSmsCode,
+  startConnectorLogin,
 } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -41,60 +39,53 @@ export function NeteaseConnectorDialog({
   const [open, setOpen] = useState(false)
   const [loginMethod, setLoginMethod] = useState<'qr' | 'sms'>('qr')
   const [attemptId, setAttemptId] = useState<string | null>(null)
-  const [qrUrl, setQrUrl] = useState<string | null>(null)
+  const [challenge, setChallenge] = useState<ConnectorAuthChallenge | null>(null)
   const [countryCode, setCountryCode] = useState('86')
   const [phone, setPhone] = useState('')
   const [smsCode, setSmsCode] = useState('')
   const [smsSent, setSmsSent] = useState(false)
-  const [retriedVerificationAttemptId, setRetriedVerificationAttemptId] = useState<string | null>(null)
   const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string> | null>(null)
+  const finishLogin = useCallback(async () => {
+    await onChanged()
+    setAttemptId(null)
+    setChallenge(null)
+    setSmsCode('')
+    setSmsSent(false)
+    toast.success(t('neteaseConnected'))
+  }, [onChanged, t])
   const begin = useMutation({
-    mutationFn: beginNeteaseLogin,
-    onSuccess: ({ item }) => {
-      setAttemptId(item.id)
-      setQrUrl(item.qrUrl)
-    },
+    mutationFn: () => startConnectorLogin('netease', 'qr'),
+    onSuccess: applyPendingLogin,
     onError: (error) => toast.error(error instanceof Error ? error.message : t('neteaseLoginFailed')),
   })
   const sendSms = useMutation({
-    mutationFn: () => sendNeteaseSmsCode({ countryCode: countryCode.trim(), phone: phone.trim() }),
-    onSuccess: () => {
+    mutationFn: () => startConnectorLogin('netease', 'sms', { countryCode: countryCode.trim(), phone: phone.trim() }),
+    onSuccess: (result) => {
+      applyPendingLogin(result)
       setSmsSent(true)
       toast.success(t('smsCodeSent'))
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('smsCodeSendFailed')),
   })
   const smsLogin = useMutation({
-    mutationFn: () =>
-      loginNeteaseWithSms({
-        countryCode: countryCode.trim(),
-        phone: phone.trim(),
-        code: smsCode.trim(),
-        verificationAttemptId: attemptId ?? undefined,
-      }),
-    onSuccess: async ({ connector: connected, verification }) => {
-      if (verification) {
-        setAttemptId(verification.id)
-        setQrUrl(verification.qrUrl)
-        setRetriedVerificationAttemptId(null)
+    mutationFn: () => {
+      if (!attemptId) throw new Error('Connector login attempt is missing.')
+      return continueConnectorLogin(attemptId, 'submit_code', { code: smsCode.trim() })
+    },
+    onSuccess: async (result) => {
+      if (!result.connector) {
+        applyPendingLogin(result)
         return
       }
-      if (!connected) return
-      await onChanged()
-      setAttemptId(null)
-      setQrUrl(null)
-      setSmsCode('')
-      setSmsSent(false)
-      toast.success(t('neteaseConnected'))
+      await finishLogin()
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('neteaseLoginFailed')),
   })
   const login = useQuery({
     queryKey: ['connectors', 'netease-login', attemptId],
-    queryFn: () => checkNeteaseLogin(attemptId as string),
-    enabled: Boolean(open && attemptId),
-    refetchInterval: (query) =>
-      query.state.data?.attempt.status === 'connected' || query.state.data?.attempt.status === 'expired' ? false : 2000,
+    queryFn: () => continueConnectorLogin(attemptId as string, 'poll'),
+    enabled: Boolean(open && attemptId && challenge?.type === 'qr'),
+    refetchInterval: (query) => (query.state.data?.attempt.status === 'pending' ? 2000 : false),
   })
   const playlists = useQuery({
     queryKey: queryKeys.connectors.playlists(connector?.id ?? ''),
@@ -124,45 +115,34 @@ export function NeteaseConnectorDialog({
   }, [connector, open, playlists.data, selectedPlaylistIds])
 
   useEffect(() => {
-    const nextQrUrl = login.data?.attempt.qrUrl
-    if (!attemptId || !nextQrUrl || nextQrUrl === qrUrl) return
-    setQrUrl(nextQrUrl)
-  }, [attemptId, login.data?.attempt.qrUrl, qrUrl])
+    if (!attemptId || !login.data) return
+    setChallenge(login.data.attempt.challenge)
+  }, [attemptId, login.data])
 
   useEffect(() => {
     if (!attemptId || !login.data?.connector) return
-    void onChanged()
-    setAttemptId(null)
-    setQrUrl(null)
-    toast.success(t('neteaseConnected'))
-  }, [attemptId, login.data?.connector, onChanged, t])
-
-  useEffect(() => {
-    if (
-      loginMethod !== 'sms' ||
-      !attemptId ||
-      login.data?.attempt.status !== 'connected' ||
-      login.data.connector ||
-      retriedVerificationAttemptId === attemptId
-    )
-      return
-    setRetriedVerificationAttemptId(attemptId)
-    smsLogin.mutate()
-  }, [attemptId, login.data, loginMethod, retriedVerificationAttemptId, smsLogin.mutate])
+    void finishLogin()
+  }, [attemptId, login.data?.connector, finishLogin])
 
   const canSendSms = /^\d{1,4}$/.test(countryCode.trim()) && /^\d{5,20}$/.test(phone.trim())
   const canLoginWithSms = canSendSms && /^\d{4,8}$/.test(smsCode.trim())
-  const verificationPending = loginMethod === 'sms' && Boolean(attemptId) && login.data?.attempt.status !== 'connected'
-  const qrVerificationPending =
-    loginMethod === 'qr' && Boolean(qrUrl?.startsWith('https://st.music.163.com/encrypt-pages'))
+  const currentChallenge = login.data ? login.data.attempt.challenge : challenge
+  const qrUrl = currentChallenge?.type === 'qr' ? currentChallenge.url : null
+  const loginStatus = login.data?.attempt.status ?? (attemptId ? 'pending' : null)
+  const verificationPending = loginMethod === 'sms' && currentChallenge?.type === 'qr' && loginStatus === 'pending'
+  const qrVerificationPending = currentChallenge?.type === 'qr' && currentChallenge.purpose === 'verification'
+
+  function applyPendingLogin(result: ConnectorLoginResult) {
+    setAttemptId(result.attempt.id)
+    setChallenge(result.attempt.challenge)
+  }
 
   function changeLoginMethod(values: string[]) {
     const method = values[0]
     if (method !== 'qr' && method !== 'sms') return
     setLoginMethod(method)
     setAttemptId(null)
-    setQrUrl(null)
-    setRetriedVerificationAttemptId(null)
+    setChallenge(null)
   }
 
   function changeSmsRecipient(nextCountryCode: string, nextPhone: string) {
@@ -171,8 +151,7 @@ export function NeteaseConnectorDialog({
     setSmsCode('')
     setSmsSent(false)
     setAttemptId(null)
-    setQrUrl(null)
-    setRetriedVerificationAttemptId(null)
+    setChallenge(null)
   }
 
   function changeOpen(nextOpen: boolean) {
@@ -183,10 +162,9 @@ export function NeteaseConnectorDialog({
       return
     }
     setAttemptId(null)
-    setQrUrl(null)
+    setChallenge(null)
     setSmsCode('')
     setSmsSent(false)
-    setRetriedVerificationAttemptId(null)
     setSelectedPlaylistIds(null)
   }
 
@@ -300,13 +278,13 @@ export function NeteaseConnectorDialog({
                 {qrVerificationPending ? (
                   <p className="text-muted-foreground text-sm">{t('neteaseVerificationDescription')}</p>
                 ) : null}
-                {login.data?.attempt.status === 'waiting_scan' ? (
+                {currentChallenge?.type === 'qr' && currentChallenge.progress === 'waiting_scan' ? (
                   <p className="text-muted-foreground text-sm">{t('waitingForScan')}</p>
                 ) : null}
-                {login.data?.attempt.status === 'waiting_confirmation' ? (
+                {currentChallenge?.type === 'qr' && currentChallenge.progress === 'waiting_confirmation' ? (
                   <p className="text-muted-foreground text-sm">{t('waitingForConfirmation')}</p>
                 ) : null}
-                {login.data?.attempt.status === 'expired' ? (
+                {loginStatus === 'expired' ? (
                   <div className="flex flex-col items-center gap-2">
                     <p className="text-destructive text-sm">{t('qrCodeExpired')}</p>
                     <Button
@@ -314,7 +292,7 @@ export function NeteaseConnectorDialog({
                       variant="outline"
                       onClick={() => {
                         setAttemptId(null)
-                        setQrUrl(null)
+                        setChallenge(null)
                         begin.mutate()
                       }}
                       disabled={begin.isPending}
@@ -371,23 +349,22 @@ export function NeteaseConnectorDialog({
                         <QRCodeSVG value={qrUrl} size={176} />
                       </div>
                       <p className="text-muted-foreground text-sm">{t('neteaseVerificationDescription')}</p>
-                      {login.data?.attempt.status === 'waiting_scan' ? (
+                      {currentChallenge?.type === 'qr' && currentChallenge.progress === 'waiting_scan' ? (
                         <p className="text-muted-foreground text-sm">{t('waitingForScan')}</p>
                       ) : null}
-                      {login.data?.attempt.status === 'waiting_confirmation' ? (
+                      {currentChallenge?.type === 'qr' && currentChallenge.progress === 'waiting_confirmation' ? (
                         <p className="text-muted-foreground text-sm">{t('waitingForConfirmation')}</p>
                       ) : null}
-                      {login.data?.attempt.status === 'connected' ? (
+                      {loginStatus === 'connected' ? (
                         <p className="text-muted-foreground text-sm">{t('verificationComplete')}</p>
                       ) : null}
-                      {login.data?.attempt.status === 'expired' ? (
+                      {loginStatus === 'expired' ? (
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => {
                             setAttemptId(null)
-                            setQrUrl(null)
-                            setRetriedVerificationAttemptId(null)
+                            setChallenge(null)
                           }}
                         >
                           {t('tryAgain')}

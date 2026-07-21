@@ -1,15 +1,21 @@
 import type {
-  ConnectorLoginAttempt,
+  ConnectorLoginResult,
+  ConnectorProviderSummary,
   ConnectorSummary,
   DoubanConnectorInput,
   MusicCollectionSummary,
-  NeteaseSmsCodeInput,
-  NeteaseSmsLoginInput,
 } from '@shared/types'
 import { apiRequest } from './client'
 
 export async function listConnectors() {
   return apiRequest<{ items: ConnectorSummary[] }>('/api/connectors', 'Failed to load connectors.')
+}
+
+export async function listConnectorProviders() {
+  return apiRequest<{ items: ConnectorProviderSummary[] }>(
+    '/api/connectors/providers',
+    'Failed to load connector providers.',
+  )
 }
 
 export async function saveDoubanConnector(input: DoubanConnectorInput) {
@@ -38,36 +44,27 @@ export async function syncConnector(id: string) {
   })
 }
 
-export async function beginNeteaseLogin() {
-  return apiRequest<{ item: ConnectorLoginAttempt }>(
-    '/api/connectors/netease/login-attempts',
-    'Failed to start Netease login.',
-    { method: 'POST' },
-  )
-}
-
-export async function checkNeteaseLogin(id: string) {
-  return apiRequest<{ attempt: ConnectorLoginAttempt; connector: ConnectorSummary | null }>(
-    `/api/connectors/netease/login-attempts/${id}/check`,
-    'Failed to check Netease login.',
-    { method: 'POST' },
-  )
-}
-
-export async function sendNeteaseSmsCode(input: NeteaseSmsCodeInput) {
-  return apiRequest<{ sent: true }>('/api/connectors/netease/sms-codes', 'Failed to send Netease SMS code.', {
+export async function startConnectorLogin(kind: string, method: string, input: Record<string, string> = {}) {
+  return apiRequest<ConnectorLoginResult>('/api/connectors/login-attempts', 'Failed to start connector login.', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ kind, method, input }),
   })
 }
 
-export async function loginNeteaseWithSms(input: NeteaseSmsLoginInput) {
-  return apiRequest<{ connector: ConnectorSummary | null; verification: ConnectorLoginAttempt | null }>(
-    '/api/connectors/netease/sms-login',
-    'Netease SMS login failed.',
+export async function getConnectorLoginAttempt(id: string) {
+  return apiRequest<ConnectorLoginResult>(
+    `/api/connectors/login-attempts/${id}`,
+    'Failed to load connector login attempt.',
+  )
+}
+
+export async function continueConnectorLogin(id: string, action: string, input: Record<string, string> = {}) {
+  return apiRequest<ConnectorLoginResult>(
+    `/api/connectors/login-attempts/${id}/continue`,
+    'Failed to continue connector login.',
     {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: JSON.stringify({ action, input }),
     },
   )
 }

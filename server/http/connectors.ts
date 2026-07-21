@@ -1,5 +1,11 @@
 import { zValidator } from '@hono/zod-validator'
 import {
+  continueConnectorLogin,
+  getConnectorLoginAttempt,
+  listConnectorProviders,
+  startConnectorLogin,
+} from '@server/usecases/connector-auth'
+import {
   deleteConnector,
   enqueueConnectorSync,
   listConnectorPlaylists,
@@ -8,12 +14,6 @@ import {
   saveDoubanConnector,
   updateConnector,
 } from '@server/usecases/connectors'
-import {
-  beginNeteaseLogin,
-  checkNeteaseLogin,
-  loginNeteaseWithSms,
-  sendNeteaseSmsCode,
-} from '@server/usecases/music-connectors/netease'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
@@ -28,27 +28,17 @@ const connectorPatchSchema = z.object({
   enabled: z.boolean(),
 })
 
-const loginAttemptParamsSchema = z.object({
-  id: z.string().uuid(),
+const connectorAuthInputSchema = z.record(z.string(), z.string()).default({})
+
+const connectorLoginStartSchema = z.object({
+  kind: z.string().trim().min(1),
+  method: z.string().trim().min(1),
+  input: connectorAuthInputSchema,
 })
 
-const neteaseSmsCodeSchema = z.object({
-  countryCode: z
-    .string()
-    .trim()
-    .regex(/^\d{1,4}$/),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^\d{5,20}$/),
-})
-
-const neteaseSmsLoginSchema = neteaseSmsCodeSchema.extend({
-  code: z
-    .string()
-    .trim()
-    .regex(/^\d{4,8}$/),
-  verificationAttemptId: z.string().uuid().optional(),
+const connectorLoginContinueSchema = z.object({
+  action: z.string().trim().min(1),
+  input: connectorAuthInputSchema,
 })
 
 const playlistSelectionSchema = z.object({
@@ -56,6 +46,10 @@ const playlistSelectionSchema = z.object({
 })
 
 export function registerConnectorRoutes(routes: Hono<AppEnv>) {
+  routes.get('/connectors/providers', (c) => {
+    return c.json({ items: listConnectorProviders(c.get('deps')) })
+  })
+
   routes.get('/connectors', async (c) => {
     const items = await listConnectors(c.get('deps'), c.get('user').id)
     return c.json({ items })
@@ -66,27 +60,31 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
     return c.json({ item })
   })
 
-  routes.post('/connectors/netease/login-attempts', async (c) => {
-    const item = await beginNeteaseLogin(c.get('deps'), c.env, c.get('user').id)
-    return c.json({ item }, 201)
+  routes.post('/connectors/login-attempts', zValidator('json', connectorLoginStartSchema), async (c) => {
+    const result = await startConnectorLogin(c.get('deps'), c.env, c.get('user').id, c.req.valid('json'))
+    return c.json(result, 201)
+  })
+
+  routes.get('/connectors/login-attempts/:id', zValidator('param', idParamsSchema), async (c) => {
+    return c.json(await getConnectorLoginAttempt(c.get('deps'), c.get('user').id, c.req.valid('param').id))
   })
 
   routes.post(
-    '/connectors/netease/login-attempts/:id/check',
-    zValidator('param', loginAttemptParamsSchema),
+    '/connectors/login-attempts/:id/continue',
+    zValidator('param', idParamsSchema),
+    zValidator('json', connectorLoginContinueSchema),
     async (c) => {
-      return c.json(await checkNeteaseLogin(c.get('deps'), c.env, c.get('user').id, c.req.valid('param').id))
+      return c.json(
+        await continueConnectorLogin(
+          c.get('deps'),
+          c.env,
+          c.get('user').id,
+          c.req.valid('param').id,
+          c.req.valid('json'),
+        ),
+      )
     },
   )
-
-  routes.post('/connectors/netease/sms-codes', zValidator('json', neteaseSmsCodeSchema), async (c) => {
-    await sendNeteaseSmsCode(c.get('deps'), c.req.valid('json'))
-    return c.json({ sent: true })
-  })
-
-  routes.post('/connectors/netease/sms-login', zValidator('json', neteaseSmsLoginSchema), async (c) => {
-    return c.json(await loginNeteaseWithSms(c.get('deps'), c.env, c.get('user').id, c.req.valid('json')))
-  })
 
   routes.patch(
     '/connectors/:id',

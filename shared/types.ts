@@ -262,22 +262,12 @@ export interface LibraryMediaPage {
 
 export type ConnectorKind = string
 export type ConnectorCapability = 'library.import' | 'music.playlists.read' | 'music.tracks.download'
-export type ConnectorAuthMode = 'profile' | 'qr' | 'sms'
+export type ConnectorAuthMode = string
 export type ConnectorStatus = 'connected' | 'reauth_required' | 'error'
 
 export interface DoubanConnectorInput {
   profileId: string
   enabled: boolean
-}
-
-export interface NeteaseSmsCodeInput {
-  countryCode: string
-  phone: string
-}
-
-export interface NeteaseSmsLoginInput extends NeteaseSmsCodeInput {
-  code: string
-  verificationAttemptId?: string
 }
 
 export interface LibraryImportSyncResult {
@@ -315,14 +305,52 @@ export interface ConnectorSummary {
   updatedAt: string
 }
 
-export type ConnectorLoginStatus = 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'
+export type ConnectorLoginStatus = 'pending' | 'connected' | 'expired'
+
+export interface ConnectorAuthField {
+  name: string
+  type: 'text' | 'password'
+  required: boolean
+}
+
+export type ConnectorAuthChallenge =
+  | {
+      type: 'qr'
+      url: string
+      purpose: 'login' | 'verification'
+      progress: 'waiting_scan' | 'waiting_confirmation'
+      expiresAt: string
+    }
+  | {
+      type: 'form'
+      action: string
+      fields: ConnectorAuthField[]
+      expiresAt: string
+    }
+  | {
+      type: 'redirect'
+      url: string
+      expiresAt: string
+    }
 
 export interface ConnectorLoginAttempt {
   id: string
   kind: ConnectorKind
-  qrUrl: string
+  method: ConnectorAuthMode
   status: ConnectorLoginStatus
+  challenge: ConnectorAuthChallenge | null
   expiresAt: string
+}
+
+export interface ConnectorLoginResult {
+  attempt: ConnectorLoginAttempt
+  connector: ConnectorSummary | null
+}
+
+export interface ConnectorProviderSummary {
+  kind: ConnectorKind
+  authModes: ConnectorAuthMode[]
+  capabilities: ConnectorCapability[]
 }
 
 export type MusicCollectionKind = 'playlist' | 'album' | 'favorites'

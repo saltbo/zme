@@ -80,18 +80,33 @@ test.describe
       await expect(dialog.getByRole('button', { name: 'Send verification code' })).toBeDisabled()
       await expect(dialog.getByText(/not your phone number or verification code/i)).toBeVisible()
 
-      const verificationAttempt = {
+      const smsAttempt = {
         id: '11111111-1111-4111-8111-111111111111',
         kind: 'netease',
-        qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
-        status: 'waiting_scan',
-        expiresAt: '2026-07-21T00:00:00.000Z',
+        method: 'sms',
+        status: 'pending',
+        challenge: {
+          type: 'form',
+          action: 'submit_code',
+          fields: [{ name: 'code', type: 'text', required: true }],
+          expiresAt: '2099-07-21T00:00:00.000Z',
+        },
+        expiresAt: '2099-07-21T00:00:00.000Z',
       }
-      await page.route('**/api/connectors/netease/sms-codes', (route) => route.fulfill({ json: { sent: true } }))
-      await page.route('**/api/connectors/netease/sms-login', (route) =>
-        route.fulfill({ json: { connector: null, verification: verificationAttempt } }),
+      const verificationAttempt = {
+        ...smsAttempt,
+        challenge: {
+          type: 'qr',
+          url: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+          purpose: 'verification',
+          progress: 'waiting_scan',
+          expiresAt: '2099-07-21T00:00:00.000Z',
+        },
+      }
+      await page.route('**/api/connectors/login-attempts', (route) =>
+        route.fulfill({ json: { attempt: smsAttempt, connector: null } }),
       )
-      await page.route('**/api/connectors/netease/login-attempts/*/check', (route) =>
+      await page.route('**/api/connectors/login-attempts/*/continue', (route) =>
         route.fulfill({ json: { attempt: verificationAttempt, connector: null } }),
       )
 
@@ -114,18 +129,31 @@ test.describe
       const loginAttempt = {
         id: '22222222-2222-4222-8222-222222222222',
         kind: 'netease',
-        qrUrl: 'https://music.163.com/login?codekey=login-key',
-        status: 'waiting_scan',
+        method: 'qr',
+        status: 'pending',
+        challenge: {
+          type: 'qr',
+          url: 'https://music.163.com/login?codekey=login-key',
+          purpose: 'login',
+          progress: 'waiting_scan',
+          expiresAt: '2099-07-21T00:00:00.000Z',
+        },
         expiresAt: '2099-07-21T00:00:00.000Z',
       }
       const verificationAttempt = {
         ...loginAttempt,
-        qrUrl: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+        challenge: {
+          type: 'qr',
+          url: 'https://st.music.163.com/encrypt-pages?qrCode=risk-qr-code',
+          purpose: 'verification',
+          progress: 'waiting_scan',
+          expiresAt: '2099-07-21T00:00:00.000Z',
+        },
       }
-      await page.route('**/api/connectors/netease/login-attempts', (route) =>
-        route.fulfill({ json: { item: loginAttempt } }),
+      await page.route('**/api/connectors/login-attempts', (route) =>
+        route.fulfill({ json: { attempt: loginAttempt, connector: null } }),
       )
-      await page.route('**/api/connectors/netease/login-attempts/*/check', (route) =>
+      await page.route('**/api/connectors/login-attempts/*/continue', (route) =>
         route.fulfill({ json: { attempt: verificationAttempt, connector: null } }),
       )
 

@@ -154,11 +154,12 @@ export const connectorLoginAttempts = sqliteTable('connector_login_attempts', {
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
   kind: text('kind').notNull(),
-  externalKey: text('external_key').notNull(),
-  credentialsEncrypted: text('credentials_encrypted'),
-  status: text('status', { enum: ['waiting_scan', 'waiting_confirmation', 'connected', 'expired'] })
+  method: text('method').notNull(),
+  stateEncrypted: text('state_encrypted'),
+  challengeJson: text('challenge_json'),
+  status: text('status', { enum: ['pending', 'connected', 'expired'] })
     .notNull()
-    .default('waiting_scan'),
+    .default('pending'),
   expiresAt: text('expires_at').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),

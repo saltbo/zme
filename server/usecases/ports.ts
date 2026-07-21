@@ -2,6 +2,7 @@ import type {
   BookDetails,
   BookDiscoveryInput,
   BookSearchItem,
+  ConnectorAuthChallenge,
   ConnectorAuthMode,
   ConnectorCapability,
   ConnectorKind,
@@ -44,8 +45,6 @@ import type {
   MusicLibraryTrack,
   MusicReleaseKind,
   MusicSearchItem,
-  NeteaseSmsCodeInput,
-  NeteaseSmsLoginInput,
   ResourcePage,
 } from '@shared/types'
 
@@ -291,9 +290,10 @@ export interface ConnectorLoginAttemptRecord {
   id: string
   userId: string
   kind: string
-  externalKey: string
-  credentialsEncrypted: string | null
-  status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'
+  method: string
+  stateEncrypted: string | null
+  challenge: ConnectorAuthChallenge | null
+  status: 'pending' | 'connected' | 'expired'
   expiresAt: string
   createdAt: string
   updatedAt: string
@@ -306,7 +306,7 @@ export interface ConnectorLoginAttemptsRepo {
     userId: string,
     id: string,
     patch: Partial<
-      Pick<ConnectorLoginAttemptRecord, 'credentialsEncrypted' | 'externalKey' | 'status' | 'expiresAt' | 'updatedAt'>
+      Pick<ConnectorLoginAttemptRecord, 'stateEncrypted' | 'challenge' | 'status' | 'expiresAt' | 'updatedAt'>
     >,
   ): Promise<ConnectorLoginAttemptRecord | null>
 }
@@ -675,44 +675,34 @@ export interface ConnectedMusicAccount {
   avatarUrl: string | null
 }
 
-export type MusicSmsLoginResult =
-  | { status: 'connected'; cookies: string[]; account: ConnectedMusicAccount }
+export interface ConnectorAuthStartInput {
+  method: string
+  input: Record<string, string>
+}
+
+export interface ConnectorAuthContinueInput {
+  action: string
+  input: Record<string, string>
+}
+
+export type ConnectorAuthTransition =
   | {
-      status: 'verification_required'
-      cookies: string[]
-      verification: { qrCode: string; qrUrl: string; expiresAt: string }
+      status: 'pending'
+      state: unknown
+      challenge: ConnectorAuthChallenge
     }
-
-export type MusicQrLoginResult =
-  | { status: 'waiting_scan' | 'waiting_confirmation' | 'expired'; cookies: string[] }
-  | { status: 'connected'; cookies: string[]; account: ConnectedMusicAccount }
   | {
-      status: 'verification_required'
-      cookies: string[]
-      verification: { qrCode: string; qrUrl: string; expiresAt: string }
+      status: 'connected'
+      credentials: unknown
+      account: ConnectedMusicAccount
     }
-
-export interface MusicConnectorQrAuth {
-  beginQrLogin(): Promise<{ key: string; qrUrl: string; cookies: string[]; expiresAt: string }>
-  checkQrLogin(key: string, cookies: string[]): Promise<MusicQrLoginResult>
-}
-
-export interface MusicConnectorSmsAuth {
-  sendSmsCode(input: NeteaseSmsCodeInput): Promise<void>
-  loginWithSms(input: NeteaseSmsLoginInput, cookies: string[]): Promise<MusicSmsLoginResult>
-}
-
-export interface MusicConnectorVerificationAuth {
-  checkRiskVerification(
-    qrCode: string,
-    cookies: string[],
-  ): Promise<{ status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'; cookies: string[] }>
-}
+  | {
+      status: 'expired'
+    }
 
 export interface MusicConnectorAuth {
-  qr?: MusicConnectorQrAuth
-  sms?: MusicConnectorSmsAuth
-  verification?: MusicConnectorVerificationAuth
+  start(input: ConnectorAuthStartInput): Promise<ConnectorAuthTransition>
+  continue(state: unknown, input: ConnectorAuthContinueInput): Promise<ConnectorAuthTransition>
 }
 
 export interface MusicConnectorSession {
