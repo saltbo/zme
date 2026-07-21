@@ -34,6 +34,7 @@ import type {
   MusicCollectionProvider,
   MusicCollectionSummary,
   MusicDiscoveryInput,
+  MusicDownloadQuality,
   MusicLibraryTrack,
   MusicSearchItem,
   NeteaseSmsCodeInput,
@@ -311,10 +312,14 @@ export interface MusicTrackInput extends Omit<MusicLibraryTrack, 'id' | 'positio
   addedAt?: string | null
 }
 
+export type MusicTrackRecord = Omit<MusicLibraryTrack, 'position' | 'addedAt'>
+
 export interface MusicCollectionsRepo {
   listLibrary(userId: string, kind: 'playlist' | 'album'): Promise<MusicCollectionSummary[]>
   listForConnector(userId: string, connectorId: string): Promise<MusicCollectionSummary[]>
   getDetails(userId: string, id: string): Promise<MusicCollectionDetails | null>
+  getLibraryTrack(userId: string, id: string): Promise<MusicTrackRecord | null>
+  getTrack(id: string): Promise<MusicTrackRecord | null>
   find(userId: string, provider: MusicCollectionProvider, externalId: string): Promise<MusicCollectionRecord | null>
   upsert(
     userId: string,
@@ -342,6 +347,25 @@ export interface MusicCollectionsRepo {
   replaceTracks(collectionId: string, tracks: MusicTrackInput[]): Promise<void>
   deleteMissingConnectorCollections(connectorId: string, externalIds: string[]): Promise<void>
   delete(userId: string, id: string): Promise<boolean>
+}
+
+export interface MusicDownloadKeyRecord {
+  id: string
+  keyHash: string
+  userId: string
+  connectorId: string
+  trackId: string
+  downloaderId: string
+  quality: MusicDownloadQuality
+  expiresAt: string
+  revokedAt: string | null
+  createdAt: string
+}
+
+export interface MusicDownloadKeysRepo {
+  create(record: MusicDownloadKeyRecord): Promise<void>
+  getByHash(keyHash: string): Promise<MusicDownloadKeyRecord | null>
+  revoke(id: string, revokedAt: string): Promise<void>
 }
 
 export interface UsersRepo {
@@ -471,4 +495,19 @@ export interface MusicPlaylistConnector {
   ): Promise<{ status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'; cookies: string[] }>
   listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
   listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
+}
+
+export interface ResolvedMusicResource {
+  url: string
+  headers: Record<string, string>
+  extension: string
+  contentType: string | null
+  contentLength: number | null
+}
+
+export interface MusicResourceResolver {
+  resolve(
+    credentials: string[],
+    input: { trackId: string; quality: MusicDownloadQuality },
+  ): Promise<ResolvedMusicResource>
 }

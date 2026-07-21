@@ -1,11 +1,13 @@
 import type {
+  CreateDownloadResult,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
   MusicDiscoveryInput,
   MusicSearchItem,
+  MusicTrackDownloadInput,
   ResourcePage,
 } from '@shared/types'
-import { apiRequest, query } from './client'
+import { apiRequest, jsonBody, query } from './client'
 
 export async function searchMusicAlbums(input: {
   query?: string
@@ -46,5 +48,13 @@ export async function getMusicAlbumDetails(mediaKey: string) {
   return apiRequest<{ item: MusicAlbumDetails }>(
     `/api/music/details${query({ mediaKey })}`,
     'Failed to load music album details.',
+  )
+}
+
+export async function submitMusicTrackDownload(trackId: string, input: MusicTrackDownloadInput) {
+  return apiRequest<{ item: CreateDownloadResult }>(
+    `/api/music/tracks/${encodeURIComponent(trackId)}/download`,
+    'Failed to submit music download.',
+    jsonBody(input),
   )
 }

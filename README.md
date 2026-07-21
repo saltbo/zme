@@ -117,12 +117,11 @@ tiers, and database/codegen conventions are documented in
 
 ## Disclaimer
 
-ZME is intended for **self-hosted, personal or household use only**. It is a
-discovery and download-orchestration interface — it hosts and distributes no
-media itself, and only talks to the third-party services (metadata providers,
-indexers, and download clients) that *you* configure. You are solely responsible
-for how you use it and for complying with the laws and the terms of those
-services in your jurisdiction.
+ZME is intended for **self-hosted, personal or household use only**. It does not
+store downloaded media, but it may temporarily proxy content from a service you
+connect to a downloader you configure. You are solely responsible for how you
+use it and for complying with the laws and the terms of those services in your
+jurisdiction.
 
 **Running this project for commercial purposes is entirely at your own risk; you
 assume all resulting legal liability.** The software is provided "as is", without

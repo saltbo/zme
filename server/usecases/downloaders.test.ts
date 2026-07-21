@@ -42,6 +42,12 @@ const torrentUrlInput: CreateDownloadInput = {
   sourceType: 'torrent_url',
 }
 
+const httpInput: CreateDownloadInput = {
+  downloaderId: 'dl-1',
+  uri: 'https://zme.test/api/music/tracks/track-1/download?key=temporary',
+  sourceType: 'http',
+}
+
 function createSubmitDeps(options: {
   matches?: boolean
   resolved?: ResolvedDownloadSource | null
@@ -82,6 +88,26 @@ describe('submitDownload', () => {
 
     expect(result).toEqual({ downloaderId: 'dl-1', status: 'submitted' })
     expect(submit).toHaveBeenCalledWith(downloader.config, magnetInput)
+  })
+
+  it('submits HTTP files directly to a compatible downloader', async () => {
+    const { deps, submit } = createSubmitDeps({})
+
+    await submitDownload(deps, 'user-1', httpInput)
+
+    expect(submit).toHaveBeenCalledWith(downloader.config, httpInput)
+  })
+
+  it('rejects HTTP files for torrent-only downloaders', async () => {
+    const torrentDownloader = { ...downloader, kind: 'qbittorrent' as const }
+    const deps = {
+      downloadersRepo: { getEnabled: async () => torrentDownloader },
+      downloaderGateways: { qbittorrent: { submit: vi.fn(), probe: async () => {} } },
+    } as never as Deps
+
+    await expect(submitDownload(deps, 'user-1', httpInput)).rejects.toThrow(
+      'qbittorrent does not support HTTP file downloads.',
+    )
   })
 
   it('submits the original torrent url when no indexer serves it', async () => {

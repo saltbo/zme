@@ -1,14 +1,24 @@
-import type { MusicCollectionSummary } from '@shared/types'
+import type { DownloaderSummary, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Disc3, Download, ListMusic, Trash2 } from 'lucide-react'
+import { ArrowLeft, Disc3, Download, HardDriveDownload, ListMusic, LoaderCircle, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
 import { LibraryNavigation } from '@/components/library/library-navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getMusicCollection, listMusicCollections, removeMusicCollection } from '@/lib/api'
+import { useDownloaders } from '@/hooks/use-downloader-queries'
+import { getMusicCollection, listMusicCollections, removeMusicCollection, submitMusicTrackDownload } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 const collectionSkeletonKeys = Array.from({ length: 10 }, (_, index) => `music-collection-skeleton-${index + 1}`)
@@ -66,6 +76,7 @@ export function MusicCollectionDetailPage() {
   const { collectionId = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const downloaders = useDownloaders()
   const collection = useQuery({
     queryKey: queryKeys.music.collection(collectionId),
     queryFn: async () => (await getMusicCollection(collectionId)).item,
@@ -87,6 +98,9 @@ export function MusicCollectionDetailPage() {
   }
 
   const item = collection.data
+  const httpDownloaders = (downloaders.data ?? []).filter(
+    (downloader) => downloader.enabled && (downloader.kind === 'zpan' || downloader.kind === 'aria2'),
+  )
   const musicKind = item.kind === 'album' ? 'album' : 'playlist'
   const title = item.kind === 'favorites' ? t('favoriteSongs') : item.title
   return (
@@ -125,19 +139,79 @@ export function MusicCollectionDetailPage() {
               </div>
             </div>
             <span className="hidden text-muted-foreground text-xs sm:block">{formatDuration(track.durationMs)}</span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              disabled
-              title={t('downloadComingSoon')}
-              aria-label={t('downloadComingSoon')}
-            >
-              <Download />
-            </Button>
+            <MusicTrackDownloadButton
+              track={track}
+              downloaders={httpDownloaders}
+              loadingDownloaders={downloaders.isLoading}
+            />
           </div>
         ))}
       </div>
     </main>
+  )
+}
+
+function MusicTrackDownloadButton({
+  track,
+  downloaders,
+  loadingDownloaders,
+}: {
+  track: MusicLibraryTrack
+  downloaders: DownloaderSummary[]
+  loadingDownloaders: boolean
+}) {
+  const { t } = useTranslation()
+  const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
+  const supported = track.provider === 'netease'
+  const submitting = submittingDownloaderId !== null
+  const label = !supported
+    ? t('musicDownloadUnavailable')
+    : loadingDownloaders
+      ? t('loadingDownloaders')
+      : downloaders.length === 0
+        ? t('noDownloadersAvailable')
+        : t('downloadTo')
+
+  async function handleDownload(downloader: DownloaderSummary) {
+    setSubmittingDownloaderId(downloader.id)
+    try {
+      await submitMusicTrackDownload(track.id, { downloaderId: downloader.id })
+      toast.success(t('downloadSubmitted'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
+    } finally {
+      setSubmittingDownloaderId(null)
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={!supported || loadingDownloaders || downloaders.length === 0 || submitting}
+            title={label}
+            aria-label={label}
+          />
+        }
+      >
+        {submitting ? <LoaderCircle className="animate-spin" /> : <Download />}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
+          {downloaders.map((downloader) => (
+            <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader)}>
+              <HardDriveDownload />
+              <span className="truncate">{downloader.description || downloader.kind}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

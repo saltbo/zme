@@ -44,6 +44,9 @@ export async function submitDownload(
 ): Promise<CreateDownloadResult> {
   const downloader = await deps.downloadersRepo.getEnabled(userId, input.downloaderId)
   if (!downloader) throw new Error('Downloader is not available.')
+  if (input.sourceType === 'http' && downloader.kind !== 'zpan' && downloader.kind !== 'aria2') {
+    throw new Error(`${downloader.kind} does not support HTTP file downloads.`)
+  }
   const resolvedInput = await resolveDownloadInput(deps, input)
 
   await deps.downloaderGateways[downloader.kind].submit(downloader.config, resolvedInput)

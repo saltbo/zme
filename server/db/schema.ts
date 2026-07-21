@@ -229,6 +229,31 @@ export const musicCollectionTracks = sqliteTable(
   (table) => [uniqueIndex('music_collection_tracks_collection_position_idx').on(table.collectionId, table.position)],
 )
 
+export const musicDownloadKeys = sqliteTable(
+  'music_download_keys',
+  {
+    id: text('id').primaryKey(),
+    keyHash: text('key_hash').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    connectorId: text('connector_id')
+      .notNull()
+      .references(() => connectors.id, { onDelete: 'cascade' }),
+    trackId: text('track_id')
+      .notNull()
+      .references(() => musicTracks.id, { onDelete: 'cascade' }),
+    downloaderId: text('downloader_id')
+      .notNull()
+      .references(() => downloaders.id, { onDelete: 'cascade' }),
+    quality: text('quality', { enum: ['standard', 'exhigh', 'lossless', 'hires'] }).notNull(),
+    expiresAt: text('expires_at').notNull(),
+    revokedAt: text('revoked_at'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('music_download_keys_key_hash_idx').on(table.keyHash)],
+)
+
 export type User = typeof user.$inferSelect
 export type Downloader = typeof downloaders.$inferSelect
 export type NewDownloader = typeof downloaders.$inferInsert
@@ -242,3 +267,4 @@ export type Connector = typeof connectors.$inferSelect
 export type ConnectorLoginAttempt = typeof connectorLoginAttempts.$inferSelect
 export type MusicCollection = typeof musicCollections.$inferSelect
 export type MusicTrackRow = typeof musicTracks.$inferSelect
+export type MusicDownloadKey = typeof musicDownloadKeys.$inferSelect

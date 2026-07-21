@@ -17,6 +17,7 @@ import {
   requireAuthMiddleware,
 } from './http/middleware'
 import { registerMusicRoutes } from './http/music'
+import { registerMusicDownloadRoutes, registerPublicMusicDownloadRoutes } from './http/music-downloads'
 import { registerMusicLibraryRoutes } from './http/music-library'
 import { registerSetupRoutes } from './http/setup'
 
@@ -30,6 +31,7 @@ routes.use('*', async (c, next) => {
 // Registration order is load-bearing: setup routes stay public because they are
 // registered before the auth middleware.
 registerSetupRoutes(routes)
+registerPublicMusicDownloadRoutes(routes)
 
 routes.use('*', requireAuthMiddleware)
 
@@ -41,6 +43,7 @@ routes.use('/media-sources/*', requireAdminMiddleware)
 registerMediaRoutes(routes)
 registerBookRoutes(routes)
 registerMusicRoutes(routes)
+registerMusicDownloadRoutes(routes)
 registerMusicLibraryRoutes(routes)
 registerConnectorRoutes(routes)
 registerIndexerRoutes(routes)

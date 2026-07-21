@@ -8,7 +8,7 @@ import type { AppEnv } from './context'
 const createDownloadSchema = z.object({
   downloaderId: z.string().trim().min(1),
   uri: z.string().trim().min(1),
-  sourceType: z.enum(['magnet', 'torrent_url']),
+  sourceType: z.enum(['http', 'magnet', 'torrent_url']),
   title: z.string().trim().optional(),
   category: z.string().trim().min(1).max(120).optional(),
   tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),

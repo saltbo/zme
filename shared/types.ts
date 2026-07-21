@@ -261,7 +261,7 @@ export interface LibraryMediaPage {
 }
 
 export type ConnectorKind = 'douban' | 'netease'
-export type ConnectorCapability = 'library.import' | 'music.playlists.read'
+export type ConnectorCapability = 'library.import' | 'music.playlists.read' | 'music.tracks.download'
 export type ConnectorAuthMode = 'profile' | 'qr' | 'sms'
 export type ConnectorStatus = 'connected' | 'reauth_required' | 'error'
 
@@ -365,6 +365,13 @@ export type MusicFavoriteTrackInput = Omit<MusicLibraryTrack, 'id' | 'position' 
 
 export interface MusicCollectionDetails extends MusicCollectionSummary {
   tracks: MusicLibraryTrack[]
+}
+
+export type MusicDownloadQuality = 'standard' | 'exhigh' | 'lossless' | 'hires'
+
+export interface MusicTrackDownloadInput {
+  downloaderId: string
+  quality?: MusicDownloadQuality
 }
 
 export type UserRole = 'admin' | 'user'
@@ -678,7 +685,7 @@ export interface DownloadTaskPage {
 export interface CreateDownloadInput {
   downloaderId: string
   uri: string
-  sourceType: 'magnet' | 'torrent_url'
+  sourceType: 'http' | 'magnet' | 'torrent_url'
   title?: string
   category?: string
   tags?: string[]

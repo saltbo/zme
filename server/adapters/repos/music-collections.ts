@@ -1,8 +1,8 @@
 import type { createDb } from '@server/db/client'
 import { musicCollections, musicCollectionTracks, musicTracks } from '@server/db/schema'
-import type { MusicCollectionRecord, MusicCollectionsRepo } from '@server/usecases/ports'
+import type { MusicCollectionRecord, MusicCollectionsRepo, MusicTrackRecord } from '@server/usecases/ports'
 import type { MusicCollectionDetails, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
 const D1_MAX_BOUND_PARAMETERS = 100
@@ -72,6 +72,24 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
         ...toSummary(collection),
         tracks: rows.map(({ relation, track }) => toTrack(track, relation.position, relation.addedAt)),
       } satisfies MusicCollectionDetails
+    },
+
+    async getLibraryTrack(userId, id) {
+      const rows = await db
+        .select({ track: musicTracks })
+        .from(musicCollectionTracks)
+        .innerJoin(musicTracks, eq(musicCollectionTracks.trackId, musicTracks.id))
+        .innerJoin(musicCollections, eq(musicCollectionTracks.collectionId, musicCollections.id))
+        .where(
+          and(eq(musicTracks.id, id), eq(musicCollections.userId, userId), isNotNull(musicCollections.libraryAddedAt)),
+        )
+        .limit(1)
+      return rows[0] ? toTrackRecord(rows[0].track) : null
+    },
+
+    async getTrack(id) {
+      const rows = await db.select().from(musicTracks).where(eq(musicTracks.id, id)).limit(1)
+      return rows[0] ? toTrackRecord(rows[0]) : null
     },
 
     async find(userId, provider, externalId) {
@@ -226,6 +244,14 @@ function toSummary(row: typeof musicCollections.$inferSelect): MusicCollectionSu
 
 function toTrack(row: typeof musicTracks.$inferSelect, position: number, addedAt: string | null): MusicLibraryTrack {
   return {
+    ...toTrackRecord(row),
+    position,
+    addedAt,
+  }
+}
+
+function toTrackRecord(row: typeof musicTracks.$inferSelect): MusicTrackRecord {
+  return {
     id: row.id,
     provider: row.provider,
     externalId: row.externalId,
@@ -237,7 +263,5 @@ function toTrack(row: typeof musicTracks.$inferSelect, position: number, addedAt
     coverUrl: row.coverUrl,
     durationMs: row.durationMs,
     isrcs: JSON.parse(row.isrcsJson) as string[],
-    position,
-    addedAt,
   }
 }

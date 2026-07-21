@@ -28,6 +28,11 @@ describe('http wiring', () => {
     expect(await response.json()).toEqual({ ok: true, name: 'zme' })
   })
 
+  it('keeps keyed music downloads outside the session auth wall', async () => {
+    const response = await request('/api/music/tracks/track-1/download')
+    expect(response.status).toBe(400)
+  })
+
   it('rejects unauthenticated requests to protected routes', async () => {
     for (const path of ['/api/library', '/api/downloads', '/api/tmdb/search?q=dune']) {
       const response = await request(path)

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { neteasePlaylistConnector } from './netease'
+import { neteaseMusicResourceResolver, neteasePlaylistConnector } from './netease'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -241,5 +241,78 @@ describe('Netease playlist connector', () => {
     await expect(neteasePlaylistConnector.sendSmsCode({ countryCode: '86', phone: '13800138000' })).rejects.toThrow(
       'Netease failed to send the SMS code (code 503: Verification attempts exceeded).',
     )
+  })
+})
+
+describe('Netease music resource resolver', () => {
+  it('resolves an entitled track through the authenticated EAPI', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 200,
+          data: [
+            {
+              id: 123,
+              url: 'http://m701.music.126.net/audio.mp3',
+              type: 'mp3',
+              size: 4096,
+              level: 'exhigh',
+              code: 200,
+              freeTrialInfo: null,
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      neteaseMusicResourceResolver.resolve(['MUSIC_U=session-value'], { trackId: '123', quality: 'exhigh' }),
+    ).resolves.toEqual({
+      url: 'https://m701.music.126.net/audio.mp3',
+      headers: {
+        Referer: 'https://music.163.com/',
+        'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
+      },
+      extension: 'mp3',
+      contentType: 'audio/mpeg',
+      contentLength: 4096,
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://interface.music.163.com/eapi/song/enhance/player/url/v1',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Cookie: expect.stringContaining('MUSIC_U=session-value') }),
+      }),
+    )
+  })
+
+  it('rejects preview-only tracks', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: 200,
+            data: [
+              {
+                id: 123,
+                url: 'https://m701.music.126.net/preview.mp3',
+                type: 'mp3',
+                level: 'exhigh',
+                code: 200,
+                freeTrialInfo: { start: 0, end: 30 },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    )
+
+    await expect(
+      neteaseMusicResourceResolver.resolve(['MUSIC_U=session-value'], { trackId: '123', quality: 'exhigh' }),
+    ).rejects.toThrow('The full Netease track is not available for this account.')
   })
 })

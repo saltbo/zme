@@ -13,8 +13,10 @@ import type {
   MediaProvider,
   MediaSourcesRepo,
   MusicCollectionsRepo,
+  MusicDownloadKeysRepo,
   MusicPlaylistConnector,
   MusicProvider,
+  MusicResourceResolver,
   UsersRepo,
 } from './ports'
 
@@ -24,6 +26,7 @@ export interface Deps {
   connectorsRepo: ConnectorsRepo
   connectorLoginAttemptsRepo: ConnectorLoginAttemptsRepo
   musicCollectionsRepo: MusicCollectionsRepo
+  musicDownloadKeysRepo: MusicDownloadKeysRepo
   downloadersRepo: DownloadersRepo
   indexersRepo: IndexersRepo
   mediaSourcesRepo: MediaSourcesRepo
@@ -35,4 +38,5 @@ export interface Deps {
   musicProvider: MusicProvider
   libraryImporters: { douban: LibraryEntryImporter }
   musicPlaylistConnectors: { netease: MusicPlaylistConnector }
+  musicResourceResolvers: { netease: MusicResourceResolver }
 }

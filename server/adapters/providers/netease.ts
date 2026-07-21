@@ -8,7 +8,12 @@ import {
   randomBytes,
 } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import type { ImportedMusicPlaylist, ImportedMusicTrack, MusicPlaylistConnector } from '@server/usecases/ports'
+import type {
+  ImportedMusicPlaylist,
+  ImportedMusicTrack,
+  MusicPlaylistConnector,
+  MusicResourceResolver,
+} from '@server/usecases/ports'
 
 const NETEASE_BASE = 'https://music.163.com'
 const NETEASE_INTERFACE_BASE = 'https://interface.music.163.com'
@@ -205,6 +210,85 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
     }
     return tracks
   },
+}
+
+export const neteaseMusicResourceResolver: MusicResourceResolver = {
+  async resolve(credentials, input) {
+    if (!/^\d+$/.test(input.trackId)) throw new Error('Netease track id is invalid.')
+
+    const response = await eapiRequest<{
+      code?: number
+      message?: string
+      data?: Array<{
+        id?: number
+        url?: string | null
+        type?: string | null
+        size?: number | null
+        level?: string | null
+        code?: number
+        freeTrialInfo?: unknown
+      }>
+    }>(
+      '/api/song/enhance/player/url/v1',
+      {
+        ids: JSON.stringify([Number(input.trackId)]),
+        level: input.quality,
+        encodeType: 'flac',
+      },
+      credentials,
+    )
+    if (response.body.code !== 200) {
+      throw new Error(neteaseError('Netease failed to resolve the track', response.body))
+    }
+
+    const item = response.body.data?.find((value) => String(value.id) === input.trackId)
+    if (!item?.url || item.code !== 200 || item.freeTrialInfo) {
+      throw new Error('The full Netease track is not available for this account.')
+    }
+    if (item.level && item.level !== input.quality) {
+      throw new Error(`Netease returned ${item.level} instead of the requested ${input.quality} quality.`)
+    }
+
+    const url = normalizeNeteaseMediaUrl(item.url)
+    const extension = normalizeAudioExtension(item.type, input.quality)
+    return {
+      url: url.toString(),
+      headers: {
+        Referer: `${NETEASE_BASE}/`,
+        'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
+      },
+      extension,
+      contentType: extension === 'flac' ? 'audio/flac' : 'audio/mpeg',
+      contentLength: typeof item.size === 'number' && item.size >= 0 ? item.size : null,
+    }
+  },
+}
+
+function normalizeNeteaseMediaUrl(value: string): URL {
+  const url = new URL(value)
+  const hostname = url.hostname.toLowerCase()
+  const trustedHost =
+    hostname === 'music.126.net' ||
+    hostname.endsWith('.music.126.net') ||
+    hostname === 'music.163.com' ||
+    hostname.endsWith('.music.163.com')
+  if (!trustedHost || (url.protocol !== 'http:' && url.protocol !== 'https:')) {
+    throw new Error('Netease returned an untrusted media URL.')
+  }
+  if (url.port && url.port !== '80' && url.port !== '443') {
+    throw new Error('Netease returned an untrusted media URL.')
+  }
+  url.protocol = 'https:'
+  url.port = ''
+  url.username = ''
+  url.password = ''
+  return url
+}
+
+function normalizeAudioExtension(value: string | null | undefined, quality: string): string {
+  const extension = value?.toLowerCase()
+  if (extension === 'mp3' || extension === 'flac') return extension
+  return quality === 'lossless' || quality === 'hires' ? 'flac' : 'mp3'
 }
 
 async function createRiskVerification(data: NeteaseRiskData, cookies: string[]) {

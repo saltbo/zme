@@ -31,7 +31,7 @@ import type {
 
 const CONNECTOR_DEFINITIONS = {
   douban: { authModes: ['profile'], capabilities: ['library.import'] },
-  netease: { authModes: ['qr', 'sms'], capabilities: ['music.playlists.read'] },
+  netease: { authModes: ['qr', 'sms'], capabilities: ['music.playlists.read', 'music.tracks.download'] },
 } as const
 
 export async function listConnectors(deps: Deps, userId: string): Promise<ConnectorSummary[]> {
