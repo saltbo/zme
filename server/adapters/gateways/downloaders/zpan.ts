@@ -18,7 +18,7 @@ export const zpanDownloaderGateway: DownloaderGateway = {
   async submit(config, input) {
     const task = await getClient(config).createDownloadTask({
       source: { type: input.sourceType, uri: input.uri },
-      targetFolder: getTypedDownloadDirectory(config.options.targetFolder, input.category),
+      targetFolder: getTypedDownloadDirectory(config.options.targetFolder, input.category, input.targetSubdirectory),
       name: input.title,
       category: normalizeZmeDownloadCategory(input.category),
       tags: input.tags,

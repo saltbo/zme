@@ -1,6 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { type DownloadTaskEvent, listDownloadTasks, streamDownloadTaskEvents } from '@server/usecases/download-tasks'
 import { submitDownload } from '@server/usecases/downloaders'
+import { isValidDownloadSubdirectory } from '@shared/download-metadata'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
@@ -11,6 +12,7 @@ const createDownloadSchema = z.object({
   sourceType: z.enum(['http', 'magnet', 'torrent_url']),
   title: z.string().trim().optional(),
   category: z.string().trim().min(1).max(120).optional(),
+  targetSubdirectory: z.string().trim().refine(isValidDownloadSubdirectory).optional(),
   tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
 })
 

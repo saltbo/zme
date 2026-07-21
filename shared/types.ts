@@ -762,6 +762,7 @@ export interface CreateDownloadInput {
   sourceType: DownloadSourceType
   title?: string
   category?: string
+  targetSubdirectory?: string
   tags?: string[]
 }
 

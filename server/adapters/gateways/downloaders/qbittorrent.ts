@@ -8,7 +8,11 @@ export const qbittorrentDownloaderGateway: DownloaderGateway = {
     const cookie = await login(baseUrl, config.credentials)
     const form = new FormData()
     form.set('urls', input.uri)
-    const savePath = getTypedDownloadDirectory(config.options.savePath || config.options.category, input.category)
+    const savePath = getTypedDownloadDirectory(
+      config.options.savePath || config.options.category,
+      input.category,
+      input.targetSubdirectory,
+    )
     if (savePath) form.set('savepath', savePath)
 
     const response = await fetch(new URL('/api/v2/torrents/add', baseUrl), {

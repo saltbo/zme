@@ -6,7 +6,7 @@ export const aria2DownloaderGateway: DownloaderGateway = {
   async submit(config, input) {
     const params: unknown[] = [[input.uri]]
     if (config.credentials.secret) params.unshift(`token:${config.credentials.secret}`)
-    const dir = getTypedDownloadDirectory(config.options.dir, input.category)
+    const dir = getTypedDownloadDirectory(config.options.dir, input.category, input.targetSubdirectory)
     if (dir) params.push({ dir })
 
     const response = await rpc(config.endpoint, 'aria2.addUri', params)

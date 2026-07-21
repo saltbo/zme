@@ -228,7 +228,11 @@ describe('music downloads', () => {
     expect(accesses[0]?.resourceEncrypted).not.toContain('music.126.net')
     expect(submit).toHaveBeenCalledOnce()
     const submitted = submittedInputs[0]
-    expect(submitted).toMatchObject({ sourceType: 'http', title: 'Artist - Track Name.mp3' })
+    expect(submitted).toMatchObject({
+      sourceType: 'http',
+      title: 'Artist - Track Name.mp3',
+      targetSubdirectory: 'Artist/Album',
+    })
     const url = new URL(submitted?.uri ?? '')
     expect(url.origin).toBe('https://zme.test')
     expect(url.pathname).toBe('/api/music/tracks/track-1/download')

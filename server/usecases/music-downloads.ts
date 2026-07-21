@@ -4,6 +4,7 @@ import {
   encryptConnectorPayload,
 } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
+import { buildMusicDownloadSubdirectory, sanitizeDownloadPathComponent } from '@shared/download-metadata'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
 import type { Deps } from './deps'
 import { submitDownload } from './downloaders'
@@ -185,6 +186,7 @@ export async function dispatchMusicDownloadRecord(
       uri: downloadUrl.toString(),
       title: buildMusicFilename(track.artists, track.title, resource.extension),
       category: 'zme:music',
+      targetSubdirectory: buildMusicDownloadSubdirectory(track.artists, track.albumTitle),
       tags: [
         `downloadRecordId=${record.id}`,
         `generation=${record.generation}`,
@@ -357,11 +359,6 @@ async function hashAccessKey(value: string): Promise<string> {
 }
 
 function buildMusicFilename(artists: string[], title: string, extension: string): string {
-  const raw = `${artists.join(', ') || 'Unknown Artist'} - ${title}`.replace(/[\\/:*?"<>|]/g, '_')
-  const basename = [...raw]
-    .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
-    .join('')
-    .trim()
-    .slice(0, 180)
-  return `${basename || 'track'}.${extension}`
+  const basename = sanitizeDownloadPathComponent(`${artists.join(', ') || 'Unknown Artist'} - ${title}`, 'track', 180)
+  return `${basename}.${extension}`
 }

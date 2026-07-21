@@ -46,3 +46,31 @@ export function getZmeDownloadResourceDirectory(category: string | null | undefi
   const resourceType = parseZmeDownloadResourceType(category)
   return resourceType ? zmeDownloadResourceDirectories[resourceType] : null
 }
+
+export function isValidDownloadSubdirectory(value: string): boolean {
+  if (!value || value.length > 500 || value.startsWith('/') || value.endsWith('/')) return false
+  return value.split('/').every((component) => {
+    if (!component || component === '.' || component === '..' || component.length > 120) return false
+    if (component !== component.trim() || component.endsWith('.')) return false
+    if (/[\\:*?"<>|]/.test(component)) return false
+    return [...component].every((character) => character.charCodeAt(0) >= 32)
+  })
+}
+
+export function buildMusicDownloadSubdirectory(artists: string[], albumTitle: string | null): string {
+  const artist = sanitizeDownloadPathComponent(artists[0] ?? '', 'Unknown Artist', 120)
+  const album = sanitizeDownloadPathComponent(albumTitle ?? '', 'Unknown Album', 120)
+  return `${artist}/${album}`
+}
+
+export function sanitizeDownloadPathComponent(value: string, fallback: string, maxLength: number): string {
+  const normalized = [...value.replace(/[\\/:*?"<>|]/g, '_')]
+    .map((character) => (character.charCodeAt(0) < 32 ? '_' : character))
+    .join('')
+    .trim()
+  const sanitized = [...normalized]
+    .slice(0, maxLength)
+    .join('')
+    .replace(/[. ]+$/, '')
+  return sanitized || fallback
+}

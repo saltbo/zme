@@ -16,6 +16,7 @@ const input: Parameters<DownloaderGateway['submit']>[1] = {
   uri: 'magnet:?xt=urn:btih:abc',
   sourceType: 'magnet',
   category: 'zme:music',
+  targetSubdirectory: 'Artist/Album',
 }
 
 afterEach(() => {
@@ -31,7 +32,7 @@ describe('aria2DownloaderGateway', () => {
     expect(calls).toHaveLength(1)
     const payload = JSON.parse(calls[0].body ?? '')
     expect(payload.method).toBe('aria2.addUri')
-    expect(payload.params).toEqual(['token:s3cret', ['magnet:?xt=urn:btih:abc'], { dir: '/dl/Music' }])
+    expect(payload.params).toEqual(['token:s3cret', ['magnet:?xt=urn:btih:abc'], { dir: '/dl/Music/Artist/Album' }])
   })
 
   it('omits the token when no secret is configured', async () => {

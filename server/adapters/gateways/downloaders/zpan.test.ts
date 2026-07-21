@@ -47,6 +47,24 @@ describe('zpanDownloaderGateway', () => {
     })
   })
 
+  it('appends a music subdirectory to the typed target folder', async () => {
+    const calls = stubFetch(() => jsonResponse({ id: 'task-1' }))
+
+    await zpanDownloaderGateway.submit(config, {
+      downloaderId: 'dl-1',
+      uri: 'https://zme.test/api/music/tracks/track-1/download?key=temporary',
+      sourceType: 'http',
+      title: 'Artist - Track.mp3',
+      category: 'zme:music',
+      targetSubdirectory: 'Artist/Album',
+    })
+
+    expect(JSON.parse(calls[0].body ?? '')).toMatchObject({
+      targetFolder: '/media/Music/Artist/Album',
+      name: 'Artist - Track.mp3',
+    })
+  })
+
   it('probes by listing a single download task with credentials', async () => {
     const calls = stubFetch(() => jsonResponse({ items: [], total: 0, page: 1, pageSize: 1 }))
 

@@ -5,7 +5,7 @@ export const transmissionDownloaderGateway: DownloaderGateway = {
   supportedSourceTypes: ['magnet', 'torrent_url'],
   async submit(config, input) {
     const endpoint = new URL('/transmission/rpc', normalizeBaseUrl(config.endpoint))
-    const downloadDir = getTypedDownloadDirectory(config.options.downloadDir, input.category)
+    const downloadDir = getTypedDownloadDirectory(config.options.downloadDir, input.category, input.targetSubdirectory)
     const body = {
       method: 'torrent-add',
       arguments: {
