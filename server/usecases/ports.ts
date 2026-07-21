@@ -325,6 +325,18 @@ export interface MusicTrackInput
     | 'downloadRecord'
   > {
   addedAt?: string | null
+  albumMetadataUpdatedAt?: string | null
+}
+
+export interface MusicAlbumMetadata {
+  provider: MusicTrackInput['provider']
+  externalId: string
+  title: string
+  artists: string[]
+  releaseDate: string | null
+  releaseType: string | null
+  coverUrl: string | null
+  updatedAt: string
 }
 
 export type MusicTrackRecord = Omit<
@@ -388,6 +400,11 @@ export interface MusicCollectionsRepo {
     input: { trackCount: number; lastSyncedAt: string },
   ): Promise<MusicCollectionRecord | null>
   replaceTracks(collectionId: string, tracks: MusicTrackInput[]): Promise<void>
+  listAlbumMetadata(
+    provider: MusicTrackInput['provider'],
+    externalIds: string[],
+    staleBefore: string,
+  ): Promise<MusicAlbumMetadata[]>
   listTracksForAvailabilityCheck(
     userId: string,
     connectorId: string,
@@ -633,6 +650,15 @@ export interface ImportedMusicPlaylist {
 
 export interface ImportedMusicTrack extends MusicTrackInput {}
 
+export interface ImportedMusicAlbum {
+  externalId: string
+  title: string
+  artists: string[]
+  releaseDate: string | null
+  releaseType: string | null
+  coverUrl: string | null
+}
+
 export interface ConnectedMusicAccount {
   externalAccountId: string
   displayName: string
@@ -667,6 +693,7 @@ export interface MusicPlaylistConnector {
   ): Promise<{ status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'; cookies: string[] }>
   listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
   listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
+  getAlbums(credentials: string[], albumIds: string[]): Promise<ImportedMusicAlbum[]>
   checkTrackAvailability(credentials: string[], trackIds: string[]): Promise<MusicTrackAvailabilityCheckResult>
 }
 

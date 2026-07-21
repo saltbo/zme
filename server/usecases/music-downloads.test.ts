@@ -27,6 +27,11 @@ const track: MusicTrackRecord = {
   artists: ['Artist'],
   albumTitle: 'Album',
   albumExternalId: 'album-1',
+  albumArtists: ['Artist'],
+  albumReleaseDate: '2024-03-02',
+  albumReleaseType: 'Album',
+  discNumber: 1,
+  trackNumber: 3,
   coverUrl: null,
   durationMs: 180_000,
   isrcs: [],
@@ -230,8 +235,8 @@ describe('music downloads', () => {
     const submitted = submittedInputs[0]
     expect(submitted).toMatchObject({
       sourceType: 'http',
-      title: 'Artist - Track Name.mp3',
-      targetSubdirectory: 'Artist/Album',
+      title: '01-03 Track Name.mp3',
+      targetSubdirectory: 'Artist/Album (2024)',
     })
     const url = new URL(submitted?.uri ?? '')
     expect(url.origin).toBe('https://zme.test')
@@ -273,7 +278,7 @@ describe('music downloads', () => {
 
     await expect(resolveMusicTrackDownload(deps, env, 'track-1', 'temporary-key')).resolves.toEqual({
       resource,
-      filename: 'Artist - Track Name.mp3',
+      filename: '01-03 Track Name.mp3',
     })
     expect(getConnector).not.toHaveBeenCalled()
     expect(resolve).not.toHaveBeenCalled()

@@ -49,6 +49,11 @@ function musicTrackRecord(id: string, externalId: string): MusicTrackRecord {
     artists: ['Artist'],
     albumTitle: null,
     albumExternalId: null,
+    albumArtists: [],
+    albumReleaseDate: null,
+    albumReleaseType: null,
+    discNumber: null,
+    trackNumber: null,
     coverUrl: null,
     durationMs: null,
     isrcs: [],
@@ -215,9 +220,20 @@ describe('syncConnector', () => {
     }))
     const fetchedTrackPlaylists: string[] = []
     const replacedCollections: string[] = []
+    const replacedTracks: unknown[][] = []
     const availabilityChecks: string[][] = []
     const availabilityUpdates: unknown[] = []
     const availabilityClears: string[] = []
+    const getAlbums = vi.fn(async () => [
+      {
+        externalId: 'album-1',
+        title: 'Canonical Album',
+        artists: ['Album Artist'],
+        releaseDate: '2024-03-02',
+        releaseType: 'Album',
+        coverUrl: 'https://img.test/album.jpg',
+      },
+    ])
     const deps = {
       connectorsRepo: {
         get: async () => ({
@@ -239,14 +255,21 @@ describe('syncConnector', () => {
                 mediaKey: `netease:track:${playlistId}`,
                 title: `Track ${playlistId}`,
                 artists: ['Artist'],
-                albumTitle: null,
-                albumExternalId: null,
+                albumTitle: 'Compact Album Name',
+                albumExternalId: 'album-1',
+                albumArtists: [],
+                albumReleaseDate: null,
+                albumReleaseType: null,
+                albumMetadataUpdatedAt: null,
+                discNumber: 1,
+                trackNumber: 2,
                 coverUrl: null,
                 durationMs: null,
                 isrcs: [],
               },
             ]
           },
+          getAlbums,
           checkTrackAvailability: async (_credentials: string[], trackIds: string[]) => {
             availabilityChecks.push(trackIds)
             return {
@@ -272,9 +295,11 @@ describe('syncConnector', () => {
           userId,
           ...input,
         }),
-        replaceTracks: async (collectionId: string) => {
+        replaceTracks: async (collectionId: string, playlistTracks: unknown[]) => {
           replacedCollections.push(collectionId)
+          replacedTracks.push(playlistTracks)
         },
+        listAlbumMetadata: async () => [],
         updateSnapshot: async () => existing[0],
         deleteMissingConnectorCollections: async () => undefined,
         clearTrackAvailabilities: async (connectorId: string) => {
@@ -301,6 +326,18 @@ describe('syncConnector', () => {
 
     expect(fetchedTrackPlaylists).toEqual(['remote-1', 'remote-2'])
     expect(replacedCollections).toEqual(['playlist-1', 'playlist-2'])
+    expect(getAlbums).toHaveBeenCalledOnce()
+    expect(getAlbums).toHaveBeenCalledWith(['MUSIC_U=session-value'], ['album-1'])
+    expect(replacedTracks[0]?.[0]).toMatchObject({
+      albumTitle: 'Canonical Album',
+      albumArtists: ['Album Artist'],
+      albumReleaseDate: '2024-03-02',
+      albumReleaseType: 'Album',
+      discNumber: 1,
+      trackNumber: 2,
+      coverUrl: 'https://img.test/album.jpg',
+      albumMetadataUpdatedAt: expect.any(String),
+    })
     expect(availabilityClears).toEqual(['connector-1'])
     expect(availabilityChecks).toEqual([['track-remote-1', 'track-remote-2']])
     expect(availabilityUpdates).toEqual([

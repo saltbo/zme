@@ -256,7 +256,7 @@ describe('Netease playlist connector', () => {
         new Response(
           JSON.stringify({
             songs: [
-              { id: 123, name: 'Available', ar: [{ name: 'Artist' }], al: { id: 1, name: 'Album' } },
+              { id: 123, name: 'Available', no: 7, cd: '02', ar: [{ name: 'Artist' }], al: { id: 1, name: 'Album' } },
               { id: 456, name: 'Unavailable', ar: [{ name: 'Artist' }], al: { id: 1, name: 'Album' } },
             ],
           }),
@@ -291,7 +291,7 @@ describe('Netease playlist connector', () => {
     )
 
     expect(result).toHaveLength(2)
-    expect(result[0]).toMatchObject({ externalId: '123' })
+    expect(result[0]).toMatchObject({ externalId: '123', discNumber: 2, trackNumber: 7 })
     expect(result[1]).toMatchObject({ externalId: '456' })
     expect(availability.results).toEqual(
       new Map([
@@ -319,6 +319,42 @@ describe('Netease playlist connector', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       'https://interface.music.163.com/eapi/song/enhance/player/url/v1',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('loads canonical album metadata for directory organization', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 200,
+          album: {
+            id: 34888233,
+            name: '翁梓铭',
+            type: '专辑',
+            publishTime: Date.UTC(2016, 8, 19),
+            picUrl: 'https://p1.music.126.net/album.jpg',
+            artist: { name: '翁梓铭' },
+            artists: [{ name: '翁梓铭' }],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(neteasePlaylistConnector.getAlbums(['MUSIC_U=session-value'], ['34888233'])).resolves.toEqual([
+      {
+        externalId: '34888233',
+        title: '翁梓铭',
+        artists: ['翁梓铭'],
+        releaseDate: '2016-09-19',
+        releaseType: '专辑',
+        coverUrl: 'https://p1.music.126.net/album.jpg',
+      },
+    ])
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://music.163.com/weapi/v1/album/34888233',
       expect.objectContaining({ method: 'POST' }),
     )
   })

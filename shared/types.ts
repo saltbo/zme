@@ -397,6 +397,11 @@ export interface MusicLibraryTrack {
   artists: string[]
   albumTitle: string | null
   albumExternalId: string | null
+  albumArtists: string[]
+  albumReleaseDate: string | null
+  albumReleaseType: string | null
+  discNumber: number | null
+  trackNumber: number | null
   coverUrl: string | null
   durationMs: number | null
   isrcs: string[]

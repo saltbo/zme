@@ -9,6 +9,7 @@ import {
 } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
 import {
+  type ImportedMusicAlbum,
   type ImportedMusicPlaylist,
   type ImportedMusicTrack,
   type MusicAvailabilityInterruption,
@@ -32,6 +33,11 @@ const WEAPI_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB
 -----END PUBLIC KEY-----`
 const SECRET_CHARACTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+const NETEASE_ALBUM_REQUEST_INTERVAL_MS = 250
+
+interface NeteaseArtist {
+  name?: string
+}
 
 interface NeteaseProfile {
   userId?: number
@@ -53,8 +59,21 @@ interface NeteaseSong {
   id?: number
   name?: string
   dt?: number
-  ar?: Array<{ name?: string }>
+  no?: number
+  cd?: string | number
+  ar?: NeteaseArtist[]
   al?: { id?: number; name?: string; picUrl?: string }
+}
+
+interface NeteaseAlbum {
+  id?: number
+  name?: string
+  type?: string
+  subType?: string
+  publishTime?: number
+  picUrl?: string
+  artist?: NeteaseArtist
+  artists?: NeteaseArtist[]
 }
 
 interface NeteasePlaybackResource {
@@ -227,6 +246,30 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
       tracks.push(...(response.body.songs ?? []).map(toTrack).filter((item) => item !== null))
     }
     return tracks
+  },
+
+  async getAlbums(credentials, albumIds) {
+    const uniqueAlbumIds = [...new Set(albumIds)]
+    if (uniqueAlbumIds.some((id) => !/^\d+$/.test(id))) throw new Error('Netease album id is invalid.')
+
+    const albums: ImportedMusicAlbum[] = []
+    for (const [index, albumId] of uniqueAlbumIds.entries()) {
+      const response = await weapiRequest<{ code?: number; message?: string; album?: NeteaseAlbum }>(
+        `/weapi/v1/album/${albumId}`,
+        {},
+        credentials,
+      )
+      if (response.body.code !== 200) {
+        throw new Error(neteaseError(`Netease failed to load album ${albumId}`, response.body))
+      }
+      const album = toAlbum(response.body.album)
+      if (!album || album.externalId !== albumId) {
+        throw new Error(`Netease album ${albumId} response is incomplete.`)
+      }
+      albums.push(album)
+      if (index < uniqueAlbumIds.length - 1) await delay(NETEASE_ALBUM_REQUEST_INTERVAL_MS)
+    }
+    return albums
   },
 
   async checkTrackAvailability(credentials, trackIds) {
@@ -824,10 +867,48 @@ function toTrack(value: NeteaseSong): ImportedMusicTrack | null {
     artists: (value.ar ?? []).flatMap((artist) => (artist.name ? [artist.name] : [])),
     albumTitle: value.al?.name ?? null,
     albumExternalId: value.al?.id ? String(value.al.id) : null,
+    albumArtists: [],
+    albumReleaseDate: null,
+    albumReleaseType: null,
+    albumMetadataUpdatedAt: null,
+    discNumber: positiveInteger(value.cd),
+    trackNumber: positiveInteger(value.no),
     coverUrl: value.al?.picUrl ?? null,
     durationMs: value.dt ?? null,
     isrcs: [],
   }
+}
+
+function toAlbum(value: NeteaseAlbum | undefined): ImportedMusicAlbum | null {
+  if (!value?.id || !value.name) return null
+  const artists = (value.artists ?? []).flatMap((artist) => (artist.name ? [artist.name] : []))
+  if (artists.length === 0 && value.artist?.name) artists.push(value.artist.name)
+  return {
+    externalId: String(value.id),
+    title: value.name,
+    artists,
+    releaseDate: timestampDate(value.publishTime),
+    releaseType: value.type?.trim() || value.subType?.trim() || null,
+    coverUrl: value.picUrl ?? null,
+  }
+}
+
+function timestampDate(value: number | undefined): string | null {
+  if (!value || !Number.isFinite(value)) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+}
+
+function positiveInteger(value: string | number | undefined): number | null {
+  if (typeof value === 'number') return Number.isInteger(value) && value > 0 ? value : null
+  const match = value?.match(/\d+/)
+  if (!match) return null
+  const parsed = Number(match[0])
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function toBase64(value: Uint8Array): string {

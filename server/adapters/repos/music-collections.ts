@@ -1,8 +1,13 @@
 import type { createDb } from '@server/db/client'
 import { musicCollections, musicCollectionTracks, musicTrackAvailability, musicTracks } from '@server/db/schema'
-import type { MusicCollectionRecord, MusicCollectionsRepo, MusicTrackRecord } from '@server/usecases/ports'
+import type {
+  MusicAlbumMetadata,
+  MusicCollectionRecord,
+  MusicCollectionsRepo,
+  MusicTrackRecord,
+} from '@server/usecases/ports'
 import type { MusicCollectionDetails, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
-import { and, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
 const D1_MAX_BOUND_PARAMETERS = 100
@@ -208,6 +213,12 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
               artistsJson: JSON.stringify(input.artists),
               albumTitle: input.albumTitle,
               albumExternalId: input.albumExternalId,
+              albumArtistsJson: JSON.stringify(input.albumArtists),
+              albumReleaseDate: input.albumReleaseDate,
+              albumReleaseType: input.albumReleaseType,
+              albumMetadataUpdatedAt: input.albumMetadataUpdatedAt ?? existing.albumMetadataUpdatedAt,
+              discNumber: input.discNumber,
+              trackNumber: input.trackNumber,
               coverUrl: input.coverUrl,
               durationMs: input.durationMs,
               isrcsJson: JSON.stringify(input.isrcs),
@@ -224,6 +235,12 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
             artistsJson: JSON.stringify(input.artists),
             albumTitle: input.albumTitle,
             albumExternalId: input.albumExternalId,
+            albumArtistsJson: JSON.stringify(input.albumArtists),
+            albumReleaseDate: input.albumReleaseDate,
+            albumReleaseType: input.albumReleaseType,
+            albumMetadataUpdatedAt: input.albumMetadataUpdatedAt ?? null,
+            discNumber: input.discNumber,
+            trackNumber: input.trackNumber,
             coverUrl: input.coverUrl,
             durationMs: input.durationMs,
             isrcsJson: JSON.stringify(input.isrcs),
@@ -247,6 +264,36 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
         )
         await db.batch([clear, ...inserts])
       }
+    },
+
+    async listAlbumMetadata(provider, externalIds, staleBefore) {
+      const metadata = new Map<string, MusicAlbumMetadata>()
+      for (const ids of chunks([...new Set(externalIds)], D1_MAX_BOUND_PARAMETERS - 2)) {
+        const rows = await db
+          .select()
+          .from(musicTracks)
+          .where(
+            and(
+              eq(musicTracks.provider, provider),
+              inArray(musicTracks.albumExternalId, ids),
+              gt(musicTracks.albumMetadataUpdatedAt, staleBefore),
+            ),
+          )
+        for (const row of rows) {
+          if (!row.albumExternalId || !row.albumMetadataUpdatedAt || metadata.has(row.albumExternalId)) continue
+          metadata.set(row.albumExternalId, {
+            provider: row.provider,
+            externalId: row.albumExternalId,
+            title: row.albumTitle ?? '',
+            artists: JSON.parse(row.albumArtistsJson) as string[],
+            releaseDate: row.albumReleaseDate,
+            releaseType: row.albumReleaseType,
+            coverUrl: row.coverUrl,
+            updatedAt: row.albumMetadataUpdatedAt,
+          })
+        }
+      }
+      return [...metadata.values()]
     },
 
     async listTracksForAvailabilityCheck(userId, connectorId, staleBefore, limit) {
@@ -393,6 +440,11 @@ function toTrackRecord(row: typeof musicTracks.$inferSelect): MusicTrackRecord {
     artists: JSON.parse(row.artistsJson) as string[],
     albumTitle: row.albumTitle,
     albumExternalId: row.albumExternalId,
+    albumArtists: JSON.parse(row.albumArtistsJson) as string[],
+    albumReleaseDate: row.albumReleaseDate,
+    albumReleaseType: row.albumReleaseType,
+    discNumber: row.discNumber,
+    trackNumber: row.trackNumber,
     coverUrl: row.coverUrl,
     durationMs: row.durationMs,
     isrcs: JSON.parse(row.isrcsJson) as string[],

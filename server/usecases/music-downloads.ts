@@ -4,7 +4,7 @@ import {
   encryptConnectorPayload,
 } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
-import { buildMusicDownloadSubdirectory, sanitizeDownloadPathComponent } from '@shared/download-metadata'
+import { buildMusicDownloadFilename, buildMusicDownloadSubdirectory } from '@shared/download-metadata'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
 import type { Deps } from './deps'
 import { submitDownload } from './downloaders'
@@ -184,9 +184,9 @@ export async function dispatchMusicDownloadRecord(
       downloaderId: record.downloaderId,
       sourceType: 'http',
       uri: downloadUrl.toString(),
-      title: buildMusicFilename(track.artists, track.title, resource.extension),
+      title: buildMusicDownloadFilename(track, resource.extension),
       category: 'zme:music',
-      targetSubdirectory: buildMusicDownloadSubdirectory(track.artists, track.albumTitle),
+      targetSubdirectory: buildMusicDownloadSubdirectory(track),
       tags: [
         `downloadRecordId=${record.id}`,
         `generation=${record.generation}`,
@@ -233,7 +233,7 @@ export async function resolveMusicTrackDownload(
     const resource = parseResolvedMusicResource(
       await decryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, access.resourceEncrypted),
     )
-    return { resource, filename: buildMusicFilename(track.artists, track.title, resource.extension) }
+    return { resource, filename: buildMusicDownloadFilename(track, resource.extension) }
   }
 
   const connector = await deps.connectorsRepo.get(access.userId, access.connectorId)
@@ -246,7 +246,7 @@ export async function resolveMusicTrackDownload(
     await setTrackAvailability(deps, access.userId, connector.id, track.id, availableResult())
     return {
       resource,
-      filename: buildMusicFilename(track.artists, track.title, resource.extension),
+      filename: buildMusicDownloadFilename(track, resource.extension),
     }
   } catch (error) {
     await setTrackAvailability(deps, access.userId, connector.id, track.id, availabilityFromError(error))
@@ -356,9 +356,4 @@ function createAccessKey(): string {
 async function hashAccessKey(value: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-function buildMusicFilename(artists: string[], title: string, extension: string): string {
-  const basename = sanitizeDownloadPathComponent(`${artists.join(', ') || 'Unknown Artist'} - ${title}`, 'track', 180)
-  return `${basename}.${extension}`
 }

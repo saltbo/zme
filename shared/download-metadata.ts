@@ -57,10 +57,49 @@ export function isValidDownloadSubdirectory(value: string): boolean {
   })
 }
 
-export function buildMusicDownloadSubdirectory(artists: string[], albumTitle: string | null): string {
-  const artist = sanitizeDownloadPathComponent(artists[0] ?? '', 'Unknown Artist', 120)
-  const album = sanitizeDownloadPathComponent(albumTitle ?? '', 'Unknown Album', 120)
+export interface MusicDownloadMetadata {
+  title: string
+  artists: string[]
+  albumTitle: string | null
+  albumArtists: string[]
+  albumReleaseDate: string | null
+  discNumber: number | null
+  trackNumber: number | null
+}
+
+export function buildMusicDownloadSubdirectory(metadata: MusicDownloadMetadata): string {
+  const artistCredit = metadata.albumArtists.length > 0 ? metadata.albumArtists : metadata.artists
+  const artist = sanitizeDownloadPathComponent(artistCredit.join(', '), 'Unknown Artist', 120)
+  const albumTitle = sanitizeDownloadPathComponent(metadata.albumTitle ?? '', 'Unknown Album', 100)
+  const year = releaseYear(metadata.albumReleaseDate)
+  const album = year && !albumTitle.endsWith(`(${year})`) ? `${albumTitle} (${year})` : albumTitle
   return `${artist}/${album}`
+}
+
+export function buildMusicDownloadFilename(metadata: MusicDownloadMetadata, extension: string): string {
+  const position = trackPosition(metadata.discNumber, metadata.trackNumber)
+  const trackArtist = metadata.artists.join(', ')
+  const albumArtist = metadata.albumArtists.join(', ')
+  const artistPrefix = trackArtist && albumArtist && trackArtist !== albumArtist ? `${trackArtist} - ` : ''
+  const fallback = trackArtist ? `${trackArtist} - ${metadata.title}` : metadata.title
+  const basename = sanitizeDownloadPathComponent(
+    position ? `${position} ${artistPrefix}${metadata.title}` : fallback,
+    'track',
+    180,
+  )
+  const safeExtension = sanitizeDownloadPathComponent(extension.toLowerCase(), 'mp3', 10)
+  return `${basename}.${safeExtension}`
+}
+
+function releaseYear(value: string | null): string | null {
+  const match = value?.match(/^(\d{4})/)
+  return match?.[1] ?? null
+}
+
+function trackPosition(discNumber: number | null, trackNumber: number | null): string | null {
+  if (!trackNumber || trackNumber < 1) return null
+  const disc = discNumber && discNumber > 0 ? discNumber : 1
+  return `${String(disc).padStart(2, '0')}-${String(trackNumber).padStart(2, '0')}`
 }
 
 export function sanitizeDownloadPathComponent(value: string, fallback: string, maxLength: number): string {

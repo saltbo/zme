@@ -27,6 +27,8 @@ import type {
   ConnectorLoginAttemptRecord,
   ConnectorRecord,
   ImportedLibraryEntry,
+  ImportedMusicTrack,
+  MusicAlbumMetadata,
   MusicQrLoginResult,
 } from './ports'
 
@@ -36,6 +38,7 @@ const CONNECTOR_DEFINITIONS = {
 } as const
 const MUSIC_AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000
 const MUSIC_AVAILABILITY_CHECK_PAGE_SIZE = 500
+const MUSIC_ALBUM_METADATA_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 export type ConnectorSyncTrigger = 'scheduled' | 'manual' | 'login'
 
@@ -321,7 +324,7 @@ async function syncNeteaseConnector(
   deps: Deps,
   env: Env,
   connector: ConnectorRecord,
-  forceAvailability: boolean,
+  forceRefresh: boolean,
 ): Promise<MusicPlaylistSyncResult> {
   if (!connector.credentialsEncrypted) throw new Error('Netease connector has no credentials.')
   const credentials = await decryptConnectorCredentials(
@@ -330,9 +333,7 @@ async function syncNeteaseConnector(
   )
   const remotePlaylists = await deps.musicPlaylistConnectors.netease.listPlaylists(credentials)
   const existing = await deps.musicCollectionsRepo.listForConnector(connector.userId, connector.id)
-  const selectedCollectionIds: string[] = []
-  let selectedPlaylists = 0
-  let tracks = 0
+  const selectedCollections: Array<{ id: string; externalId: string; tracks: ImportedMusicTrack[] }> = []
   for (const playlist of remotePlaylists) {
     const current = existing.find((item) => item.externalId === playlist.externalId)
     const collection = await deps.musicCollectionsRepo.upsert(connector.userId, {
@@ -350,29 +351,83 @@ async function syncNeteaseConnector(
       lastSyncedAt: current?.lastSyncedAt ?? null,
     })
     if (!collection.libraryAddedAt) continue
-    const playlistTracks = await deps.musicPlaylistConnectors.netease.listTracks(credentials, playlist.externalId)
+    selectedCollections.push({ id: collection.id, externalId: playlist.externalId, tracks: [] })
+  }
+
+  for (const collection of selectedCollections) {
+    collection.tracks = await deps.musicPlaylistConnectors.netease.listTracks(credentials, collection.externalId)
+  }
+  const hydratedTracks = await hydrateNeteaseAlbumMetadata(
+    deps,
+    credentials,
+    selectedCollections.flatMap((collection) => collection.tracks),
+    forceRefresh,
+  )
+  let trackOffset = 0
+  for (const collection of selectedCollections) {
+    const playlistTracks = hydratedTracks.slice(trackOffset, trackOffset + collection.tracks.length)
+    trackOffset += collection.tracks.length
     await deps.musicCollectionsRepo.replaceTracks(collection.id, playlistTracks)
     await deps.musicCollectionsRepo.updateSnapshot(connector.userId, collection.id, {
       trackCount: playlistTracks.length,
       lastSyncedAt: new Date().toISOString(),
     })
-    selectedCollectionIds.push(collection.id)
-    selectedPlaylists += 1
-    tracks += playlistTracks.length
   }
   await deps.musicCollectionsRepo.deleteMissingConnectorCollections(
     connector.id,
     remotePlaylists.map((item) => item.externalId),
   )
-  await refreshNeteaseTrackAvailability(deps, connector, credentials, forceAvailability)
-  for (const collectionId of selectedCollectionIds) {
-    await evaluateMusicCollectionSubscription(deps, connector.userId, collectionId)
+  await refreshNeteaseTrackAvailability(deps, connector, credentials, forceRefresh)
+  for (const collection of selectedCollections) {
+    await evaluateMusicCollectionSubscription(deps, connector.userId, collection.id)
   }
   return {
     capability: 'music.playlists.read',
     playlists: remotePlaylists.length,
-    selectedPlaylists,
-    tracks,
+    selectedPlaylists: selectedCollections.length,
+    tracks: hydratedTracks.length,
+  }
+}
+
+async function hydrateNeteaseAlbumMetadata(
+  deps: Deps,
+  credentials: string[],
+  tracks: ImportedMusicTrack[],
+  force: boolean,
+): Promise<ImportedMusicTrack[]> {
+  const albumIds = [...new Set(tracks.flatMap((track) => (track.albumExternalId ? [track.albumExternalId] : [])))]
+  if (albumIds.length === 0) return tracks
+  const staleBefore = force
+    ? new Date().toISOString()
+    : new Date(Date.now() - MUSIC_ALBUM_METADATA_TTL_MS).toISOString()
+  const cached = await deps.musicCollectionsRepo.listAlbumMetadata('netease', albumIds, staleBefore)
+  const metadata = new Map(cached.map((album) => [album.externalId, album]))
+  const missingIds = albumIds.filter((id) => !metadata.has(id))
+  const updatedAt = new Date().toISOString()
+  const imported = await deps.musicPlaylistConnectors.netease.getAlbums(credentials, missingIds)
+  for (const album of imported) {
+    metadata.set(album.externalId, { provider: 'netease', ...album, updatedAt })
+  }
+
+  const unresolvedIds = missingIds.filter((id) => !metadata.has(id))
+  if (unresolvedIds.length > 0) {
+    throw new Error(`Netease did not return album metadata for ${unresolvedIds.join(', ')}.`)
+  }
+  return tracks.map((track) => applyAlbumMetadata(track, metadata))
+}
+
+function applyAlbumMetadata(track: ImportedMusicTrack, metadata: Map<string, MusicAlbumMetadata>): ImportedMusicTrack {
+  if (!track.albumExternalId) return track
+  const album = metadata.get(track.albumExternalId)
+  if (!album) return track
+  return {
+    ...track,
+    albumTitle: album.title,
+    albumArtists: album.artists,
+    albumReleaseDate: album.releaseDate,
+    albumReleaseType: album.releaseType,
+    albumMetadataUpdatedAt: album.updatedAt,
+    coverUrl: album.coverUrl ?? track.coverUrl,
   }
 }
 
