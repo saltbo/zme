@@ -8,12 +8,14 @@ import {
   randomBytes,
 } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import type {
-  ImportedMusicPlaylist,
-  ImportedMusicTrack,
-  MusicPlaylistConnector,
-  MusicResourceResolver,
+import {
+  type ImportedMusicPlaylist,
+  type ImportedMusicTrack,
+  type MusicPlaylistConnector,
+  type MusicResourceResolver,
+  MusicResourceUnavailableError,
 } from '@server/usecases/ports'
+import type { MusicDownloadQuality } from '@shared/types'
 
 const NETEASE_BASE = 'https://music.163.com'
 const NETEASE_INTERFACE_BASE = 'https://interface.music.163.com'
@@ -51,6 +53,16 @@ interface NeteaseSong {
   dt?: number
   ar?: Array<{ name?: string }>
   al?: { id?: number; name?: string; picUrl?: string }
+}
+
+interface NeteasePlaybackResource {
+  id?: number
+  url?: string | null
+  type?: string | null
+  size?: number | null
+  level?: string | null
+  code?: number
+  freeTrialInfo?: unknown
 }
 
 interface NeteaseRiskData {
@@ -210,43 +222,47 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
     }
     return tracks
   },
+
+  async checkTrackAvailability(credentials, trackIds) {
+    const uniqueTrackIds = [...new Set(trackIds)]
+    if (uniqueTrackIds.some((id) => !/^\d+$/.test(id))) throw new Error('Netease track id is invalid.')
+    const ids = uniqueTrackIds.map(Number)
+    const statuses = new Map<string, 'available' | 'unavailable' | 'unknown'>()
+    let interrupted: string | null = null
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const pageIds = ids.slice(offset, offset + 100)
+      try {
+        const resources = await getNeteasePlaybackResources(credentials, pageIds, 'standard')
+        const riskItem = resources.find(isNeteaseRiskResource)
+        if (riskItem) {
+          interrupted = `Netease availability check was interrupted by risk control (code ${riskItem.code}).`
+          break
+        }
+        const byId = new Map(resources.flatMap((item) => (item.id ? [[item.id, item] as const] : [])))
+        for (const id of pageIds) {
+          const item = byId.get(id)
+          statuses.set(
+            String(id),
+            item ? (isFullNeteaseResource(item, 'standard') ? 'available' : 'unavailable') : 'unknown',
+          )
+        }
+      } catch (error) {
+        interrupted = error instanceof Error ? error.message : 'Netease availability check was interrupted.'
+        break
+      }
+    }
+    return { statuses, interrupted }
+  },
 }
 
 export const neteaseMusicResourceResolver: MusicResourceResolver = {
   async resolve(credentials, input) {
     if (!/^\d+$/.test(input.trackId)) throw new Error('Netease track id is invalid.')
-
-    const response = await eapiRequest<{
-      code?: number
-      message?: string
-      data?: Array<{
-        id?: number
-        url?: string | null
-        type?: string | null
-        size?: number | null
-        level?: string | null
-        code?: number
-        freeTrialInfo?: unknown
-      }>
-    }>(
-      '/api/song/enhance/player/url/v1',
-      {
-        ids: JSON.stringify([Number(input.trackId)]),
-        level: input.quality,
-        encodeType: 'flac',
-      },
-      credentials,
+    const item = (await getNeteasePlaybackResources(credentials, [Number(input.trackId)], input.quality)).find(
+      (value) => String(value.id) === input.trackId,
     )
-    if (response.body.code !== 200) {
-      throw new Error(neteaseError('Netease failed to resolve the track', response.body))
-    }
-
-    const item = response.body.data?.find((value) => String(value.id) === input.trackId)
-    if (!item?.url || item.code !== 200 || item.freeTrialInfo) {
-      throw new Error('The full Netease track is not available for this account.')
-    }
-    if (item.level && item.level !== input.quality) {
-      throw new Error(`Netease returned ${item.level} instead of the requested ${input.quality} quality.`)
+    if (!isFullNeteaseResource(item, input.quality)) {
+      throw new MusicResourceUnavailableError('The full Netease track is not available for this account.')
     }
 
     const url = normalizeNeteaseMediaUrl(item.url)
@@ -257,11 +273,39 @@ export const neteaseMusicResourceResolver: MusicResourceResolver = {
         Referer: `${NETEASE_BASE}/`,
         'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
       },
+      quality: input.quality,
       extension,
       contentType: extension === 'flac' ? 'audio/flac' : 'audio/mpeg',
       contentLength: typeof item.size === 'number' && item.size >= 0 ? item.size : null,
     }
   },
+}
+
+async function getNeteasePlaybackResources(
+  credentials: string[],
+  ids: number[],
+  quality: MusicDownloadQuality,
+): Promise<NeteasePlaybackResource[]> {
+  const response = await eapiRequest<{ code?: number; message?: string; data?: NeteasePlaybackResource[] }>(
+    '/api/song/enhance/player/url/v1',
+    { ids: JSON.stringify(ids), level: quality, encodeType: 'flac' },
+    credentials,
+  )
+  if (response.body.code !== 200) {
+    throw new Error(neteaseError('Netease failed to resolve tracks', response.body))
+  }
+  return response.body.data ?? []
+}
+
+function isNeteaseRiskResource(item: NeteasePlaybackResource): boolean {
+  return item.code === 401 || item.code === 403 || item.code === 429 || item.code === -460 || item.code === -462
+}
+
+function isFullNeteaseResource(
+  item: NeteasePlaybackResource | undefined,
+  quality: MusicDownloadQuality,
+): item is NeteasePlaybackResource & { url: string } {
+  return Boolean(item?.url && item.code === 200 && !item.freeTrialInfo && (!item.level || item.level === quality))
 }
 
 function normalizeNeteaseMediaUrl(value: string): URL {

@@ -44,10 +44,73 @@ describe('music collections repository in D1', () => {
     const details = await repo.getDetails(USER_ID, collection.id)
     expect(details?.tracks).toHaveLength(30)
     expect(details?.tracks.map((track) => track.position)).toEqual(Array.from({ length: 30 }, (_, index) => index + 1))
+    expect(details?.tracks[0]).toMatchObject({ downloadStatus: 'unknown', downloadCheckedAt: null })
+
+    await repo.setTrackAvailabilities(
+      USER_ID,
+      (details?.tracks ?? []).map((track, index) => ({
+        trackId: track.id,
+        status: index % 2 === 0 ? 'available' : 'unavailable',
+        checkedAt: '2026-07-21T01:00:00.000Z',
+      })),
+    )
+    const updated = await repo.getDetails(USER_ID, collection.id)
+    expect(updated?.tracks[0]).toMatchObject({
+      downloadStatus: 'available',
+      downloadCheckedAt: '2026-07-21T01:00:00.000Z',
+    })
+    expect(updated?.tracks[1]).toMatchObject({ downloadStatus: 'unavailable' })
+  })
+
+  it('shares fresh availability across playlists and returns each track once for checking', async () => {
+    const repo = createMusicCollectionsRepo(createDb(env))
+    const first = await repo.upsert(USER_ID, playlistInput('playlist-a', '2026-07-20T00:00:00.000Z'))
+    const second = await repo.upsert(USER_ID, playlistInput('playlist-b', '2026-07-20T00:00:00.000Z'))
+    await repo.replaceTracks(first.id, [trackInput(1)])
+    await repo.replaceTracks(second.id, [trackInput(1)])
+
+    const uncached = await repo.listTracksForAvailabilityCheck(
+      USER_ID,
+      { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T00:00:00.000Z' },
+      500,
+    )
+    expect(uncached).toHaveLength(1)
+
+    await repo.setTrackAvailabilities(USER_ID, [
+      { trackId: uncached[0]?.id ?? '', status: 'available', checkedAt: '2026-07-21T01:00:00.000Z' },
+    ])
+    const fresh = await repo.listTracksForAvailabilityCheck(
+      USER_ID,
+      { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T00:00:00.000Z' },
+      500,
+    )
+    expect(fresh).toEqual([])
+    expect((await repo.getDetails(USER_ID, second.id))?.tracks[0]).toMatchObject({ downloadStatus: 'available' })
+
+    await repo.clearTrackAvailabilities(USER_ID)
+    expect((await repo.getDetails(USER_ID, first.id))?.tracks[0]).toMatchObject({ downloadStatus: 'unknown' })
+
+    await repo.setTrackAvailabilities(USER_ID, [
+      { trackId: uncached[0]?.id ?? '', status: 'unknown', checkedAt: '2026-07-21T01:00:00.000Z' },
+    ])
+    expect(
+      await repo.listTracksForAvailabilityCheck(
+        USER_ID,
+        { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T00:00:00.000Z' },
+        500,
+      ),
+    ).toEqual([])
+    expect(
+      await repo.listTracksForAvailabilityCheck(
+        USER_ID,
+        { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T02:00:00.000Z' },
+        500,
+      ),
+    ).toHaveLength(1)
   })
 })
 
-function playlistInput(externalId: string) {
+function playlistInput(externalId: string, libraryAddedAt: string | null = null) {
   return {
     connectorId: CONNECTOR_ID,
     kind: 'playlist' as const,
@@ -58,7 +121,7 @@ function playlistInput(externalId: string) {
     coverUrl: null,
     ownerName: 'Music Tester',
     trackCount: 0,
-    libraryAddedAt: null,
+    libraryAddedAt,
     remoteUpdatedAt: null,
     lastSyncedAt: null,
   }

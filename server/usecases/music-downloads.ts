@@ -3,7 +3,12 @@ import type { Env } from '@server/env'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
 import type { Deps } from './deps'
 import { submitDownload } from './downloaders'
-import type { ResolvedMusicResource } from './ports'
+import {
+  type ConnectorRecord,
+  MusicResourceUnavailableError,
+  type MusicTrackRecord,
+  type ResolvedMusicResource,
+} from './ports'
 
 const MUSIC_DOWNLOAD_KEY_TTL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_MUSIC_DOWNLOAD_QUALITY: MusicDownloadQuality = 'exhigh'
@@ -20,6 +25,7 @@ export class MusicDownloadError extends Error {
 
 export async function submitMusicTrackDownload(
   deps: Deps,
+  env: Env,
   userId: string,
   trackId: string,
   input: MusicTrackDownloadInput,
@@ -42,6 +48,20 @@ export async function submitMusicTrackDownload(
   }
 
   const quality = input.quality ?? DEFAULT_MUSIC_DOWNLOAD_QUALITY
+  let preflight: ResolvedMusicResource
+  try {
+    preflight = await resolvePreferredTrackResource(deps, env, track, connector, quality)
+    await setTrackAvailability(deps, userId, track.id, 'available')
+  } catch (error) {
+    await setTrackAvailability(
+      deps,
+      userId,
+      track.id,
+      error instanceof MusicResourceUnavailableError ? 'unavailable' : 'unknown',
+    )
+    throw toResolutionError(error)
+  }
+
   const key = createAccessKey()
   const now = new Date()
   const record = {
@@ -51,7 +71,7 @@ export async function submitMusicTrackDownload(
     connectorId: connector.id,
     trackId: track.id,
     downloaderId: input.downloaderId,
-    quality,
+    quality: preflight.quality,
     expiresAt: new Date(now.getTime() + MUSIC_DOWNLOAD_KEY_TTL_MS).toISOString(),
     revokedAt: null,
     createdAt: now.toISOString(),
@@ -65,7 +85,7 @@ export async function submitMusicTrackDownload(
       downloaderId: input.downloaderId,
       sourceType: 'http',
       uri: downloadUrl.toString(),
-      title: buildMusicFilename(track.artists, track.title, expectedExtension(quality)),
+      title: buildMusicFilename(track.artists, track.title, preflight.extension),
       category: 'zme:music',
       tags: [...track.artists, ...(track.albumTitle ? [track.albumTitle] : [])],
     })
@@ -101,21 +121,81 @@ export async function resolveMusicTrackDownload(
   }
 
   try {
-    const credentials = await decryptConnectorCredentials(
-      env.CONNECTOR_CREDENTIALS_SECRET,
-      connector.credentialsEncrypted,
-    )
-    const resource = await deps.musicResourceResolvers.netease.resolve(credentials, {
-      trackId: track.externalId,
-      quality: access.quality,
-    })
+    const resource = await resolveTrackResource(deps, env, track, connector, access.quality)
+    await setTrackAvailability(deps, access.userId, track.id, 'available')
     return {
       resource,
       filename: buildMusicFilename(track.artists, track.title, resource.extension),
     }
   } catch (error) {
-    throw new MusicDownloadError(error instanceof Error ? error.message : 'Music resource resolution failed.', 502)
+    await setTrackAvailability(
+      deps,
+      access.userId,
+      track.id,
+      error instanceof MusicResourceUnavailableError ? 'unavailable' : 'unknown',
+    )
+    throw toResolutionError(error)
   }
+}
+
+async function setTrackAvailability(
+  deps: Deps,
+  userId: string,
+  trackId: string,
+  status: 'available' | 'unavailable' | 'unknown',
+): Promise<void> {
+  await deps.musicCollectionsRepo.setTrackAvailabilities(userId, [
+    { trackId, status, checkedAt: new Date().toISOString() },
+  ])
+}
+
+async function resolveTrackResource(
+  deps: Deps,
+  env: Env,
+  track: MusicTrackRecord,
+  connector: ConnectorRecord,
+  quality: MusicDownloadQuality,
+): Promise<ResolvedMusicResource> {
+  if (!connector.credentialsEncrypted) throw new Error('Netease connector has no credentials.')
+  const credentials = await decryptConnectorCredentials(
+    env.CONNECTOR_CREDENTIALS_SECRET,
+    connector.credentialsEncrypted,
+  )
+  return deps.musicResourceResolvers.netease.resolve(credentials, {
+    trackId: track.externalId,
+    quality,
+  })
+}
+
+async function resolvePreferredTrackResource(
+  deps: Deps,
+  env: Env,
+  track: MusicTrackRecord,
+  connector: ConnectorRecord,
+  preferredQuality: MusicDownloadQuality,
+): Promise<ResolvedMusicResource> {
+  let unavailable: MusicResourceUnavailableError | null = null
+  for (const quality of qualityFallbacks(preferredQuality)) {
+    try {
+      return await resolveTrackResource(deps, env, track, connector, quality)
+    } catch (error) {
+      if (!(error instanceof MusicResourceUnavailableError)) throw error
+      unavailable = error
+    }
+  }
+  throw unavailable ?? new MusicResourceUnavailableError('The full track is not available for this account.')
+}
+
+function qualityFallbacks(preferred: MusicDownloadQuality): MusicDownloadQuality[] {
+  if (preferred === 'hires') return ['hires', 'lossless', 'exhigh', 'standard']
+  if (preferred === 'lossless') return ['lossless', 'exhigh', 'standard']
+  if (preferred === 'exhigh') return ['exhigh', 'standard']
+  return ['standard']
+}
+
+function toResolutionError(error: unknown): MusicDownloadError {
+  const message = error instanceof Error ? error.message : 'Music resource resolution failed.'
+  return new MusicDownloadError(message, error instanceof MusicResourceUnavailableError ? 409 : 502)
 }
 
 function createAccessKey(): string {
@@ -128,10 +208,6 @@ function createAccessKey(): string {
 async function hashAccessKey(value: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
   return [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-}
-
-function expectedExtension(quality: MusicDownloadQuality): string {
-  return quality === 'lossless' || quality === 'hires' ? 'flac' : 'mp3'
 }
 
 function buildMusicFilename(artists: string[], title: string, extension: string): string {

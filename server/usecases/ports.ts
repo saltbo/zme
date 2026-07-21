@@ -35,6 +35,7 @@ import type {
   MusicCollectionSummary,
   MusicDiscoveryInput,
   MusicDownloadQuality,
+  MusicDownloadStatus,
   MusicLibraryTrack,
   MusicSearchItem,
   NeteaseSmsCodeInput,
@@ -308,11 +309,18 @@ export interface MusicCollectionRecord extends MusicCollectionSummary {
   connectorId: string | null
 }
 
-export interface MusicTrackInput extends Omit<MusicLibraryTrack, 'id' | 'position' | 'addedAt'> {
+export interface MusicTrackInput
+  extends Omit<MusicLibraryTrack, 'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt'> {
   addedAt?: string | null
 }
 
-export type MusicTrackRecord = Omit<MusicLibraryTrack, 'position' | 'addedAt'>
+export type MusicTrackRecord = Omit<MusicLibraryTrack, 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt'>
+
+export interface MusicTrackAvailabilityUpdate {
+  trackId: string
+  status: MusicDownloadStatus
+  checkedAt: string | null
+}
 
 export interface MusicCollectionsRepo {
   listLibrary(userId: string, kind: 'playlist' | 'album'): Promise<MusicCollectionSummary[]>
@@ -345,6 +353,13 @@ export interface MusicCollectionsRepo {
     input: { trackCount: number; lastSyncedAt: string },
   ): Promise<MusicCollectionRecord | null>
   replaceTracks(collectionId: string, tracks: MusicTrackInput[]): Promise<void>
+  listTracksForAvailabilityCheck(
+    userId: string,
+    staleBefore: { known: string; unknown: string },
+    limit: number,
+  ): Promise<MusicTrackRecord[]>
+  setTrackAvailabilities(userId: string, updates: MusicTrackAvailabilityUpdate[]): Promise<void>
+  clearTrackAvailabilities(userId: string): Promise<void>
   deleteMissingConnectorCollections(connectorId: string, externalIds: string[]): Promise<void>
   delete(userId: string, id: string): Promise<boolean>
 }
@@ -495,11 +510,18 @@ export interface MusicPlaylistConnector {
   ): Promise<{ status: 'waiting_scan' | 'waiting_confirmation' | 'connected' | 'expired'; cookies: string[] }>
   listPlaylists(credentials: string[]): Promise<ImportedMusicPlaylist[]>
   listTracks(credentials: string[], playlistId: string): Promise<ImportedMusicTrack[]>
+  checkTrackAvailability(credentials: string[], trackIds: string[]): Promise<MusicTrackAvailabilityCheckResult>
+}
+
+export interface MusicTrackAvailabilityCheckResult {
+  statuses: Map<string, MusicDownloadStatus>
+  interrupted: string | null
 }
 
 export interface ResolvedMusicResource {
   url: string
   headers: Record<string, string>
+  quality: MusicDownloadQuality
   extension: string
   contentType: string | null
   contentLength: number | null
@@ -510,4 +532,11 @@ export interface MusicResourceResolver {
     credentials: string[],
     input: { trackId: string; quality: MusicDownloadQuality },
   ): Promise<ResolvedMusicResource>
+}
+
+export class MusicResourceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MusicResourceUnavailableError'
+  }
 }

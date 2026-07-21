@@ -134,8 +134,13 @@ export function MusicCollectionDetailPage() {
             <span className="text-right text-muted-foreground text-sm">{track.position}</span>
             <div className="min-w-0">
               <div className="truncate font-medium text-sm">{track.title}</div>
-              <div className="truncate text-muted-foreground text-xs">
-                {track.artists.join(', ') || t('unknownArtist')}
+              <div className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
+                <span className="truncate">{track.artists.join(', ') || t('unknownArtist')}</span>
+                {track.provider === 'netease' && track.downloadStatus === 'unavailable' ? (
+                  <span className="shrink-0 text-destructive">{t('musicTrackUnavailable')}</span>
+                ) : track.provider === 'netease' && track.downloadStatus === 'unknown' ? (
+                  <span className="shrink-0">{t('musicTrackUnknown')}</span>
+                ) : null}
               </div>
             </div>
             <span className="hidden text-muted-foreground text-xs sm:block">{formatDuration(track.durationMs)}</span>
@@ -143,6 +148,7 @@ export function MusicCollectionDetailPage() {
               track={track}
               downloaders={httpDownloaders}
               loadingDownloaders={downloaders.isLoading}
+              onSettled={() => queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })}
             />
           </div>
         ))}
@@ -155,16 +161,19 @@ function MusicTrackDownloadButton({
   track,
   downloaders,
   loadingDownloaders,
+  onSettled,
 }: {
   track: MusicLibraryTrack
   downloaders: DownloaderSummary[]
   loadingDownloaders: boolean
+  onSettled: () => Promise<unknown>
 }) {
   const { t } = useTranslation()
   const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
   const supported = track.provider === 'netease'
+  const available = supported && track.downloadStatus !== 'unavailable'
   const submitting = submittingDownloaderId !== null
-  const label = !supported
+  const label = !available
     ? t('musicDownloadUnavailable')
     : loadingDownloaders
       ? t('loadingDownloaders')
@@ -180,6 +189,7 @@ function MusicTrackDownloadButton({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
     } finally {
+      await onSettled()
       setSubmittingDownloaderId(null)
     }
   }
@@ -192,7 +202,7 @@ function MusicTrackDownloadButton({
             type="button"
             variant="ghost"
             size="icon-sm"
-            disabled={!supported || loadingDownloaders || downloaders.length === 0 || submitting}
+            disabled={!available || loadingDownloaders || downloaders.length === 0 || submitting}
             title={label}
             aria-label={label}
           />

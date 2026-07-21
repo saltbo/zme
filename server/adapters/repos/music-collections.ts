@@ -1,12 +1,13 @@
 import type { createDb } from '@server/db/client'
-import { musicCollections, musicCollectionTracks, musicTracks } from '@server/db/schema'
+import { musicCollections, musicCollectionTracks, musicTrackAvailability, musicTracks } from '@server/db/schema'
 import type { MusicCollectionRecord, MusicCollectionsRepo, MusicTrackRecord } from '@server/usecases/ports'
 import type { MusicCollectionDetails, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
-import { and, eq, inArray, isNotNull } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
 const D1_MAX_BOUND_PARAMETERS = 100
 const MUSIC_COLLECTION_TRACK_PARAMETERS = 4
+const MUSIC_TRACK_AVAILABILITY_PARAMETERS = 5
 
 export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
   async function find(
@@ -63,14 +64,20 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       if (!collection) return null
 
       const rows = await db
-        .select({ relation: musicCollectionTracks, track: musicTracks })
+        .select({ relation: musicCollectionTracks, track: musicTracks, availability: musicTrackAvailability })
         .from(musicCollectionTracks)
         .innerJoin(musicTracks, eq(musicCollectionTracks.trackId, musicTracks.id))
+        .leftJoin(
+          musicTrackAvailability,
+          and(eq(musicTrackAvailability.userId, userId), eq(musicTrackAvailability.trackId, musicTracks.id)),
+        )
         .where(eq(musicCollectionTracks.collectionId, id))
         .orderBy(musicCollectionTracks.position)
       return {
         ...toSummary(collection),
-        tracks: rows.map(({ relation, track }) => toTrack(track, relation.position, relation.addedAt)),
+        tracks: rows.map(({ relation, track, availability }) =>
+          toTrack(track, relation.position, relation.addedAt, availability?.status, availability?.checkedAt),
+        ),
       } satisfies MusicCollectionDetails
     },
 
@@ -191,6 +198,63 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       }
     },
 
+    async listTracksForAvailabilityCheck(userId, staleBefore, limit) {
+      const rows = await db
+        .selectDistinct({ track: musicTracks })
+        .from(musicCollectionTracks)
+        .innerJoin(musicTracks, eq(musicCollectionTracks.trackId, musicTracks.id))
+        .innerJoin(musicCollections, eq(musicCollectionTracks.collectionId, musicCollections.id))
+        .leftJoin(
+          musicTrackAvailability,
+          and(eq(musicTrackAvailability.userId, userId), eq(musicTrackAvailability.trackId, musicTracks.id)),
+        )
+        .where(
+          and(
+            eq(musicCollections.userId, userId),
+            isNotNull(musicCollections.libraryAddedAt),
+            eq(musicTracks.provider, 'netease'),
+            or(
+              isNull(musicTrackAvailability.trackId),
+              and(
+                eq(musicTrackAvailability.status, 'unknown'),
+                or(
+                  isNull(musicTrackAvailability.checkedAt),
+                  lte(musicTrackAvailability.checkedAt, staleBefore.unknown),
+                ),
+              ),
+              and(
+                inArray(musicTrackAvailability.status, ['available', 'unavailable']),
+                or(isNull(musicTrackAvailability.checkedAt), lte(musicTrackAvailability.checkedAt, staleBefore.known)),
+              ),
+            ),
+          ),
+        )
+        .limit(limit)
+      return rows.map(({ track }) => toTrackRecord(track))
+    },
+
+    async setTrackAvailabilities(userId, updates) {
+      const now = new Date().toISOString()
+      const rows = updates.map((update) => ({ userId, ...update, updatedAt: now }))
+      for (const values of chunks(rows, Math.floor(D1_MAX_BOUND_PARAMETERS / MUSIC_TRACK_AVAILABILITY_PARAMETERS))) {
+        await db
+          .insert(musicTrackAvailability)
+          .values(values)
+          .onConflictDoUpdate({
+            target: [musicTrackAvailability.userId, musicTrackAvailability.trackId],
+            set: {
+              status: sql`excluded.status`,
+              checkedAt: sql`excluded.checked_at`,
+              updatedAt: sql`excluded.updated_at`,
+            },
+          })
+      }
+    },
+
+    async clearTrackAvailabilities(userId) {
+      await db.delete(musicTrackAvailability).where(eq(musicTrackAvailability.userId, userId))
+    },
+
     async deleteMissingConnectorCollections(connectorId, externalIds) {
       const existing = await db
         .select({ id: musicCollections.id, externalId: musicCollections.externalId })
@@ -242,9 +306,17 @@ function toSummary(row: typeof musicCollections.$inferSelect): MusicCollectionSu
   }
 }
 
-function toTrack(row: typeof musicTracks.$inferSelect, position: number, addedAt: string | null): MusicLibraryTrack {
+function toTrack(
+  row: typeof musicTracks.$inferSelect,
+  position: number,
+  addedAt: string | null,
+  downloadStatus: 'available' | 'unavailable' | 'unknown' | undefined,
+  downloadCheckedAt: string | null | undefined,
+): MusicLibraryTrack {
   return {
     ...toTrackRecord(row),
+    downloadStatus: downloadStatus ?? 'unknown',
+    downloadCheckedAt: downloadCheckedAt ?? null,
     position,
     addedAt,
   }

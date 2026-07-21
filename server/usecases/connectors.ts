@@ -33,6 +33,9 @@ const CONNECTOR_DEFINITIONS = {
   douban: { authModes: ['profile'], capabilities: ['library.import'] },
   netease: { authModes: ['qr', 'sms'], capabilities: ['music.playlists.read', 'music.tracks.download'] },
 } as const
+const KNOWN_MUSIC_AVAILABILITY_TTL_MS = 24 * 60 * 60 * 1000
+const UNKNOWN_MUSIC_AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000
+const MAX_MUSIC_AVAILABILITY_CHECKS_PER_SYNC = 500
 
 export async function listConnectors(deps: Deps, userId: string): Promise<ConnectorSummary[]> {
   return (await deps.connectorsRepo.list(userId)).map(toSummary)
@@ -343,11 +346,53 @@ async function syncNeteaseConnector(
     connector.id,
     remotePlaylists.map((item) => item.externalId),
   )
+  await refreshNeteaseTrackAvailability(deps, connector, credentials)
   return {
     capability: 'music.playlists.read',
     playlists: remotePlaylists.length,
     selectedPlaylists,
     tracks,
+  }
+}
+
+async function refreshNeteaseTrackAvailability(
+  deps: Deps,
+  connector: ConnectorRecord,
+  credentials: string[],
+): Promise<void> {
+  const now = new Date()
+  const candidates = await deps.musicCollectionsRepo.listTracksForAvailabilityCheck(
+    connector.userId,
+    {
+      known: new Date(now.getTime() - KNOWN_MUSIC_AVAILABILITY_TTL_MS).toISOString(),
+      unknown: new Date(now.getTime() - UNKNOWN_MUSIC_AVAILABILITY_TTL_MS).toISOString(),
+    },
+    MAX_MUSIC_AVAILABILITY_CHECKS_PER_SYNC,
+  )
+  if (candidates.length === 0) return
+
+  const result = await deps.musicPlaylistConnectors.netease.checkTrackAvailability(
+    credentials,
+    candidates.map((track) => track.externalId),
+  )
+  const checkedAt = now.toISOString()
+  await deps.musicCollectionsRepo.setTrackAvailabilities(
+    connector.userId,
+    candidates.flatMap((track) => {
+      const status = result.statuses.get(track.externalId) ?? (result.interrupted ? 'unknown' : undefined)
+      return status ? [{ trackId: track.id, status, checkedAt }] : []
+    }),
+  )
+  if (result.interrupted) {
+    console.warn(
+      JSON.stringify({
+        event: 'connector.music_availability.interrupted',
+        connectorId: connector.id,
+        checkedTracks: result.statuses.size,
+        pendingTracks: candidates.length - result.statuses.size,
+        message: result.interrupted,
+      }),
+    )
   }
 }
 
@@ -358,6 +403,7 @@ async function saveConnectedNeteaseConnector(
   account: ConnectedMusicAccount,
   credentialsEncrypted: string,
 ): Promise<ConnectorSummary> {
+  const existing = await deps.connectorsRepo.findByKind(userId, 'netease')
   const record = await deps.connectorsRepo.save(userId, 'netease', {
     externalAccountId: account.externalAccountId,
     displayName: account.displayName,
@@ -367,6 +413,9 @@ async function saveConnectedNeteaseConnector(
     status: 'connected',
     enabled: true,
   })
+  if (existing && existing.externalAccountId !== account.externalAccountId) {
+    await deps.musicCollectionsRepo.clearTrackAvailabilities(userId)
+  }
   await syncConnector(deps, env, userId, record.id)
   const synced = await deps.connectorsRepo.get(userId, record.id)
   return synced ? toSummary(synced) : toSummary(record)

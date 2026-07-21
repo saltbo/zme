@@ -26,6 +26,7 @@ describe('music download proxy', () => {
       {
         url: 'https://m701.music.126.net/audio.mp3',
         headers: { Referer: 'https://music.163.com/' },
+        quality: 'exhigh',
         extension: 'mp3',
         contentType: 'audio/mpeg',
         contentLength: 10,

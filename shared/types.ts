@@ -327,6 +327,7 @@ export interface ConnectorLoginAttempt {
 
 export type MusicCollectionKind = 'playlist' | 'album' | 'favorites'
 export type MusicCollectionProvider = 'netease' | 'musicbrainz' | 'zme'
+export type MusicDownloadStatus = 'available' | 'unavailable' | 'unknown'
 
 export interface MusicCollectionSummary {
   id: string
@@ -357,11 +358,16 @@ export interface MusicLibraryTrack {
   coverUrl: string | null
   durationMs: number | null
   isrcs: string[]
+  downloadStatus: MusicDownloadStatus
+  downloadCheckedAt: string | null
   position: number
   addedAt: string | null
 }
 
-export type MusicFavoriteTrackInput = Omit<MusicLibraryTrack, 'id' | 'position' | 'addedAt'>
+export type MusicFavoriteTrackInput = Omit<
+  MusicLibraryTrack,
+  'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt'
+>
 
 export interface MusicCollectionDetails extends MusicCollectionSummary {
   tracks: MusicLibraryTrack[]

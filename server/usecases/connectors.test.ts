@@ -1,7 +1,7 @@
 import { decryptConnectorCredentials, encryptConnectorCredentials } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import type { MediaSearchItem, MusicCollectionSummary } from '@shared/types'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   checkNeteaseLogin,
   loginNeteaseWithSms,
@@ -10,7 +10,13 @@ import {
   syncConnector,
 } from './connectors'
 import type { Deps } from './deps'
-import type { ConnectorLoginAttemptRecord, ConnectorRecord, ImportedLibraryEntry, LibraryRecord } from './ports'
+import type {
+  ConnectorLoginAttemptRecord,
+  ConnectorRecord,
+  ImportedLibraryEntry,
+  LibraryRecord,
+  MusicTrackRecord,
+} from './ports'
 
 const connectorRecord: ConnectorRecord = {
   id: 'connector-1',
@@ -28,6 +34,24 @@ const connectorRecord: ConnectorRecord = {
   lastResult: null,
   createdAt: '2026-06-01T00:00:00.000Z',
   updatedAt: '2026-06-01T00:00:00.000Z',
+}
+
+afterEach(() => vi.restoreAllMocks())
+
+function musicTrackRecord(id: string, externalId: string): MusicTrackRecord {
+  return {
+    id,
+    provider: 'netease',
+    externalId,
+    mediaKey: `netease:track:${externalId}`,
+    title: externalId,
+    artists: ['Artist'],
+    albumTitle: null,
+    albumExternalId: null,
+    coverUrl: null,
+    durationMs: null,
+    isrcs: [],
+  }
 }
 
 function mediaItem(id: number, title: string): MediaSearchItem {
@@ -167,6 +191,7 @@ describe('syncConnector', () => {
   })
 
   it('synchronizes tracks only for selected Netease playlists', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const secret = 'test-connector-secret-with-32-chars!'
     const remotePlaylists = ['remote-1', 'remote-2', 'remote-3'].map((externalId, index) => ({
       externalId,
@@ -189,6 +214,8 @@ describe('syncConnector', () => {
     }))
     const fetchedTrackPlaylists: string[] = []
     const replacedCollections: string[] = []
+    const availabilityChecks: string[][] = []
+    const availabilityUpdates: unknown[] = []
     const deps = {
       connectorsRepo: {
         get: async () => ({
@@ -218,6 +245,13 @@ describe('syncConnector', () => {
               },
             ]
           },
+          checkTrackAvailability: async (_credentials: string[], trackIds: string[]) => {
+            availabilityChecks.push(trackIds)
+            return {
+              statuses: new Map([[trackIds[0] ?? '', 'available' as const]]),
+              interrupted: 'Netease request failed: 429',
+            }
+          },
         },
       },
       musicCollectionsRepo: {
@@ -232,6 +266,13 @@ describe('syncConnector', () => {
         },
         updateSnapshot: async () => existing[0],
         deleteMissingConnectorCollections: async () => undefined,
+        listTracksForAvailabilityCheck: async () => [
+          musicTrackRecord('track-1', 'track-remote-1'),
+          musicTrackRecord('track-2', 'track-remote-2'),
+        ],
+        setTrackAvailabilities: async (_userId: string, updates: unknown[]) => {
+          availabilityUpdates.push(...updates)
+        },
       },
     } as never as Deps
 
@@ -239,6 +280,12 @@ describe('syncConnector', () => {
 
     expect(fetchedTrackPlaylists).toEqual(['remote-1', 'remote-2'])
     expect(replacedCollections).toEqual(['playlist-1', 'playlist-2'])
+    expect(availabilityChecks).toEqual([['track-remote-1', 'track-remote-2']])
+    expect(availabilityUpdates).toEqual([
+      { trackId: 'track-1', status: 'available', checkedAt: expect.any(String) },
+      { trackId: 'track-2', status: 'unknown', checkedAt: expect.any(String) },
+    ])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('connector.music_availability.interrupted'))
     expect(result).toEqual({
       capability: 'music.playlists.read',
       playlists: 3,
@@ -325,6 +372,7 @@ describe('Netease SMS login', () => {
     let record: ConnectorRecord | null = null
     const deps = {
       connectorsRepo: {
+        findByKind: async () => null,
         save: async (userId: string, kind: ConnectorRecord['kind'], input: SaveInput) => {
           saved.input = input
           record = {
@@ -360,6 +408,7 @@ describe('Netease SMS login', () => {
       musicCollectionsRepo: {
         listForConnector: async () => [],
         deleteMissingConnectorCollections: async () => undefined,
+        listTracksForAvailabilityCheck: async () => [],
       },
     } as never as Deps
 

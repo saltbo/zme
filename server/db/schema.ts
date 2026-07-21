@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const user = sqliteTable('user', {
   id: text('id').primaryKey(),
@@ -227,6 +227,25 @@ export const musicCollectionTracks = sqliteTable(
     addedAt: text('added_at'),
   },
   (table) => [uniqueIndex('music_collection_tracks_collection_position_idx').on(table.collectionId, table.position)],
+)
+
+export const musicTrackAvailability = sqliteTable(
+  'music_track_availability',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    trackId: text('track_id')
+      .notNull()
+      .references(() => musicTracks.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['available', 'unavailable', 'unknown'] }).notNull(),
+    checkedAt: text('checked_at'),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('music_track_availability_user_track_idx').on(table.userId, table.trackId),
+    index('music_track_availability_user_checked_idx').on(table.userId, table.checkedAt),
+  ],
 )
 
 export const musicDownloadKeys = sqliteTable(

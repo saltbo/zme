@@ -242,6 +242,100 @@ describe('Netease playlist connector', () => {
       'Netease failed to send the SMS code (code 503: Verification attempts exceeded).',
     )
   })
+
+  it('keeps playlist metadata sync separate from batched availability checks', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ playlist: { trackIds: [{ id: 123 }, { id: 456 }] } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            songs: [
+              { id: 123, name: 'Available', ar: [{ name: 'Artist' }], al: { id: 1, name: 'Album' } },
+              { id: 456, name: 'Unavailable', ar: [{ name: 'Artist' }], al: { id: 1, name: 'Album' } },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: 200,
+            data: [
+              {
+                id: 123,
+                url: 'https://m701.music.126.net/audio.mp3',
+                type: 'mp3',
+                level: 'standard',
+                code: 200,
+                freeTrialInfo: null,
+              },
+              { id: 456, url: null, type: null, level: 'standard', code: 404, freeTrialInfo: null },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await neteasePlaylistConnector.listTracks(['MUSIC_U=session-value'], 'playlist-1')
+    const availability = await neteasePlaylistConnector.checkTrackAvailability(
+      ['MUSIC_U=session-value'],
+      ['123', '456'],
+    )
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({ externalId: '123' })
+    expect(result[1]).toMatchObject({ externalId: '456' })
+    expect(availability.statuses).toEqual(
+      new Map([
+        ['123', 'available'],
+        ['456', 'unavailable'],
+      ]),
+    )
+    expect(availability.interrupted).toBeNull()
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'https://interface.music.163.com/eapi/song/enhance/player/url/v1',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('stops later availability batches after an upstream risk response', async () => {
+    const trackIds = Array.from({ length: 201 }, (_, index) => String(index + 1))
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            code: 200,
+            data: trackIds.slice(0, 100).map((id) => ({
+              id: Number(id),
+              url: `https://m701.music.126.net/${id}.mp3`,
+              type: 'mp3',
+              level: 'standard',
+              code: 200,
+              freeTrialInfo: null,
+            })),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await neteasePlaylistConnector.checkTrackAvailability(['MUSIC_U=session-value'], trackIds)
+
+    expect(result.statuses.size).toBe(100)
+    expect(result.interrupted).toBe('Netease request failed: 429')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('Netease music resource resolver', () => {
@@ -275,6 +369,7 @@ describe('Netease music resource resolver', () => {
         Referer: 'https://music.163.com/',
         'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
       },
+      quality: 'exhigh',
       extension: 'mp3',
       contentType: 'audio/mpeg',
       contentLength: 4096,

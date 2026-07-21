@@ -51,6 +51,7 @@ export function registerMusicDownloadRoutes(routes: Hono<AppEnv>) {
       try {
         const item = await submitMusicTrackDownload(
           c.get('deps'),
+          c.env,
           c.get('user').id,
           c.req.valid('param').id,
           c.req.valid('json'),

@@ -53,6 +53,8 @@ function createDeps() {
                 id: `track-${index + 1}`,
                 position: index + 1,
                 addedAt: item.addedAt ?? null,
+                downloadStatus: 'unknown',
+                downloadCheckedAt: null,
               })),
             }
           : null,
