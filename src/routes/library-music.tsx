@@ -2,7 +2,6 @@ import type {
   DownloaderSummary,
   MusicAvailabilityReason,
   MusicCollectionSummary,
-  MusicDownloadQuality,
   MusicLibraryTrack,
   MusicSubscriptionSummary,
 } from '@shared/types'
@@ -105,7 +104,6 @@ export function MusicCollectionDetailPage() {
   const downloaders = useDownloaders()
   const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false)
   const [subscriptionDownloaderId, setSubscriptionDownloaderId] = useState('')
-  const [subscriptionQuality, setSubscriptionQuality] = useState<MusicDownloadQuality>('exhigh')
   const collection = useQuery({
     queryKey: queryKeys.music.collection(collectionId),
     queryFn: async () => (await getMusicCollection(collectionId)).item,
@@ -124,7 +122,6 @@ export function MusicCollectionDetailPage() {
     mutationFn: () =>
       enableMusicCollectionSubscription(collectionId, {
         downloaderId: subscriptionDownloaderId,
-        quality: subscriptionQuality,
       }),
     onSuccess: async ({ item }) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })
@@ -171,7 +168,6 @@ export function MusicCollectionDetailPage() {
   function openSubscriptionDialog() {
     const downloaderId = item.subscription?.downloaderId ?? httpDownloaders[0]?.id ?? ''
     setSubscriptionDownloaderId(downloaderId)
-    setSubscriptionQuality(item.subscription?.quality ?? 'exhigh')
     setSubscriptionDialogOpen(true)
   }
 
@@ -193,12 +189,10 @@ export function MusicCollectionDetailPage() {
         open={subscriptionDialogOpen}
         downloaders={httpDownloaders}
         downloaderId={subscriptionDownloaderId}
-        quality={subscriptionQuality}
         trackCount={item.tracks.length}
         saving={enableSubscription.isPending}
         onOpenChange={setSubscriptionDialogOpen}
         onDownloaderChange={setSubscriptionDownloaderId}
-        onQualityChange={setSubscriptionQuality}
         onSubmit={() => enableSubscription.mutate()}
       />
 
@@ -400,33 +394,25 @@ function MusicSubscriptionDialog({
   open,
   downloaders,
   downloaderId,
-  quality,
   trackCount,
   saving,
   onOpenChange,
   onDownloaderChange,
-  onQualityChange,
   onSubmit,
 }: {
   open: boolean
   downloaders: DownloaderSummary[]
   downloaderId: string
-  quality: MusicDownloadQuality
   trackCount: number
   saving: boolean
   onOpenChange: (open: boolean) => void
   onDownloaderChange: (value: string) => void
-  onQualityChange: (value: MusicDownloadQuality) => void
   onSubmit: () => void
 }) {
   const { t } = useTranslation()
   const downloaderItems = downloaders.map((downloader) => ({
     label: downloader.description || downloader.kind,
     value: downloader.id,
-  }))
-  const qualityItems = (['standard', 'exhigh', 'lossless', 'hires'] as const).map((value) => ({
-    label: t(`musicQuality_${value}`),
-    value,
   }))
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -464,27 +450,6 @@ function MusicSubscriptionDialog({
                 </SelectContent>
               </Select>
               {downloaders.length === 0 ? <FieldDescription>{t('noHttpDownloaders')}</FieldDescription> : null}
-            </Field>
-            <Field>
-              <FieldLabel>{t('musicQuality')}</FieldLabel>
-              <Select
-                items={qualityItems}
-                value={quality}
-                onValueChange={(value) => onQualityChange((value || 'exhigh') as MusicDownloadQuality)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start" alignItemWithTrigger={false}>
-                  <SelectGroup>
-                    {qualityItems.map((quality) => (
-                      <SelectItem key={quality.value} value={quality.value}>
-                        {quality.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
             </Field>
           </FieldGroup>
           <DialogFooter>

@@ -414,7 +414,6 @@ export interface MediaSubscriptionRecord {
   subjectType: 'music_collection' | 'movie' | 'tv'
   subjectKey: string
   downloaderId: string | null
-  config: { quality?: MusicDownloadQuality }
   enabled: boolean
   lastEvaluatedAt: string | null
   createdAt: string
@@ -431,7 +430,7 @@ export interface MediaSubscriptionsRepo {
   upsertMusicCollection(
     userId: string,
     collectionId: string,
-    input: { downloaderId: string; quality: MusicDownloadQuality; now: string },
+    input: { downloaderId: string; now: string },
   ): Promise<MediaSubscriptionRecord>
   disable(userId: string, id: string, now: string): Promise<MediaSubscriptionRecord | null>
   markEvaluated(id: string, evaluatedAt: string): Promise<void>

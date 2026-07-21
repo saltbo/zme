@@ -98,7 +98,7 @@ function createFixture() {
       upsertMusicCollection: async (
         _userId: string,
         _collectionId: string,
-        input: { downloaderId: string; quality: 'exhigh'; now: string },
+        input: { downloaderId: string; now: string },
       ) => {
         subscription = {
           id: 'subscription-1',
@@ -106,7 +106,6 @@ function createFixture() {
           subjectType: 'music_collection',
           subjectKey: collection.id,
           downloaderId: input.downloaderId,
-          config: { quality: input.quality },
           enabled: true,
           lastEvaluatedAt: null,
           createdAt: input.now,
@@ -169,12 +168,12 @@ describe('music collection subscriptions', () => {
 
     const result = await enableMusicCollectionSubscription(fixture.deps, 'user-1', collection.id, {
       downloaderId: 'downloader-1',
-      quality: 'exhigh',
     })
 
     expect(result).toMatchObject({ queued: 1, waiting: 1, skipped: 0, canceled: 0 })
     expect(fixture.records).toHaveLength(2)
     expect(fixture.records.map((record) => record.status)).toEqual(['queued', 'waiting_source'])
+    expect(fixture.records.map((record) => record.config.preferredQuality)).toEqual(['hires', 'hires'])
     expect(fixture.links.size).toBe(2)
     expect(fixture.wake).toHaveBeenCalledOnce()
     expect(fixture.wake).toHaveBeenCalledWith('netease:connector-1')
@@ -185,7 +184,6 @@ describe('music collection subscriptions', () => {
     const fixture = createFixture()
     await enableMusicCollectionSubscription(fixture.deps, 'user-1', collection.id, {
       downloaderId: 'downloader-1',
-      quality: 'exhigh',
     })
     fixture.records[0].status = 'accepted'
     fixture.records[0].firstAcceptedAt = '2026-07-20T01:00:00.000Z'
@@ -215,7 +213,6 @@ describe('music collection subscriptions', () => {
     const fixture = createFixture()
     await enableMusicCollectionSubscription(fixture.deps, 'user-1', collection.id, {
       downloaderId: 'downloader-1',
-      quality: 'exhigh',
     })
     fixture.wake.mockClear()
     fixture.setTracks([
@@ -238,7 +235,6 @@ describe('music collection subscriptions', () => {
     const fixture = createFixture()
     await enableMusicCollectionSubscription(fixture.deps, 'user-1', collection.id, {
       downloaderId: 'downloader-1',
-      quality: 'exhigh',
     })
 
     const result = await disableMusicCollectionSubscription(fixture.deps, 'user-1', collection.id)

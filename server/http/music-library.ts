@@ -27,7 +27,6 @@ const albumSchema = z.object({
 
 const musicSubscriptionSchema = z.object({
   downloaderId: z.string().trim().min(1),
-  quality: z.enum(['standard', 'exhigh', 'lossless', 'hires']),
 })
 
 const favoriteTrackSchema = z.object({

@@ -30,7 +30,6 @@ describe('media download repositories in D1', () => {
     const downloads = createDownloadRecordsRepo(db)
     const subscription = await subscriptions.upsertMusicCollection(USER_ID, 'playlist-1', {
       downloaderId: DOWNLOADER_ID,
-      quality: 'exhigh',
       now: NOW,
     })
     const records = Array.from({ length: 120 }, (_, index) => record(index))

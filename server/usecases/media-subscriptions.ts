@@ -9,7 +9,7 @@ import type {
 import type { Deps } from './deps'
 import type { DownloadRecordRecord, MediaSubscriptionRecord } from './ports'
 
-const DEFAULT_MUSIC_DOWNLOAD_QUALITY: MusicDownloadQuality = 'exhigh'
+const AUTOMATIC_MUSIC_DOWNLOAD_QUALITY: MusicDownloadQuality = 'hires'
 
 export class MusicSubscriptionError extends Error {
   constructor(
@@ -61,7 +61,6 @@ export async function enableMusicCollectionSubscription(
   const now = new Date().toISOString()
   const subscription = await deps.mediaSubscriptionsRepo.upsertMusicCollection(userId, collectionId, {
     downloaderId: input.downloaderId,
-    quality: input.quality,
     now,
   })
   const result = await evaluateMusicSubscription(deps, subscription, collection.connectorId)
@@ -125,7 +124,7 @@ async function evaluateMusicSubscription(
       generation: 1,
       downloaderId: subscription.downloaderId,
       config: {
-        preferredQuality: subscription.config.quality ?? DEFAULT_MUSIC_DOWNLOAD_QUALITY,
+        preferredQuality: AUTOMATIC_MUSIC_DOWNLOAD_QUALITY,
         resolvedQuality: null,
       },
       status,
@@ -161,7 +160,7 @@ async function evaluateMusicSubscription(
           generation: record.generation + 1,
           downloaderId: subscription.downloaderId,
           config: {
-            preferredQuality: subscription.config.quality ?? DEFAULT_MUSIC_DOWNLOAD_QUALITY,
+            preferredQuality: AUTOMATIC_MUSIC_DOWNLOAD_QUALITY,
             resolvedQuality: null,
           },
           status: track.downloadStatus === 'unavailable' ? 'waiting_source' : 'queued',
@@ -214,7 +213,6 @@ export function toSubscriptionSummary(subscription: MediaSubscriptionRecord): Mu
     id: subscription.id,
     enabled: subscription.enabled,
     downloaderId: subscription.downloaderId,
-    quality: subscription.config.quality ?? DEFAULT_MUSIC_DOWNLOAD_QUALITY,
     lastEvaluatedAt: subscription.lastEvaluatedAt,
     createdAt: subscription.createdAt,
     updatedAt: subscription.updatedAt,

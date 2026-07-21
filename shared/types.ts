@@ -366,7 +366,6 @@ export interface MusicSubscriptionSummary {
   id: string
   enabled: boolean
   downloaderId: string | null
-  quality: MusicDownloadQuality
   lastEvaluatedAt: string | null
   createdAt: string
   updatedAt: string
@@ -437,7 +436,6 @@ export interface MusicTrackDownloadInput {
 
 export interface MusicSubscriptionInput {
   downloaderId: string
-  quality: MusicDownloadQuality
 }
 
 export interface MusicSubscriptionMutationResult {
