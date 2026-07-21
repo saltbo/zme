@@ -10,6 +10,11 @@ import { createConnectorsRepo } from './adapters/repos/connectors'
 import { createDownloadersRepo } from './adapters/repos/downloaders'
 import { createIndexersRepo } from './adapters/repos/indexers'
 import { createLibraryRepo } from './adapters/repos/library'
+import {
+  createDispatchLanesRepo,
+  createDownloadRecordsRepo,
+  createMediaSubscriptionsRepo,
+} from './adapters/repos/media-downloads'
 import { createMediaSourcesRepo } from './adapters/repos/media-sources'
 import { createMusicCollectionsRepo } from './adapters/repos/music-collections'
 import { createMusicDownloadKeysRepo } from './adapters/repos/music-download-keys'
@@ -27,6 +32,14 @@ export function createDeps(env: Env): Deps {
     connectorLoginAttemptsRepo: createConnectorLoginAttemptsRepo(db),
     musicCollectionsRepo: createMusicCollectionsRepo(db),
     musicDownloadKeysRepo: createMusicDownloadKeysRepo(db),
+    mediaSubscriptionsRepo: createMediaSubscriptionsRepo(db),
+    downloadRecordsRepo: createDownloadRecordsRepo(db),
+    dispatchLanesRepo: createDispatchLanesRepo(db),
+    downloadDispatchQueue: {
+      async wake(laneKey, delaySeconds) {
+        await env.MEDIA_DOWNLOAD_DISPATCH.send({ laneKey }, delaySeconds ? { delaySeconds } : undefined)
+      },
+    },
     downloadersRepo: createDownloadersRepo(db),
     indexersRepo: createIndexersRepo(db),
     mediaSourcesRepo: createMediaSourcesRepo(db),

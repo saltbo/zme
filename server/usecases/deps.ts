@@ -3,8 +3,11 @@ import type {
   BookProvider,
   ConnectorLoginAttemptsRepo,
   ConnectorsRepo,
+  DispatchLanesRepo,
+  DownloadDispatchQueue,
   DownloaderGateway,
   DownloadersRepo,
+  DownloadRecordsRepo,
   DownloadTaskGateway,
   IndexerGateway,
   IndexersRepo,
@@ -12,6 +15,7 @@ import type {
   LibraryRepo,
   MediaProvider,
   MediaSourcesRepo,
+  MediaSubscriptionsRepo,
   MusicCollectionsRepo,
   MusicDownloadKeysRepo,
   MusicPlaylistConnector,
@@ -27,6 +31,10 @@ export interface Deps {
   connectorLoginAttemptsRepo: ConnectorLoginAttemptsRepo
   musicCollectionsRepo: MusicCollectionsRepo
   musicDownloadKeysRepo: MusicDownloadKeysRepo
+  mediaSubscriptionsRepo: MediaSubscriptionsRepo
+  downloadRecordsRepo: DownloadRecordsRepo
+  dispatchLanesRepo: DispatchLanesRepo
+  downloadDispatchQueue: DownloadDispatchQueue
   downloadersRepo: DownloadersRepo
   indexersRepo: IndexersRepo
   mediaSourcesRepo: MediaSourcesRepo

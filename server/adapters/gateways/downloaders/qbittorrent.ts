@@ -2,6 +2,7 @@ import type { DownloaderGateway } from '@server/usecases/ports'
 import { assertOk, getTypedDownloadDirectory, normalizeBaseUrl } from './shared'
 
 export const qbittorrentDownloaderGateway: DownloaderGateway = {
+  supportedSourceTypes: ['magnet', 'torrent_url'],
   async submit(config, input) {
     const baseUrl = normalizeBaseUrl(config.endpoint)
     const cookie = await login(baseUrl, config.credentials)
@@ -17,6 +18,7 @@ export const qbittorrentDownloaderGateway: DownloaderGateway = {
     })
 
     await assertOk(response, 'qBittorrent')
+    return { externalTaskId: null }
   },
 
   async probe(config) {

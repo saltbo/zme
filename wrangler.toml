@@ -3,6 +3,9 @@ main = "./server/worker.ts"
 compatibility_date = "2026-06-03"
 compatibility_flags = ["nodejs_compat"]
 
+[vars]
+PUBLIC_APP_ORIGIN = "https://zme.tftt.cc"
+
 [assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
@@ -19,3 +22,15 @@ enabled = true
 
 [triggers]
 crons = ["0 */6 * * *"]
+
+[[queues.producers]]
+binding = "MEDIA_DOWNLOAD_DISPATCH"
+queue = "media-download-dispatch"
+
+[[queues.consumers]]
+queue = "media-download-dispatch"
+max_batch_size = 1
+max_batch_timeout = 1
+max_retries = 3
+retry_delay = 60
+max_concurrency = 4

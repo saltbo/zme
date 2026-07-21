@@ -17,6 +17,7 @@ const downloadKeyQuerySchema = z.object({
 const submitMusicDownloadSchema = z.object({
   downloaderId: z.string().trim().min(1),
   quality: z.enum(['standard', 'exhigh', 'lossless', 'hires']).optional(),
+  force: z.boolean().optional(),
 })
 
 export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
@@ -51,13 +52,11 @@ export function registerMusicDownloadRoutes(routes: Hono<AppEnv>) {
       try {
         const item = await submitMusicTrackDownload(
           c.get('deps'),
-          c.env,
           c.get('user').id,
           c.req.valid('param').id,
           c.req.valid('json'),
-          new URL(c.req.url).origin,
         )
-        return c.json({ item }, 201)
+        return c.json({ item }, 202)
       } catch (error) {
         const status = error instanceof MusicDownloadError ? error.status : 502
         return c.json({ error: error instanceof Error ? error.message : 'Music download submission failed.' }, status)

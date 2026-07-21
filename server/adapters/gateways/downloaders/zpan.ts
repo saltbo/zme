@@ -14,14 +14,16 @@ type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']
 const snapshotPageSize = 50
 
 export const zpanDownloaderGateway: DownloaderGateway = {
+  supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
   async submit(config, input) {
-    await getClient(config).createDownloadTask({
+    const task = await getClient(config).createDownloadTask({
       source: { type: input.sourceType, uri: input.uri },
       targetFolder: getTypedDownloadDirectory(config.options.targetFolder, input.category),
       name: input.title,
       category: normalizeZmeDownloadCategory(input.category),
       tags: input.tags,
     })
+    return { externalTaskId: task.id }
   },
 
   async probe(config) {

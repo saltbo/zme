@@ -266,12 +266,92 @@ export const musicDownloadKeys = sqliteTable(
       .notNull()
       .references(() => downloaders.id, { onDelete: 'cascade' }),
     quality: text('quality', { enum: ['standard', 'exhigh', 'lossless', 'hires'] }).notNull(),
+    resourceEncrypted: text('resource_encrypted'),
     expiresAt: text('expires_at').notNull(),
     revokedAt: text('revoked_at'),
     createdAt: text('created_at').notNull(),
   },
   (table) => [uniqueIndex('music_download_keys_key_hash_idx').on(table.keyHash)],
 )
+
+export const mediaSubscriptions = sqliteTable(
+  'media_subscriptions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    subjectType: text('subject_type', { enum: ['music_collection', 'movie', 'tv'] }).notNull(),
+    subjectKey: text('subject_key').notNull(),
+    downloaderId: text('downloader_id').references(() => downloaders.id, { onDelete: 'set null' }),
+    configJson: text('config_json').notNull().default('{}'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    lastEvaluatedAt: text('last_evaluated_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('media_subscriptions_user_subject_idx').on(table.userId, table.subjectType, table.subjectKey),
+  ],
+)
+
+export const downloadRecords = sqliteTable(
+  'download_records',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    resourceKind: text('resource_kind', { enum: ['music_track', 'movie', 'tv_episode'] }).notNull(),
+    resourceKey: text('resource_key').notNull(),
+    laneKey: text('lane_key').notNull(),
+    generation: integer('generation').notNull().default(1),
+    downloaderId: text('downloader_id').references(() => downloaders.id, { onDelete: 'set null' }),
+    configJson: text('config_json').notNull().default('{}'),
+    status: text('status', {
+      enum: ['queued', 'resolving', 'waiting_source', 'submitting', 'accepted', 'failed', 'canceled'],
+    })
+      .notNull()
+      .default('queued'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    externalTaskId: text('external_task_id'),
+    firstAcceptedAt: text('first_accepted_at'),
+    lastAcceptedAt: text('last_accepted_at'),
+    manualRequestedAt: text('manual_requested_at'),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('download_records_user_resource_idx').on(table.userId, table.resourceKind, table.resourceKey),
+    index('download_records_status_idx').on(table.status, table.updatedAt),
+  ],
+)
+
+export const subscriptionDownloadRecords = sqliteTable(
+  'subscription_download_records',
+  {
+    subscriptionId: text('subscription_id')
+      .notNull()
+      .references(() => mediaSubscriptions.id, { onDelete: 'cascade' }),
+    downloadRecordId: text('download_record_id')
+      .notNull()
+      .references(() => downloadRecords.id, { onDelete: 'cascade' }),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('subscription_download_records_pair_idx').on(table.subscriptionId, table.downloadRecordId),
+    index('subscription_download_records_record_idx').on(table.downloadRecordId),
+  ],
+)
+
+export const dispatchLanes = sqliteTable('dispatch_lanes', {
+  key: text('key').primaryKey(),
+  leaseOwner: text('lease_owner'),
+  leaseExpiresAt: text('lease_expires_at'),
+  nextAllowedAt: text('next_allowed_at'),
+  updatedAt: text('updated_at').notNull(),
+})
 
 export type User = typeof user.$inferSelect
 export type Downloader = typeof downloaders.$inferSelect
@@ -287,3 +367,6 @@ export type ConnectorLoginAttempt = typeof connectorLoginAttempts.$inferSelect
 export type MusicCollection = typeof musicCollections.$inferSelect
 export type MusicTrackRow = typeof musicTracks.$inferSelect
 export type MusicDownloadKey = typeof musicDownloadKeys.$inferSelect
+export type MediaSubscription = typeof mediaSubscriptions.$inferSelect
+export type DownloadRecord = typeof downloadRecords.$inferSelect
+export type DispatchLane = typeof dispatchLanes.$inferSelect

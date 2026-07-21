@@ -5,6 +5,7 @@ import type {
   MusicFavoriteTrackInput,
 } from '@shared/types'
 import type { Deps } from './deps'
+import { getMusicCollectionWithSubscription } from './media-subscriptions'
 import type { MusicTrackInput } from './ports'
 
 export function listMusicCollections(
@@ -16,12 +17,18 @@ export function listMusicCollections(
 }
 
 export function getMusicCollection(deps: Deps, userId: string, id: string): Promise<MusicCollectionDetails | null> {
-  return deps.musicCollectionsRepo.getDetails(userId, id)
+  return getMusicCollectionWithSubscription(deps, userId, id)
 }
 
 export async function removeMusicCollection(deps: Deps, userId: string, id: string): Promise<boolean> {
   const collection = await deps.musicCollectionsRepo.getDetails(userId, id)
   if (!collection) return false
+  const subscription = await deps.mediaSubscriptionsRepo.find(userId, 'music_collection', id)
+  if (subscription?.enabled) {
+    const now = new Date().toISOString()
+    await deps.mediaSubscriptionsRepo.disable(userId, subscription.id, now)
+    await deps.downloadRecordsRepo.cancelUnwantedForSubscription(subscription.id, now)
+  }
   if (collection.provider === 'netease') {
     await deps.musicCollectionsRepo.setLibraryAdded(userId, id, null)
     await deps.musicCollectionsRepo.replaceTracks(id, [])
@@ -32,7 +39,7 @@ export async function removeMusicCollection(deps: Deps, userId: string, id: stri
 
 export async function getFavoriteSongs(deps: Deps, userId: string): Promise<MusicCollectionDetails | null> {
   const collection = await deps.musicCollectionsRepo.find(userId, 'zme', 'favorite-songs')
-  return collection ? deps.musicCollectionsRepo.getDetails(userId, collection.id) : null
+  return collection ? getMusicCollectionWithSubscription(deps, userId, collection.id) : null
 }
 
 export async function setFavoriteSong(
@@ -70,7 +77,7 @@ export async function setFavoriteSong(
     trackCount: tracks.length,
     lastSyncedAt: now,
   })
-  return deps.musicCollectionsRepo.getDetails(userId, collection.id)
+  return getMusicCollectionWithSubscription(deps, userId, collection.id)
 }
 
 export async function saveMusicAlbum(deps: Deps, userId: string, mediaKey: string): Promise<MusicCollectionDetails> {
@@ -91,7 +98,7 @@ export async function saveMusicAlbum(deps: Deps, userId: string, mediaKey: strin
     lastSyncedAt: now,
   })
   await deps.musicCollectionsRepo.replaceTracks(collection.id, albumTracks(album, now))
-  const details = await deps.musicCollectionsRepo.getDetails(userId, collection.id)
+  const details = await getMusicCollectionWithSubscription(deps, userId, collection.id)
   if (!details) throw new Error('Music album disappeared after it was saved.')
   return details
 }

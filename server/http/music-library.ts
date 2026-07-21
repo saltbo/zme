@@ -1,5 +1,10 @@
 import { zValidator } from '@hono/zod-validator'
 import {
+  disableMusicCollectionSubscription,
+  enableMusicCollectionSubscription,
+  MusicSubscriptionError,
+} from '@server/usecases/media-subscriptions'
+import {
   getFavoriteSongs,
   getMusicCollection,
   listMusicCollections,
@@ -18,6 +23,11 @@ const collectionQuerySchema = z.object({
 
 const albumSchema = z.object({
   mediaKey: z.string().trim().min(1),
+})
+
+const musicSubscriptionSchema = z.object({
+  downloaderId: z.string().trim().min(1),
+  quality: z.enum(['standard', 'exhigh', 'lossless', 'hires']),
 })
 
 const favoriteTrackSchema = z.object({
@@ -46,6 +56,36 @@ export function registerMusicLibraryRoutes(routes: Hono<AppEnv>) {
     const item = await getMusicCollection(c.get('deps'), c.get('user').id, c.req.valid('param').id)
     if (!item) return c.json({ error: 'Music collection not found.' }, 404)
     return c.json({ item })
+  })
+
+  routes.put(
+    '/library/music/collections/:id/subscription',
+    zValidator('param', idParamsSchema),
+    zValidator('json', musicSubscriptionSchema),
+    async (c) => {
+      try {
+        const item = await enableMusicCollectionSubscription(
+          c.get('deps'),
+          c.get('user').id,
+          c.req.valid('param').id,
+          c.req.valid('json'),
+        )
+        return c.json({ item }, 202)
+      } catch (error) {
+        const status = error instanceof MusicSubscriptionError ? error.status : 500
+        return c.json({ error: error instanceof Error ? error.message : 'Music subscription failed.' }, status)
+      }
+    },
+  )
+
+  routes.delete('/library/music/collections/:id/subscription', zValidator('param', idParamsSchema), async (c) => {
+    try {
+      const item = await disableMusicCollectionSubscription(c.get('deps'), c.get('user').id, c.req.valid('param').id)
+      return c.json({ item })
+    } catch (error) {
+      const status = error instanceof MusicSubscriptionError ? error.status : 500
+      return c.json({ error: error instanceof Error ? error.message : 'Music subscription failed.' }, status)
+    }
   })
 
   routes.delete('/library/music/collections/:id', zValidator('param', idParamsSchema), async (c) => {

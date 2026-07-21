@@ -53,7 +53,7 @@ function createSubmitDeps(options: {
   resolved?: ResolvedDownloadSource | null
   indexers?: IndexerRecord[]
 }) {
-  const submit = vi.fn(async () => {})
+  const submit = vi.fn(async () => ({ externalTaskId: null }))
   const deps = {
     downloadersRepo: {
       getEnabled: async (_userId: string, id: string) => (id === downloader.id ? downloader : null),
@@ -61,7 +61,9 @@ function createSubmitDeps(options: {
     indexersRepo: {
       listEnabled: async () => options.indexers ?? [indexer],
     },
-    downloaderGateways: { zpan: { submit, probe: async () => {} } },
+    downloaderGateways: {
+      zpan: { supportedSourceTypes: ['magnet', 'torrent_url', 'http'], submit, probe: async () => {} },
+    },
     indexerGateways: {
       prowlarr: {
         matchesDownloadUrl: () => options.matches ?? false,
@@ -86,7 +88,7 @@ describe('submitDownload', () => {
 
     const result = await submitDownload(deps, 'user-1', magnetInput)
 
-    expect(result).toEqual({ downloaderId: 'dl-1', status: 'submitted' })
+    expect(result).toEqual({ downloaderId: 'dl-1', status: 'submitted', externalTaskId: null })
     expect(submit).toHaveBeenCalledWith(downloader.config, magnetInput)
   })
 
@@ -102,7 +104,9 @@ describe('submitDownload', () => {
     const torrentDownloader = { ...downloader, kind: 'qbittorrent' as const }
     const deps = {
       downloadersRepo: { getEnabled: async () => torrentDownloader },
-      downloaderGateways: { qbittorrent: { submit: vi.fn(), probe: async () => {} } },
+      downloaderGateways: {
+        qbittorrent: { supportedSourceTypes: ['magnet', 'torrent_url'], submit: vi.fn(), probe: async () => {} },
+      },
     } as never as Deps
 
     await expect(submitDownload(deps, 'user-1', httpInput)).rejects.toThrow(
@@ -159,7 +163,13 @@ describe('checkDownloaderHealth', () => {
           }
         },
       },
-      downloaderGateways: { zpan: { submit: async () => {}, probe } },
+      downloaderGateways: {
+        zpan: {
+          supportedSourceTypes: ['magnet', 'torrent_url', 'http'],
+          submit: async () => ({ externalTaskId: null }),
+          probe,
+        },
+      },
     }
     return { deps: deps as never as Deps, patches }
   }

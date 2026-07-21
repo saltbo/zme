@@ -54,6 +54,15 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       ).map(toSummary)
     },
 
+    async get(userId, id) {
+      const rows = await db
+        .select()
+        .from(musicCollections)
+        .where(and(eq(musicCollections.userId, userId), eq(musicCollections.id, id)))
+        .limit(1)
+      return rows[0] ? toRecord(rows[0]) : null
+    },
+
     async getDetails(userId, id) {
       const collectionRows = await db
         .select()
@@ -75,6 +84,7 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
         .orderBy(musicCollectionTracks.position)
       return {
         ...toSummary(collection),
+        subscription: null,
         tracks: rows.map(({ relation, track, availability }) =>
           toTrack(track, relation.position, relation.addedAt, availability?.status, availability?.checkedAt),
         ),
@@ -96,6 +106,11 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
 
     async getTrack(id) {
       const rows = await db.select().from(musicTracks).where(eq(musicTracks.id, id)).limit(1)
+      return rows[0] ? toTrackRecord(rows[0]) : null
+    },
+
+    async getTrackByMediaKey(mediaKey) {
+      const rows = await db.select().from(musicTracks).where(eq(musicTracks.mediaKey, mediaKey)).limit(1)
       return rows[0] ? toTrackRecord(rows[0]) : null
     },
 
@@ -319,6 +334,7 @@ function toTrack(
     downloadCheckedAt: downloadCheckedAt ?? null,
     position,
     addedAt,
+    downloadRecord: null,
   }
 }
 

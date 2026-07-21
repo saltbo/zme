@@ -274,6 +274,7 @@ describe('syncConnector', () => {
           availabilityUpdates.push(...updates)
         },
       },
+      mediaSubscriptionsRepo: { find: async () => null },
     } as never as Deps
 
     const result = await syncConnector(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', 'connector-1')

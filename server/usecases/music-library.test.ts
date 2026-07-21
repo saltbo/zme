@@ -66,6 +66,8 @@ function createDeps() {
         return collection
       },
     },
+    mediaSubscriptionsRepo: { find: async () => null },
+    downloadRecordsRepo: { listByResourceKeys: async () => [] },
   }
   return { deps: deps as never as Deps, getTracks: () => tracks }
 }

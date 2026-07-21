@@ -2,6 +2,7 @@ import type { DownloaderGateway } from '@server/usecases/ports'
 import { assertOk, basicAuthHeader, getTypedDownloadDirectory, normalizeBaseUrl } from './shared'
 
 export const transmissionDownloaderGateway: DownloaderGateway = {
+  supportedSourceTypes: ['magnet', 'torrent_url'],
   async submit(config, input) {
     const endpoint = new URL('/transmission/rpc', normalizeBaseUrl(config.endpoint))
     const downloadDir = getTypedDownloadDirectory(config.options.downloadDir, input.category)
@@ -19,6 +20,7 @@ export const transmissionDownloaderGateway: DownloaderGateway = {
     if (payload.result && payload.result !== 'success') {
       throw new Error(`Transmission rejected download: ${payload.result}`)
     }
+    return { externalTaskId: null }
   },
 
   async probe(config) {

@@ -1,8 +1,23 @@
-import type { DownloaderSummary, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
+import type {
+  DownloaderSummary,
+  MusicCollectionSummary,
+  MusicDownloadQuality,
+  MusicLibraryTrack,
+  MusicSubscriptionSummary,
+} from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Disc3, Download, HardDriveDownload, ListMusic, LoaderCircle, Trash2 } from 'lucide-react'
+import {
+  CalendarDays,
+  Disc3,
+  Download,
+  HardDriveDownload,
+  ListMusic,
+  LoaderCircle,
+  RadioTower,
+  Trash2,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
 import { toast } from 'sonner'
@@ -12,6 +27,14 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -19,9 +42,19 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
-import { getMusicCollection, listMusicCollections, removeMusicCollection, submitMusicTrackDownload } from '@/lib/api'
+import {
+  disableMusicCollectionSubscription,
+  enableMusicCollectionSubscription,
+  getMusicCollection,
+  listMusicCollections,
+  removeMusicCollection,
+  submitMusicTrackDownload,
+} from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 const collectionSkeletonKeys = Array.from({ length: 10 }, (_, index) => `music-collection-skeleton-${index + 1}`)
@@ -69,6 +102,9 @@ export function MusicCollectionDetailPage() {
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const queryClient = useQueryClient()
   const downloaders = useDownloaders()
+  const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false)
+  const [subscriptionDownloaderId, setSubscriptionDownloaderId] = useState('')
+  const [subscriptionQuality, setSubscriptionQuality] = useState<MusicDownloadQuality>('exhigh')
   const collection = useQuery({
     queryKey: queryKeys.music.collection(collectionId),
     queryFn: async () => (await getMusicCollection(collectionId)).item,
@@ -82,6 +118,27 @@ export function MusicCollectionDetailPage() {
       toast.success(t('collectionRemoved'))
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('collectionRemoveFailed')),
+  })
+  const enableSubscription = useMutation({
+    mutationFn: () =>
+      enableMusicCollectionSubscription(collectionId, {
+        downloaderId: subscriptionDownloaderId,
+        quality: subscriptionQuality,
+      }),
+    onSuccess: async ({ item }) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })
+      setSubscriptionDialogOpen(false)
+      toast.success(t('musicSubscriptionEnabled', { count: item.queued }))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('musicSubscriptionEnableFailed')),
+  })
+  const disableSubscription = useMutation({
+    mutationFn: () => disableMusicCollectionSubscription(collectionId),
+    onSuccess: async ({ item }) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })
+      toast.success(t('musicSubscriptionDisabled', { count: item.canceled }))
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : t('musicSubscriptionDisableFailed')),
   })
 
   useEffect(() => {
@@ -105,17 +162,43 @@ export function MusicCollectionDetailPage() {
 
   const item = collection.data
   const httpDownloaders = (downloaders.data ?? []).filter(
-    (downloader) => downloader.enabled && (downloader.kind === 'zpan' || downloader.kind === 'aria2'),
+    (downloader) => downloader.enabled && downloader.supportedSourceTypes.includes('http'),
   )
   const title = item.kind === 'favorites' ? t('favoriteSongs') : item.title
+  const canSubscribe = item.kind === 'playlist' && item.provider === 'netease'
+
+  function openSubscriptionDialog() {
+    const downloaderId = item.subscription?.downloaderId ?? httpDownloaders[0]?.id ?? ''
+    setSubscriptionDownloaderId(downloaderId)
+    setSubscriptionQuality(item.subscription?.quality ?? 'exhigh')
+    setSubscriptionDialogOpen(true)
+  }
+
   return (
     <main className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
       <MusicCollectionHero
         item={item}
         title={title}
         language={i18n.language}
+        subscription={item.subscription}
+        canSubscribe={canSubscribe}
+        subscriptionPending={enableSubscription.isPending || disableSubscription.isPending}
+        onSubscriptionChange={(enabled) => (enabled ? openSubscriptionDialog() : disableSubscription.mutate())}
         removing={remove.isPending}
         onRemove={() => remove.mutate()}
+      />
+
+      <MusicSubscriptionDialog
+        open={subscriptionDialogOpen}
+        downloaders={httpDownloaders}
+        downloaderId={subscriptionDownloaderId}
+        quality={subscriptionQuality}
+        trackCount={item.tracks.length}
+        saving={enableSubscription.isPending}
+        onOpenChange={setSubscriptionDialogOpen}
+        onDownloaderChange={setSubscriptionDownloaderId}
+        onQualityChange={setSubscriptionQuality}
+        onSubmit={() => enableSubscription.mutate()}
       />
 
       <section className="mt-7">
@@ -141,6 +224,7 @@ export function MusicCollectionDetailPage() {
                   ) : track.provider === 'netease' && track.downloadStatus === 'unknown' ? (
                     <span className="shrink-0">{t('musicTrackUnknown')}</span>
                   ) : null}
+                  {track.downloadRecord ? <MusicDownloadRecordBadge status={track.downloadRecord.status} /> : null}
                 </div>
               </div>
               <span className="hidden text-muted-foreground text-xs tabular-nums sm:block">
@@ -164,12 +248,20 @@ function MusicCollectionHero({
   item,
   title,
   language,
+  subscription,
+  canSubscribe,
+  subscriptionPending,
+  onSubscriptionChange,
   removing,
   onRemove,
 }: {
   item: MusicCollectionSummary
   title: string
   language: string
+  subscription: MusicSubscriptionSummary | null
+  canSubscribe: boolean
+  subscriptionPending: boolean
+  onSubscriptionChange: (enabled: boolean) => void
   removing: boolean
   onRemove: () => void
 }) {
@@ -198,7 +290,17 @@ function MusicCollectionHero({
             <div className="min-w-0 lg:hidden">
               <div className="flex items-start justify-between gap-2">
                 <CollectionTypeBadge kind={item.kind} label={collectionType} />
-                <RemoveCollectionButton removing={removing} onRemove={onRemove} />
+                <div className="flex items-center gap-2">
+                  {canSubscribe ? (
+                    <MusicSubscriptionSwitch
+                      checked={subscription?.enabled ?? false}
+                      pending={subscriptionPending}
+                      onCheckedChange={onSubscriptionChange}
+                      compact
+                    />
+                  ) : null}
+                  <RemoveCollectionButton removing={removing} onRemove={onRemove} />
+                </div>
               </div>
               <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:text-4xl sm:leading-[0.98]">
                 {title}
@@ -210,7 +312,16 @@ function MusicCollectionHero({
           <div className="min-w-0 lg:pt-2">
             <div className="mb-8 hidden items-center justify-between gap-6 lg:flex">
               <CollectionTypeBadge kind={item.kind} label={collectionType} />
-              <RemoveCollectionButton removing={removing} onRemove={onRemove} />
+              <div className="flex items-center gap-3">
+                {canSubscribe ? (
+                  <MusicSubscriptionSwitch
+                    checked={subscription?.enabled ?? false}
+                    pending={subscriptionPending}
+                    onCheckedChange={onSubscriptionChange}
+                  />
+                ) : null}
+                <RemoveCollectionButton removing={removing} onRemove={onRemove} />
+              </div>
             </div>
 
             <div className="hidden lg:block">
@@ -247,6 +358,146 @@ function CollectionTypeBadge({ kind, label }: { kind: MusicCollectionSummary['ki
     <Badge variant="secondary" className="gap-2 bg-white/12 text-white/82 backdrop-blur">
       {kind === 'album' ? <Disc3 className="size-3.5" /> : <ListMusic className="size-3.5" />}
       {label}
+    </Badge>
+  )
+}
+
+function MusicSubscriptionSwitch({
+  checked,
+  pending,
+  compact = false,
+  onCheckedChange,
+}: {
+  checked: boolean
+  pending: boolean
+  compact?: boolean
+  onCheckedChange: (checked: boolean) => void
+}) {
+  const { t } = useTranslation()
+  const switchId = useId()
+  return (
+    <label
+      htmlFor={switchId}
+      className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-white/12 px-3 text-sm text-white/88 ring-1 ring-white/10 backdrop-blur"
+    >
+      <RadioTower className="size-4" />
+      {compact ? <span className="sr-only">{t('automaticDownload')}</span> : <span>{t('automaticDownload')}</span>}
+      <Switch id={switchId} checked={checked} disabled={pending} onCheckedChange={onCheckedChange} />
+    </label>
+  )
+}
+
+function MusicSubscriptionDialog({
+  open,
+  downloaders,
+  downloaderId,
+  quality,
+  trackCount,
+  saving,
+  onOpenChange,
+  onDownloaderChange,
+  onQualityChange,
+  onSubmit,
+}: {
+  open: boolean
+  downloaders: DownloaderSummary[]
+  downloaderId: string
+  quality: MusicDownloadQuality
+  trackCount: number
+  saving: boolean
+  onOpenChange: (open: boolean) => void
+  onDownloaderChange: (value: string) => void
+  onQualityChange: (value: MusicDownloadQuality) => void
+  onSubmit: () => void
+}) {
+  const { t } = useTranslation()
+  const downloaderItems = downloaders.map((downloader) => ({
+    label: downloader.description || downloader.kind,
+    value: downloader.id,
+  }))
+  const qualityItems = (['standard', 'exhigh', 'lossless', 'hires'] as const).map((value) => ({
+    label: t(`musicQuality_${value}`),
+    value,
+  }))
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('enableAutomaticDownload')}</DialogTitle>
+          <DialogDescription>{t('automaticDownloadDescription', { count: trackCount })}</DialogDescription>
+        </DialogHeader>
+        <form
+          className="flex flex-col gap-5"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onSubmit()
+          }}
+        >
+          <FieldGroup>
+            <Field>
+              <FieldLabel>{t('downloader')}</FieldLabel>
+              <Select
+                items={downloaderItems}
+                value={downloaderId}
+                onValueChange={(value) => onDownloaderChange(value ?? '')}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t('chooseDownloader')} />
+                </SelectTrigger>
+                <SelectContent align="start" alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {downloaderItems.map((downloader) => (
+                      <SelectItem key={downloader.value} value={downloader.value}>
+                        {downloader.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              {downloaders.length === 0 ? <FieldDescription>{t('noHttpDownloaders')}</FieldDescription> : null}
+            </Field>
+            <Field>
+              <FieldLabel>{t('musicQuality')}</FieldLabel>
+              <Select
+                items={qualityItems}
+                value={quality}
+                onValueChange={(value) => onQualityChange((value || 'exhigh') as MusicDownloadQuality)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent align="start" alignItemWithTrigger={false}>
+                  <SelectGroup>
+                    {qualityItems.map((quality) => (
+                      <SelectItem key={quality.value} value={quality.value}>
+                        {quality.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+          </FieldGroup>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              {t('cancel')}
+            </Button>
+            <Button type="submit" disabled={saving || !downloaderId}>
+              {saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
+              {t('enable')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MusicDownloadRecordBadge({ status }: { status: NonNullable<MusicLibraryTrack['downloadRecord']>['status'] }) {
+  const { t } = useTranslation()
+  return (
+    <Badge variant={status === 'failed' ? 'destructive' : status === 'accepted' ? 'default' : 'secondary'}>
+      {t(`musicRecordStatus_${status}`)}
     </Badge>
   )
 }
@@ -297,22 +548,26 @@ function MusicTrackDownloadButton({
 }) {
   const { t } = useTranslation()
   const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
+  const [redownloadTarget, setRedownloadTarget] = useState<DownloaderSummary | null>(null)
   const supported = track.provider === 'netease'
   const available = supported && track.downloadStatus !== 'unavailable'
   const submitting = submittingDownloaderId !== null
+  const dispatching = ['queued', 'resolving', 'submitting'].includes(track.downloadRecord?.status ?? '')
   const label = !available
     ? t('musicDownloadUnavailable')
-    : loadingDownloaders
-      ? t('loadingDownloaders')
-      : downloaders.length === 0
-        ? t('noDownloadersAvailable')
-        : t('downloadTo')
+    : dispatching
+      ? t(`musicRecordStatus_${track.downloadRecord?.status}`)
+      : loadingDownloaders
+        ? t('loadingDownloaders')
+        : downloaders.length === 0
+          ? t('noDownloadersAvailable')
+          : t('downloadTo')
 
-  async function handleDownload(downloader: DownloaderSummary) {
+  async function handleDownload(downloader: DownloaderSummary, force = false) {
     setSubmittingDownloaderId(downloader.id)
     try {
-      await submitMusicTrackDownload(track.id, { downloaderId: downloader.id })
-      toast.success(t('downloadSubmitted'))
+      await submitMusicTrackDownload(track.id, { downloaderId: downloader.id, force })
+      toast.success(t('downloadQueued'))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
     } finally {
@@ -322,33 +577,69 @@ function MusicTrackDownloadButton({
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={!available || loadingDownloaders || downloaders.length === 0 || submitting}
-            title={label}
-            aria-label={label}
-          />
-        }
-      >
-        {submitting ? <LoaderCircle className="animate-spin" /> : <Download />}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
-          {downloaders.map((downloader) => (
-            <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader)}>
-              <HardDriveDownload />
-              <span className="truncate">{downloader.description || downloader.kind}</span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={!available || loadingDownloaders || downloaders.length === 0 || submitting || dispatching}
+              title={label}
+              aria-label={label}
+            />
+          }
+        >
+          {submitting ? <LoaderCircle className="animate-spin" /> : <Download />}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
+            {downloaders.map((downloader) => (
+              <DropdownMenuItem
+                key={downloader.id}
+                onClick={() => {
+                  if (track.downloadRecord?.status === 'accepted') {
+                    setRedownloadTarget(downloader)
+                    return
+                  }
+                  void handleDownload(downloader)
+                }}
+              >
+                <HardDriveDownload />
+                <span className="truncate">{downloader.description || downloader.kind}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog open={redownloadTarget !== null} onOpenChange={(open) => !open && setRedownloadTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('musicRedownloadTitle')}</DialogTitle>
+            <DialogDescription>{t('musicRedownloadDescription')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setRedownloadTarget(null)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={submitting}
+              onClick={() => {
+                if (!redownloadTarget) return
+                const downloader = redownloadTarget
+                setRedownloadTarget(null)
+                void handleDownload(downloader, true)
+              }}
+            >
+              {t('musicRedownloadConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

@@ -20,6 +20,7 @@ import type {
 import type { Deps } from './deps'
 import { saveLibraryState, setWatchedState } from './library'
 import { getActiveTmdbSource } from './media-sources'
+import { evaluateMusicCollectionSubscription } from './media-subscriptions'
 import type {
   ActiveMediaSource,
   ConnectedMusicAccount,
@@ -339,6 +340,7 @@ async function syncNeteaseConnector(
       trackCount: playlistTracks.length,
       lastSyncedAt: new Date().toISOString(),
     })
+    await evaluateMusicCollectionSubscription(deps, connector.userId, collection.id)
     selectedPlaylists += 1
     tracks += playlistTracks.length
   }

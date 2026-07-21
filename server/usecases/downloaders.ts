@@ -11,16 +11,16 @@ import type { DownloaderRecord } from './ports'
 
 export async function listDownloaders(deps: Deps, userId: string): Promise<DownloaderSummary[]> {
   const records = await deps.downloadersRepo.list(userId)
-  return records.map(toSummary)
+  return records.map((record) => toSummary(deps, record))
 }
 
 export async function getDownloader(deps: Deps, userId: string, id: string): Promise<DownloaderDetails | null> {
   const record = await deps.downloadersRepo.get(userId, id)
-  return record ? toDetails(record) : null
+  return record ? toDetails(deps, record) : null
 }
 
 export async function createDownloader(deps: Deps, userId: string, input: DownloaderInput): Promise<DownloaderSummary> {
-  return toSummary(await deps.downloadersRepo.create(userId, input))
+  return toSummary(deps, await deps.downloadersRepo.create(userId, input))
 }
 
 export async function updateDownloader(
@@ -30,7 +30,7 @@ export async function updateDownloader(
   input: DownloaderInput,
 ): Promise<DownloaderSummary | null> {
   const record = await deps.downloadersRepo.update(userId, id, input)
-  return record ? toSummary(record) : null
+  return record ? toSummary(deps, record) : null
 }
 
 export async function deleteDownloader(deps: Deps, userId: string, id: string): Promise<boolean> {
@@ -44,16 +44,19 @@ export async function submitDownload(
 ): Promise<CreateDownloadResult> {
   const downloader = await deps.downloadersRepo.getEnabled(userId, input.downloaderId)
   if (!downloader) throw new Error('Downloader is not available.')
-  if (input.sourceType === 'http' && downloader.kind !== 'zpan' && downloader.kind !== 'aria2') {
-    throw new Error(`${downloader.kind} does not support HTTP file downloads.`)
-  }
+  const gateway = deps.downloaderGateways[downloader.kind]
   const resolvedInput = await resolveDownloadInput(deps, input)
+  if (!gateway.supportedSourceTypes.includes(resolvedInput.sourceType)) {
+    const source = resolvedInput.sourceType === 'http' ? 'HTTP file' : resolvedInput.sourceType.replace('_', ' ')
+    throw new Error(`${downloader.kind} does not support ${source} downloads.`)
+  }
 
-  await deps.downloaderGateways[downloader.kind].submit(downloader.config, resolvedInput)
+  const submission = await gateway.submit(downloader.config, resolvedInput)
 
   return {
     downloaderId: downloader.id,
     status: 'submitted',
+    externalTaskId: submission.externalTaskId,
   }
 }
 
@@ -105,11 +108,12 @@ async function probeDownloader(
   }
 }
 
-function toSummary(record: DownloaderRecord): DownloaderSummary {
+function toSummary(deps: Deps, record: DownloaderRecord): DownloaderSummary {
   return {
     id: record.id,
     description: record.description,
     kind: record.kind,
+    supportedSourceTypes: [...deps.downloaderGateways[record.kind].supportedSourceTypes],
     endpoint: record.config.endpoint,
     enabled: record.enabled,
     healthStatus: record.healthStatus,
@@ -120,9 +124,9 @@ function toSummary(record: DownloaderRecord): DownloaderSummary {
   }
 }
 
-function toDetails(record: DownloaderRecord): DownloaderDetails {
+function toDetails(deps: Deps, record: DownloaderRecord): DownloaderDetails {
   return {
-    ...toSummary(record),
+    ...toSummary(deps, record),
     credentials: record.config.credentials,
     options: record.config.options,
   }

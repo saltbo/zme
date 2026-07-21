@@ -7,6 +7,10 @@ export function validateConnectorCredentialsSecret(secret: string): void {
 }
 
 export async function encryptConnectorCredentials(secret: string, value: string[]): Promise<string> {
+  return encryptConnectorPayload(secret, value)
+}
+
+export async function encryptConnectorPayload(secret: string, value: unknown): Promise<string> {
   const key = await importKey(secret)
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const plaintext = new TextEncoder().encode(JSON.stringify(value))
@@ -15,6 +19,14 @@ export async function encryptConnectorCredentials(secret: string, value: string[
 }
 
 export async function decryptConnectorCredentials(secret: string, envelope: string): Promise<string[]> {
+  const value = await decryptConnectorPayload(secret, envelope)
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error('Connector credentials are invalid.')
+  }
+  return value
+}
+
+export async function decryptConnectorPayload(secret: string, envelope: string): Promise<unknown> {
   const [version, ivValue, ciphertextValue, extra] = envelope.split('.')
   if (version !== VERSION || !ivValue || !ciphertextValue || extra !== undefined) {
     throw new Error('Connector credentials have an unsupported format.')
@@ -26,9 +38,6 @@ export async function decryptConnectorCredentials(secret: string, envelope: stri
     fromBase64(ciphertextValue),
   )
   const value = JSON.parse(new TextDecoder().decode(plaintext)) as unknown
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw new Error('Connector credentials are invalid.')
-  }
   return value
 }
 

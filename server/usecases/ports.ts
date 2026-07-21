@@ -8,6 +8,7 @@ import type {
   CreateDownloadInput,
   DownloaderInput,
   DownloaderKind,
+  DownloadRecordStatus,
   DownloadTaskPage,
   DownloadTaskStatus,
   DownloadTaskSummary,
@@ -51,8 +52,9 @@ export interface ConnectorConfig {
 }
 
 export interface DownloaderGateway {
+  readonly supportedSourceTypes: ReadonlyArray<CreateDownloadInput['sourceType']>
   /** Submits a download to the remote downloader. Throws on rejection. */
-  submit(config: ConnectorConfig, input: CreateDownloadInput): Promise<void>
+  submit(config: ConnectorConfig, input: CreateDownloadInput): Promise<{ externalTaskId: string | null }>
   /** Throws when the downloader is unreachable or misconfigured. */
   probe(config: ConnectorConfig): Promise<void>
 }
@@ -325,9 +327,11 @@ export interface MusicTrackAvailabilityUpdate {
 export interface MusicCollectionsRepo {
   listLibrary(userId: string, kind: 'playlist' | 'album'): Promise<MusicCollectionSummary[]>
   listForConnector(userId: string, connectorId: string): Promise<MusicCollectionSummary[]>
+  get(userId: string, id: string): Promise<MusicCollectionRecord | null>
   getDetails(userId: string, id: string): Promise<MusicCollectionDetails | null>
   getLibraryTrack(userId: string, id: string): Promise<MusicTrackRecord | null>
   getTrack(id: string): Promise<MusicTrackRecord | null>
+  getTrackByMediaKey(mediaKey: string): Promise<MusicTrackRecord | null>
   find(userId: string, provider: MusicCollectionProvider, externalId: string): Promise<MusicCollectionRecord | null>
   upsert(
     userId: string,
@@ -372,9 +376,127 @@ export interface MusicDownloadKeyRecord {
   trackId: string
   downloaderId: string
   quality: MusicDownloadQuality
+  resourceEncrypted?: string | null
   expiresAt: string
   revokedAt: string | null
   createdAt: string
+}
+
+export interface MediaSubscriptionRecord {
+  id: string
+  userId: string
+  subjectType: 'music_collection' | 'movie' | 'tv'
+  subjectKey: string
+  downloaderId: string | null
+  config: { quality?: MusicDownloadQuality }
+  enabled: boolean
+  lastEvaluatedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MediaSubscriptionsRepo {
+  find(
+    userId: string,
+    subjectType: MediaSubscriptionRecord['subjectType'],
+    subjectKey: string,
+  ): Promise<MediaSubscriptionRecord | null>
+  get(id: string): Promise<MediaSubscriptionRecord | null>
+  upsertMusicCollection(
+    userId: string,
+    collectionId: string,
+    input: { downloaderId: string; quality: MusicDownloadQuality; now: string },
+  ): Promise<MediaSubscriptionRecord>
+  disable(userId: string, id: string, now: string): Promise<MediaSubscriptionRecord | null>
+  markEvaluated(id: string, evaluatedAt: string): Promise<void>
+}
+
+export interface DownloadRecordConfig {
+  preferredQuality: MusicDownloadQuality
+  resolvedQuality: MusicDownloadQuality | null
+}
+
+export interface DownloadRecordRecord {
+  id: string
+  userId: string
+  resourceKind: 'music_track' | 'movie' | 'tv_episode'
+  resourceKey: string
+  laneKey: string
+  generation: number
+  downloaderId: string | null
+  config: DownloadRecordConfig
+  status: DownloadRecordStatus
+  attemptCount: number
+  externalTaskId: string | null
+  firstAcceptedAt: string | null
+  lastAcceptedAt: string | null
+  manualRequestedAt: string | null
+  errorMessage: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DownloadRecordsRepo {
+  listByResourceKeys(
+    userId: string,
+    resourceKind: DownloadRecordRecord['resourceKind'],
+    resourceKeys: string[],
+  ): Promise<DownloadRecordRecord[]>
+  get(id: string): Promise<DownloadRecordRecord | null>
+  create(record: DownloadRecordRecord): Promise<boolean>
+  createMany(records: DownloadRecordRecord[]): Promise<void>
+  linkSubscription(subscriptionId: string, downloadRecordId: string, createdAt: string): Promise<void>
+  linkSubscriptionMany(subscriptionId: string, downloadRecordIds: string[], createdAt: string): Promise<void>
+  update(
+    id: string,
+    generation: number,
+    patch: Partial<
+      Pick<
+        DownloadRecordRecord,
+        | 'laneKey'
+        | 'generation'
+        | 'downloaderId'
+        | 'config'
+        | 'status'
+        | 'attemptCount'
+        | 'externalTaskId'
+        | 'firstAcceptedAt'
+        | 'lastAcceptedAt'
+        | 'manualRequestedAt'
+        | 'errorMessage'
+        | 'updatedAt'
+      >
+    >,
+  ): Promise<DownloadRecordRecord | null>
+  claimNext(laneKey: string, claimedAt: string): Promise<DownloadRecordRecord | null>
+  isWanted(id: string): Promise<boolean>
+  cancelUnwantedForSubscription(subscriptionId: string, canceledAt: string): Promise<number>
+  hasQueued(laneKey: string): Promise<boolean>
+  listRecoverableLaneKeys(): Promise<string[]>
+  requeueStalled(laneKey: string | null, staleBefore: string, queuedAt: string): Promise<string[]>
+  requeueWaitingForEnabledSubscriptions(queuedAt: string): Promise<string[]>
+}
+
+export interface DispatchLaneRecord {
+  key: string
+  leaseOwner: string | null
+  leaseExpiresAt: string | null
+  nextAllowedAt: string | null
+  updatedAt: string
+}
+
+export interface DispatchLanesRepo {
+  acquire(
+    key: string,
+    owner: string,
+    acquiredAt: string,
+    leaseExpiresAt: string,
+  ): Promise<{ lane: DispatchLaneRecord; acquired: boolean }>
+  release(key: string, owner: string, nextAllowedAt: string, releasedAt: string): Promise<void>
+}
+
+export interface DownloadDispatchQueue {
+  wake(laneKey: string, delaySeconds?: number): Promise<void>
 }
 
 export interface MusicDownloadKeysRepo {

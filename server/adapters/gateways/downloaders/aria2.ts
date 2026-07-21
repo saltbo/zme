@@ -2,6 +2,7 @@ import type { DownloaderGateway } from '@server/usecases/ports'
 import { assertOk, getTypedDownloadDirectory } from './shared'
 
 export const aria2DownloaderGateway: DownloaderGateway = {
+  supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
   async submit(config, input) {
     const params: unknown[] = [[input.uri]]
     if (config.credentials.secret) params.unshift(`token:${config.credentials.secret}`)
@@ -10,8 +11,9 @@ export const aria2DownloaderGateway: DownloaderGateway = {
 
     const response = await rpc(config.endpoint, 'aria2.addUri', params)
     await assertOk(response, 'aria2')
-    const payload = (await response.json()) as { error?: { message?: string } }
+    const payload = (await response.json()) as { result?: string; error?: { message?: string } }
     if (payload.error) throw new Error(`aria2 rejected download: ${payload.error.message || 'unknown error'}`)
+    return { externalTaskId: payload.result ?? null }
   },
 
   async probe(config) {

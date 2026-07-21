@@ -328,6 +328,37 @@ export interface ConnectorLoginAttempt {
 export type MusicCollectionKind = 'playlist' | 'album' | 'favorites'
 export type MusicCollectionProvider = 'netease' | 'musicbrainz' | 'zme'
 export type MusicDownloadStatus = 'available' | 'unavailable' | 'unknown'
+export type DownloadRecordStatus =
+  | 'queued'
+  | 'resolving'
+  | 'waiting_source'
+  | 'submitting'
+  | 'accepted'
+  | 'failed'
+  | 'canceled'
+
+export interface MusicDownloadRecordSummary {
+  id: string
+  generation: number
+  downloaderId: string | null
+  preferredQuality: MusicDownloadQuality
+  resolvedQuality: MusicDownloadQuality | null
+  status: DownloadRecordStatus
+  firstAcceptedAt: string | null
+  lastAcceptedAt: string | null
+  errorMessage: string | null
+  updatedAt: string
+}
+
+export interface MusicSubscriptionSummary {
+  id: string
+  enabled: boolean
+  downloaderId: string | null
+  quality: MusicDownloadQuality
+  lastEvaluatedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 export interface MusicCollectionSummary {
   id: string
@@ -362,15 +393,17 @@ export interface MusicLibraryTrack {
   downloadCheckedAt: string | null
   position: number
   addedAt: string | null
+  downloadRecord: MusicDownloadRecordSummary | null
 }
 
 export type MusicFavoriteTrackInput = Omit<
   MusicLibraryTrack,
-  'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt'
+  'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt' | 'downloadRecord'
 >
 
 export interface MusicCollectionDetails extends MusicCollectionSummary {
   tracks: MusicLibraryTrack[]
+  subscription: MusicSubscriptionSummary | null
 }
 
 export type MusicDownloadQuality = 'standard' | 'exhigh' | 'lossless' | 'hires'
@@ -378,6 +411,20 @@ export type MusicDownloadQuality = 'standard' | 'exhigh' | 'lossless' | 'hires'
 export interface MusicTrackDownloadInput {
   downloaderId: string
   quality?: MusicDownloadQuality
+  force?: boolean
+}
+
+export interface MusicSubscriptionInput {
+  downloaderId: string
+  quality: MusicDownloadQuality
+}
+
+export interface MusicSubscriptionMutationResult {
+  subscription: MusicSubscriptionSummary
+  queued: number
+  waiting: number
+  skipped: number
+  canceled: number
 }
 
 export type UserRole = 'admin' | 'user'
@@ -614,11 +661,13 @@ export interface SaveTarget {
 }
 
 export type DownloaderKind = 'zpan' | 'qbittorrent' | 'transmission' | 'aria2'
+export type DownloadSourceType = 'http' | 'magnet' | 'torrent_url'
 
 export interface DownloaderSummary {
   id: string
   description: string | null
   kind: DownloaderKind
+  supportedSourceTypes: DownloadSourceType[]
   endpoint: string
   enabled: boolean
   healthStatus: 'unknown' | 'online' | 'offline'
@@ -691,7 +740,7 @@ export interface DownloadTaskPage {
 export interface CreateDownloadInput {
   downloaderId: string
   uri: string
-  sourceType: 'http' | 'magnet' | 'torrent_url'
+  sourceType: DownloadSourceType
   title?: string
   category?: string
   tags?: string[]
@@ -699,5 +748,7 @@ export interface CreateDownloadInput {
 
 export interface CreateDownloadResult {
   downloaderId: string
-  status: 'submitted'
+  status: 'queued' | 'submitted'
+  downloadRecordId?: string
+  externalTaskId?: string | null
 }

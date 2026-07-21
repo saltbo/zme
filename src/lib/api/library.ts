@@ -7,6 +7,8 @@ import type {
   MusicCollectionDetails,
   MusicCollectionSummary,
   MusicFavoriteTrackInput,
+  MusicSubscriptionInput,
+  MusicSubscriptionMutationResult,
 } from '@shared/types'
 import { apiRequest, query } from './client'
 
@@ -63,6 +65,22 @@ export async function removeMusicCollection(id: string) {
   return apiRequest<{ id: string }>(`/api/library/music/collections/${id}`, 'Failed to remove music collection.', {
     method: 'DELETE',
   })
+}
+
+export async function enableMusicCollectionSubscription(id: string, input: MusicSubscriptionInput) {
+  return apiRequest<{ item: MusicSubscriptionMutationResult }>(
+    `/api/library/music/collections/${id}/subscription`,
+    'Failed to enable automatic downloads.',
+    { method: 'PUT', body: JSON.stringify(input) },
+  )
+}
+
+export async function disableMusicCollectionSubscription(id: string) {
+  return apiRequest<{ item: MusicSubscriptionMutationResult }>(
+    `/api/library/music/collections/${id}/subscription`,
+    'Failed to disable automatic downloads.',
+    { method: 'DELETE' },
+  )
 }
 
 export async function saveMusicAlbum(mediaKey: string) {
