@@ -33,7 +33,7 @@ export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
           c.req.valid('param').id,
           c.req.valid('query').key,
         )
-        return await proxyMusicResource(c.req.raw, resource, filename)
+        return redirectMusicResource(resource, filename)
       } catch (error) {
         const status = error instanceof MusicDownloadError ? error.status : 502
         return c.json({ error: error instanceof Error ? error.message : 'Music download failed.' }, status)
@@ -66,55 +66,15 @@ export function registerMusicDownloadRoutes(routes: Hono<AppEnv>) {
   )
 }
 
-export async function proxyMusicResource(
-  request: Request,
-  resource: ResolvedMusicResource,
-  filename: string,
-): Promise<Response> {
-  const headers = new Headers(resource.headers)
-  headers.set('accept-encoding', 'identity')
-  copyHeader(request.headers, headers, 'range')
-  copyHeader(request.headers, headers, 'if-range')
-
-  const upstream = await fetch(resource.url, {
-    method: request.method === 'HEAD' ? 'HEAD' : 'GET',
-    headers,
-    redirect: 'error',
+export function redirectMusicResource(resource: ResolvedMusicResource, filename: string): Response {
+  return new Response(null, {
+    status: 307,
+    headers: {
+      Location: resource.url,
+      'Cache-Control': 'private, no-store',
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff',
+    },
   })
-  if (!upstream.ok && upstream.status !== 416) {
-    await upstream.body?.cancel()
-    throw new MusicDownloadError(`Music provider returned HTTP ${upstream.status}.`, 502)
-  }
-
-  const responseHeaders = new Headers()
-  for (const name of ['accept-ranges', 'content-length', 'content-range', 'content-type', 'etag', 'last-modified']) {
-    copyHeader(upstream.headers, responseHeaders, name)
-  }
-  if (!responseHeaders.has('content-type') && resource.contentType) {
-    responseHeaders.set('content-type', resource.contentType)
-  }
-  if (!responseHeaders.has('content-length') && !request.headers.has('range') && resource.contentLength !== null) {
-    responseHeaders.set('content-length', String(resource.contentLength))
-  }
-  responseHeaders.set('content-disposition', contentDisposition(filename))
-  responseHeaders.set('cache-control', 'private, no-store')
-  responseHeaders.set('referrer-policy', 'no-referrer')
-  responseHeaders.set('x-content-type-options', 'nosniff')
-
-  return new Response(request.method === 'HEAD' ? null : upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: responseHeaders,
-  })
-}
-
-function copyHeader(source: Headers, target: Headers, name: string): void {
-  const value = source.get(name)
-  if (value !== null) target.set(name, value)
-}
-
-function contentDisposition(filename: string): string {
-  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replaceAll('"', '_')
-  const encoded = encodeURIComponent(filename).replace(/[!'()*]/g, (value) => `%${value.charCodeAt(0).toString(16)}`)
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`
 }
