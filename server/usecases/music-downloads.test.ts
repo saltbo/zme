@@ -8,6 +8,7 @@ import {
   MusicResourceUnavailableError,
   type MusicTrackRecord,
 } from '@server/usecases/ports'
+import type { CreateDownloadInput } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { dispatchMusicDownloadRecord, resolveMusicTrackDownload, submitMusicTrackDownload } from './music-downloads'
 
@@ -132,7 +133,7 @@ describe('music downloads', () => {
   })
 
   it('requires explicit force before an accepted track can be queued again', async () => {
-    let record = {
+    let record: DownloadRecordRecord = {
       ...queuedRecord,
       status: 'accepted' as const,
       firstAcceptedAt: '2026-07-20T01:00:00.000Z',
@@ -169,7 +170,11 @@ describe('music downloads', () => {
     const encrypted = await encryptConnectorCredentials(secret, ['MUSIC_U=session-value'])
     const accesses: MusicDownloadKeyRecord[] = []
     const updates: Partial<DownloadRecordRecord>[] = []
-    const submit = vi.fn(async () => ({ externalTaskId: 'remote-task-1' }))
+    const submittedInputs: CreateDownloadInput[] = []
+    const submit = vi.fn(async (_config: unknown, input: CreateDownloadInput) => {
+      submittedInputs.push(input)
+      return { externalTaskId: 'remote-task-1' }
+    })
     const deps = {
       musicCollectionsRepo: {
         getTrackByMediaKey: async () => track,
@@ -222,7 +227,7 @@ describe('music downloads', () => {
     })
     expect(accesses[0]?.resourceEncrypted).not.toContain('music.126.net')
     expect(submit).toHaveBeenCalledOnce()
-    const submitted = submit.mock.calls[0]?.[1]
+    const submitted = submittedInputs[0]
     expect(submitted).toMatchObject({ sourceType: 'http', title: 'Artist - Track Name.mp3' })
     const url = new URL(submitted?.uri ?? '')
     expect(url.origin).toBe('https://zme.test')

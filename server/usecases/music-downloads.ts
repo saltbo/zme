@@ -55,7 +55,7 @@ export async function submitMusicTrackDownload(
   const laneKey = musicLaneKey(connector.id)
   const quality = input.quality ?? DEFAULT_MUSIC_DOWNLOAD_QUALITY
   let current = (await deps.downloadRecordsRepo.listByResourceKeys(userId, 'music_track', [track.mediaKey]))[0]
-  let downloadRecordId: string
+  let downloadRecordId: string | null = null
 
   if (!current) {
     const record: DownloadRecordRecord = {
@@ -116,6 +116,7 @@ export async function submitMusicTrackDownload(
     }
   }
 
+  if (!downloadRecordId) throw new Error('Music download record was not queued.')
   await deps.downloadDispatchQueue.wake(laneKey)
   return { downloaderId: input.downloaderId, downloadRecordId, status: 'queued' }
 }

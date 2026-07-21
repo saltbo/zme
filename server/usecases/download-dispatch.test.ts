@@ -36,7 +36,10 @@ describe('download dispatch lanes', () => {
     ])
     const records = [downloadRecord('download-1', 'netease:track:1'), downloadRecord('download-2', 'netease:track:2')]
     const wake = vi.fn(async () => undefined)
-    const release = vi.fn(async () => undefined)
+    const released: { args: [string, string, string, string] | null } = { args: null }
+    const release = vi.fn(async (...args: [string, string, string, string]) => {
+      released.args = args
+    })
     const submit = vi.fn(async () => ({ externalTaskId: 'remote-1' }))
     const deps = {
       dispatchLanesRepo: {
@@ -140,7 +143,8 @@ describe('download dispatch lanes', () => {
     expect(records[1]).toMatchObject({ status: 'queued', attemptCount: 0 })
     expect(submit).toHaveBeenCalledOnce()
     expect(release).toHaveBeenCalledOnce()
-    const [, , nextAllowedAt, releasedAt] = release.mock.calls[0] ?? []
+    if (!released.args) throw new Error('Dispatch lane was not released.')
+    const [, , nextAllowedAt, releasedAt] = released.args
     expect(Date.parse(nextAllowedAt ?? '') - Date.parse(releasedAt ?? '')).toBe(10_000)
     expect(wake).toHaveBeenCalledWith(laneKey, 10)
   })

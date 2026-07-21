@@ -55,7 +55,9 @@ function createDeps() {
                 addedAt: item.addedAt ?? null,
                 downloadStatus: 'unknown',
                 downloadCheckedAt: null,
+                downloadRecord: null,
               })),
+              subscription: null,
             }
           : null,
       replaceTracks: async (_collectionId: string, nextTracks: MusicTrackInput[]) => {

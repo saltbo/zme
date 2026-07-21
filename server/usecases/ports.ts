@@ -312,11 +312,17 @@ export interface MusicCollectionRecord extends MusicCollectionSummary {
 }
 
 export interface MusicTrackInput
-  extends Omit<MusicLibraryTrack, 'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt'> {
+  extends Omit<
+    MusicLibraryTrack,
+    'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt' | 'downloadRecord'
+  > {
   addedAt?: string | null
 }
 
-export type MusicTrackRecord = Omit<MusicLibraryTrack, 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt'>
+export type MusicTrackRecord = Omit<
+  MusicLibraryTrack,
+  'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt' | 'downloadRecord'
+>
 
 export interface MusicTrackAvailabilityUpdate {
   trackId: string
