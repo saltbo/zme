@@ -155,6 +155,30 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       return rows[0] ? toRecord(rows[0]) : null
     },
 
+    async setLibrarySelections(userId, connectorId, selectedCollectionIds, updatedAt) {
+      const clear = db
+        .update(musicCollections)
+        .set({ libraryAddedAt: null, updatedAt })
+        .where(and(eq(musicCollections.userId, userId), eq(musicCollections.connectorId, connectorId)))
+      if (selectedCollectionIds.length === 0) {
+        await clear
+        return
+      }
+      const selections = chunks(selectedCollectionIds, 90).map((ids) =>
+        db
+          .update(musicCollections)
+          .set({ libraryAddedAt: updatedAt, updatedAt })
+          .where(
+            and(
+              eq(musicCollections.userId, userId),
+              eq(musicCollections.connectorId, connectorId),
+              inArray(musicCollections.id, ids),
+            ),
+          ),
+      )
+      await db.batch([clear, ...selections])
+    },
+
     async updateSnapshot(userId, id, input) {
       const rows = await db
         .update(musicCollections)

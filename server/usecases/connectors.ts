@@ -255,6 +255,18 @@ export async function syncConnector(
   }
 }
 
+export interface ConnectorSyncMessage {
+  type: 'connector_sync'
+  userId: string
+  connectorId: string
+}
+
+export async function enqueueConnectorSync(deps: Deps, userId: string, connectorId: string): Promise<void> {
+  const connector = await deps.connectorsRepo.get(userId, connectorId)
+  if (!connector) throw new Error('Connector was not found.')
+  await deps.connectorSyncQueue.enqueue({ userId, connectorId })
+}
+
 export async function syncEnabledConnectors(deps: Deps, env: Env): Promise<void> {
   const connectors = await deps.connectorsRepo.listEnabled()
   for (const connector of connectors) {
@@ -281,27 +293,22 @@ export function listConnectorPlaylists(
   return deps.musicCollectionsRepo.listForConnector(userId, connectorId)
 }
 
-export async function selectConnectorPlaylist(
+export async function saveConnectorPlaylistSelection(
   deps: Deps,
   userId: string,
   connectorId: string,
-  playlistId: string,
-  selected: boolean,
-): Promise<MusicCollectionSummary> {
+  selectedPlaylistIds: string[],
+): Promise<{ selectedPlaylists: number }> {
   const connector = await deps.connectorsRepo.get(userId, connectorId)
   if (connector?.kind !== 'netease') throw new Error('Netease connector was not found.')
-  const collection = (await deps.musicCollectionsRepo.listForConnector(userId, connectorId)).find(
-    (item) => item.id === playlistId,
-  )
-  if (!collection) throw new Error('Connector playlist was not found.')
+  const collections = await deps.musicCollectionsRepo.listForConnector(userId, connectorId)
+  const knownIds = new Set(collections.map((item) => item.id))
+  if (selectedPlaylistIds.some((id) => !knownIds.has(id))) throw new Error('Connector playlist was not found.')
 
-  const updated = await deps.musicCollectionsRepo.setLibraryAdded(
-    userId,
-    collection.id,
-    selected ? new Date().toISOString() : null,
-  )
-  if (!updated) throw new Error('Connector playlist disappeared during update.')
-  return updated
+  const uniqueIds = [...new Set(selectedPlaylistIds)]
+  await deps.musicCollectionsRepo.setLibrarySelections(userId, connectorId, uniqueIds, new Date().toISOString())
+  await deps.connectorSyncQueue.enqueue({ userId, connectorId })
+  return { selectedPlaylists: uniqueIds.length }
 }
 
 async function syncDoubanConnector(deps: Deps, connector: ConnectorRecord): Promise<LibraryImportSyncResult> {

@@ -2,6 +2,7 @@ import type { DownloaderKind, IndexerKind } from '@shared/types'
 import type {
   BookProvider,
   ConnectorLoginAttemptsRepo,
+  ConnectorSyncQueue,
   ConnectorsRepo,
   DispatchLanesRepo,
   DownloadDispatchQueue,
@@ -29,6 +30,7 @@ export interface Deps {
   libraryRepo: LibraryRepo
   connectorsRepo: ConnectorsRepo
   connectorLoginAttemptsRepo: ConnectorLoginAttemptsRepo
+  connectorSyncQueue: ConnectorSyncQueue
   musicCollectionsRepo: MusicCollectionsRepo
   musicDownloadKeysRepo: MusicDownloadKeysRepo
   mediaSubscriptionsRepo: MediaSubscriptionsRepo

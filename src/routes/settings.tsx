@@ -29,8 +29,8 @@ import {
   listConnectorPlaylists,
   listConnectors,
   loginNeteaseWithSms,
+  saveConnectorPlaylistSelection,
   saveDoubanConnector,
-  selectConnectorPlaylist,
   sendNeteaseSmsCode,
   syncConnector,
   updateConnector,
@@ -152,12 +152,8 @@ function ConnectorSettings() {
   const sync = useMutation({
     mutationFn: syncConnector,
     onSuccess: async () => {
-      await Promise.all([
-        refreshConnectors(),
-        queryClient.invalidateQueries({ queryKey: queryKeys.library.root }),
-        queryClient.invalidateQueries({ queryKey: ['music', 'library'] }),
-      ])
-      toast.success(t('connectorSynced'))
+      await refreshConnectors()
+      toast.success(t('connectorSyncQueued'))
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('connectorSyncFailed')),
   })
@@ -350,6 +346,7 @@ function NeteaseConnectorDialog({
   const [smsCode, setSmsCode] = useState('')
   const [smsSent, setSmsSent] = useState(false)
   const [retriedVerificationAttemptId, setRetriedVerificationAttemptId] = useState<string | null>(null)
+  const [selectedPlaylistIds, setSelectedPlaylistIds] = useState<Set<string> | null>(null)
   const begin = useMutation({
     mutationFn: beginNeteaseLogin,
     onSuccess: ({ item }) => {
@@ -403,17 +400,27 @@ function NeteaseConnectorDialog({
     queryFn: async () => (await listConnectorPlaylists(connector?.id as string)).items,
     enabled: Boolean(open && connector),
   })
-  const select = useMutation({
-    mutationFn: (input: { playlistId: string; selected: boolean }) =>
-      selectConnectorPlaylist(connector?.id as string, input.playlistId, input.selected),
+  const savePlaylistSelection = useMutation({
+    mutationFn: () =>
+      saveConnectorPlaylistSelection(connector?.id as string, [...(selectedPlaylistIds ?? new Set<string>())]),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.connectors.playlists(connector?.id ?? '') }),
         queryClient.invalidateQueries({ queryKey: queryKeys.music.library('playlist') }),
       ])
+      setOpen(false)
+      setSelectedPlaylistIds(null)
+      toast.success(t('playlistSelectionSaved'))
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : t('playlistSelectionFailed')),
   })
+
+  useEffect(() => {
+    if (!open || !connector || !playlists.data || selectedPlaylistIds) return
+    setSelectedPlaylistIds(
+      new Set(playlists.data.filter((playlist) => playlist.libraryAddedAt).map((playlist) => playlist.id)),
+    )
+  }, [connector, open, playlists.data, selectedPlaylistIds])
 
   useEffect(() => {
     const nextQrUrl = login.data?.attempt.qrUrl
@@ -468,13 +475,29 @@ function NeteaseConnectorDialog({
   }
 
   function changeOpen(nextOpen: boolean) {
+    if (!nextOpen && savePlaylistSelection.isPending) return
     setOpen(nextOpen)
-    if (nextOpen) return
+    if (nextOpen) {
+      setSelectedPlaylistIds(null)
+      return
+    }
     setAttemptId(null)
     setQrUrl(null)
     setSmsCode('')
     setSmsSent(false)
     setRetriedVerificationAttemptId(null)
+    setSelectedPlaylistIds(null)
+  }
+
+  function changePlaylistSelection(playlistId: string, selected: boolean) {
+    setSelectedPlaylistIds((current) => {
+      const next = new Set(
+        current ?? playlists.data?.filter((playlist) => playlist.libraryAddedAt).map((playlist) => playlist.id),
+      )
+      if (selected) next.add(playlistId)
+      else next.delete(playlistId)
+      return next
+    })
   }
 
   return (
@@ -491,30 +514,56 @@ function NeteaseConnectorDialog({
           </DialogDescription>
         </DialogHeader>
         {connector ? (
-          <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-            {playlists.isLoading ? <div className="text-muted-foreground text-sm">{t('loading')}</div> : null}
-            {playlists.data?.map((playlist) => (
-              <div key={playlist.id} className="flex items-center gap-3 rounded-lg border p-3">
-                {playlist.coverUrl ? (
-                  <img src={playlist.coverUrl} alt="" className="size-12 rounded-md object-cover" />
-                ) : (
-                  <div className="flex size-12 items-center justify-center rounded-md bg-muted">
-                    <Music2 />
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              savePlaylistSelection.mutate()
+            }}
+          >
+            <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+              {playlists.isLoading ? <div className="text-muted-foreground text-sm">{t('loading')}</div> : null}
+              {playlists.data?.map((playlist) => (
+                <div key={playlist.id} className="flex items-center gap-3 rounded-lg border p-3">
+                  {playlist.coverUrl ? (
+                    <img src={playlist.coverUrl} alt="" className="size-12 rounded-md object-cover" />
+                  ) : (
+                    <div className="flex size-12 items-center justify-center rounded-md bg-muted">
+                      <Music2 />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-sm">{playlist.title}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {t('trackCount', { count: playlist.trackCount })}
+                    </div>
                   </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-sm">{playlist.title}</div>
-                  <div className="text-muted-foreground text-xs">{t('trackCount', { count: playlist.trackCount })}</div>
+                  <Switch
+                    checked={selectedPlaylistIds?.has(playlist.id) ?? Boolean(playlist.libraryAddedAt)}
+                    disabled={savePlaylistSelection.isPending}
+                    onCheckedChange={(selected) => changePlaylistSelection(playlist.id, selected)}
+                    aria-label={t('syncPlaylist')}
+                  />
                 </div>
-                <Switch
-                  checked={Boolean(playlist.libraryAddedAt)}
-                  disabled={select.isPending}
-                  onCheckedChange={(selected) => select.mutate({ playlistId: playlist.id, selected })}
-                  aria-label={t('syncPlaylist')}
-                />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={savePlaylistSelection.isPending}
+                onClick={() => changeOpen(false)}
+              >
+                {t('cancel')}
+              </Button>
+              <Button type="submit" disabled={!selectedPlaylistIds || savePlaylistSelection.isPending}>
+                {savePlaylistSelection.isPending ? (
+                  <LoaderCircle data-icon="inline-start" className="animate-spin" />
+                ) : null}
+                {t('save')}
+              </Button>
+            </DialogFooter>
+          </form>
         ) : (
           <div className="flex flex-col gap-5 py-2">
             <ToggleGroup

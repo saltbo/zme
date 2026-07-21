@@ -34,6 +34,25 @@ describe('music collections repository in D1', () => {
     expect(remaining.some((item) => item.externalId === 'playlist-104')).toBe(false)
   })
 
+  it('replaces the complete library selection in one batch operation', async () => {
+    const repo = createMusicCollectionsRepo(createDb(env))
+    const collections = []
+    for (let index = 0; index < 105; index += 1) {
+      collections.push(await repo.upsert(USER_ID, playlistInput(`selection-${index}`, '2026-07-20T00:00:00.000Z')))
+    }
+    const selectedIds = collections.filter((_item, index) => index % 2 === 0).map((item) => item.id)
+
+    await repo.setLibrarySelections(USER_ID, CONNECTOR_ID, selectedIds, '2026-07-21T02:00:00.000Z')
+
+    const saved = await repo.listForConnector(USER_ID, CONNECTOR_ID)
+    expect(
+      saved
+        .filter((item) => item.libraryAddedAt)
+        .map((item) => item.id)
+        .sort(),
+    ).toEqual([...selectedIds].sort())
+  })
+
   it('replaces a playlist containing more than 25 tracks', async () => {
     const repo = createMusicCollectionsRepo(createDb(env))
     const collection = await repo.upsert(USER_ID, playlistInput('large-playlist'))

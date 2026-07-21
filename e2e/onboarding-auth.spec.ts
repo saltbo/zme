@@ -138,4 +138,101 @@ test.describe
       await expect(dialog.getByText('Account verification required')).toBeVisible()
       await expect(dialog.getByText(/signed in to the same account/i)).toBeVisible()
     })
+
+    test('playlist selection remains a draft until one asynchronous save', async ({ page }) => {
+      const setup = await page.request.post('/api/setup/admin', { data: ADMIN })
+      expect([201, 409]).toContain(setup.status())
+      await page.goto('/login')
+      await page.fill('#login-email', ADMIN.email)
+      await page.fill('#login-password', ADMIN.password)
+      await page.getByRole('button', { name: 'Sign in' }).click()
+      await expect(page).not.toHaveURL(/\/login/)
+
+      const connectorId = '33333333-3333-4333-8333-333333333333'
+      const firstPlaylistId = '44444444-4444-4444-8444-444444444444'
+      const secondPlaylistId = '55555555-5555-4555-8555-555555555555'
+      const selectedIds = new Set([secondPlaylistId])
+      const selectionRequests: Array<{ selectedPlaylistIds: string[] }> = []
+      const connector = {
+        id: connectorId,
+        kind: 'netease',
+        displayName: 'Fixture listener',
+        avatarUrl: null,
+        externalAccountId: 'fixture-account',
+        authModes: ['qr', 'sms'],
+        capabilities: ['music.playlists.read', 'music.tracks.download'],
+        status: 'connected',
+        enabled: true,
+        lastSyncedAt: null,
+        lastError: null,
+        lastResult: null,
+        createdAt: '2026-07-21T00:00:00.000Z',
+        updatedAt: '2026-07-21T00:00:00.000Z',
+      }
+      const playlists = [
+        playlistFixture(firstPlaylistId, 'Playlist One', false),
+        playlistFixture(secondPlaylistId, 'Playlist Two', true),
+      ]
+
+      await page.route('**/api/connectors', (route) => route.fulfill({ json: { items: [connector] } }))
+      await page.route(`**/api/connectors/${connectorId}/playlists`, async (route) => {
+        if (route.request().method() === 'PUT') {
+          const input = route.request().postDataJSON() as { selectedPlaylistIds: string[] }
+          selectionRequests.push(input)
+          selectedIds.clear()
+          for (const id of input.selectedPlaylistIds) selectedIds.add(id)
+          await route.fulfill({ status: 202, json: { selectedPlaylists: selectedIds.size } })
+          return
+        }
+        await route.fulfill({
+          json: {
+            items: playlists.map((playlist) => ({
+              ...playlist,
+              libraryAddedAt: selectedIds.has(playlist.id) ? '2026-07-21T00:00:00.000Z' : null,
+            })),
+          },
+        })
+      })
+
+      await page.goto('/settings')
+      await page.getByRole('button', { name: 'Manage playlists' }).click()
+      let dialog = page.getByRole('dialog', { name: 'Netease Cloud Music' })
+      let firstPlaylistSwitch = dialog.getByText('Playlist One', { exact: true }).locator('../..').getByRole('switch')
+      await expect(firstPlaylistSwitch).not.toBeChecked()
+      await firstPlaylistSwitch.click()
+      await expect(firstPlaylistSwitch).toBeChecked()
+      expect(selectionRequests).toHaveLength(0)
+
+      await dialog.getByRole('button', { name: 'Cancel' }).click()
+      await page.getByRole('button', { name: 'Manage playlists' }).click()
+      dialog = page.getByRole('dialog', { name: 'Netease Cloud Music' })
+      firstPlaylistSwitch = dialog.getByText('Playlist One', { exact: true }).locator('../..').getByRole('switch')
+      await expect(firstPlaylistSwitch).not.toBeChecked()
+      expect(selectionRequests).toHaveLength(0)
+
+      await firstPlaylistSwitch.click()
+      await dialog.getByRole('button', { name: 'Save' }).click()
+      await expect(page.getByText('Playlist selection saved and sync queued')).toBeVisible()
+      await expect(dialog).not.toBeVisible()
+      expect(selectionRequests).toEqual([{ selectedPlaylistIds: [secondPlaylistId, firstPlaylistId] }])
+    })
   })
+
+function playlistFixture(id: string, title: string, selected: boolean) {
+  return {
+    id,
+    kind: 'playlist',
+    provider: 'netease',
+    externalId: id,
+    title,
+    description: null,
+    coverUrl: null,
+    ownerName: 'Fixture listener',
+    trackCount: 2,
+    libraryAddedAt: selected ? '2026-07-21T00:00:00.000Z' : null,
+    remoteUpdatedAt: null,
+    lastSyncedAt: null,
+    createdAt: '2026-07-21T00:00:00.000Z',
+    updatedAt: '2026-07-21T00:00:00.000Z',
+  }
+}

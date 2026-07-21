@@ -4,8 +4,9 @@ import type { MediaSearchItem, MusicCollectionSummary } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   checkNeteaseLogin,
+  enqueueConnectorSync,
   loginNeteaseWithSms,
-  selectConnectorPlaylist,
+  saveConnectorPlaylistSelection,
   sendNeteaseSmsCode,
   syncConnector,
 } from './connectors'
@@ -330,8 +331,8 @@ describe('syncConnector', () => {
   })
 })
 
-describe('selectConnectorPlaylist', () => {
-  it('only updates the library selection and leaves track synchronization to connector sync', async () => {
+describe('saveConnectorPlaylistSelection', () => {
+  it('saves the complete selection once and queues one background sync', async () => {
     const playlist: MusicCollectionSummary = {
       id: 'playlist-1',
       kind: 'playlist',
@@ -348,17 +349,16 @@ describe('selectConnectorPlaylist', () => {
       createdAt: '2026-07-20T00:00:00.000Z',
       updatedAt: '2026-07-20T00:00:00.000Z',
     }
-    let libraryAddedAt: string | null = null
+    const savedSelections: string[][] = []
+    const enqueue = vi.fn(async () => undefined)
     const deps = {
       connectorsRepo: {
         get: async () => ({ ...connectorRecord, kind: 'netease' as const }),
       },
       musicCollectionsRepo: {
         listForConnector: async () => [playlist],
-        setLibraryAdded: async (_userId: string, _id: string, value: string | null) => {
-          libraryAddedAt = value
-          return { ...playlist, userId: 'user-1', connectorId: 'connector-1', libraryAddedAt: value }
-        },
+        setLibrarySelections: async (_userId: string, _connectorId: string, selectedPlaylistIds: string[]) =>
+          savedSelections.push(selectedPlaylistIds),
         replaceTracks: async () => {
           throw new Error('Playlist selection must not synchronize tracks.')
         },
@@ -370,15 +370,45 @@ describe('selectConnectorPlaylist', () => {
           },
         },
       },
+      connectorSyncQueue: { enqueue },
     } as never as Deps
 
-    const selected = await selectConnectorPlaylist(deps, 'user-1', 'connector-1', 'playlist-1', true)
-    expect(libraryAddedAt).not.toBeNull()
-    expect(selected.libraryAddedAt).toBe(libraryAddedAt)
+    await expect(
+      saveConnectorPlaylistSelection(deps, 'user-1', 'connector-1', ['playlist-1', 'playlist-1']),
+    ).resolves.toEqual({ selectedPlaylists: 1 })
+    expect(savedSelections).toEqual([['playlist-1']])
+    expect(enqueue).toHaveBeenCalledOnce()
+    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1' })
+  })
 
-    const deselected = await selectConnectorPlaylist(deps, 'user-1', 'connector-1', 'playlist-1', false)
-    expect(libraryAddedAt).toBeNull()
-    expect(deselected.libraryAddedAt).toBeNull()
+  it('rejects playlists outside the connector without saving or queuing', async () => {
+    const setLibrarySelections = vi.fn()
+    const enqueue = vi.fn()
+    const deps = {
+      connectorsRepo: { get: async () => ({ ...connectorRecord, kind: 'netease' as const }) },
+      musicCollectionsRepo: { listForConnector: async () => [], setLibrarySelections },
+      connectorSyncQueue: { enqueue },
+    } as never as Deps
+
+    await expect(saveConnectorPlaylistSelection(deps, 'user-1', 'connector-1', ['unknown-playlist'])).rejects.toThrow(
+      'Connector playlist was not found.',
+    )
+    expect(setLibrarySelections).not.toHaveBeenCalled()
+    expect(enqueue).not.toHaveBeenCalled()
+  })
+})
+
+describe('enqueueConnectorSync', () => {
+  it('queues an existing connector without running the sync inline', async () => {
+    const enqueue = vi.fn(async () => undefined)
+    const deps = {
+      connectorsRepo: { get: async () => connectorRecord },
+      connectorSyncQueue: { enqueue },
+    } as never as Deps
+
+    await enqueueConnectorSync(deps, 'user-1', 'connector-1')
+
+    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1' })
   })
 })
 

@@ -1,7 +1,6 @@
 import type {
   ConnectorLoginAttempt,
   ConnectorSummary,
-  ConnectorSyncResult,
   DoubanConnectorInput,
   MusicCollectionSummary,
   NeteaseSmsCodeInput,
@@ -34,7 +33,7 @@ export async function deleteConnector(id: string) {
 }
 
 export async function syncConnector(id: string) {
-  return apiRequest<{ result: ConnectorSyncResult }>(`/api/connectors/${id}/sync`, 'Failed to sync connector.', {
+  return apiRequest<{ queued: true }>(`/api/connectors/${id}/sync`, 'Failed to sync connector.', {
     method: 'POST',
   })
 }
@@ -80,10 +79,10 @@ export async function listConnectorPlaylists(id: string) {
   )
 }
 
-export async function selectConnectorPlaylist(id: string, playlistId: string, selected: boolean) {
-  return apiRequest<{ item: MusicCollectionSummary }>(
-    `/api/connectors/${id}/playlists/${playlistId}`,
+export async function saveConnectorPlaylistSelection(id: string, selectedPlaylistIds: string[]) {
+  return apiRequest<{ selectedPlaylists: number }>(
+    `/api/connectors/${id}/playlists`,
     'Failed to update playlist selection.',
-    { method: 'PUT', body: JSON.stringify({ selected }) },
+    { method: 'PUT', body: JSON.stringify({ selectedPlaylistIds }) },
   )
 }

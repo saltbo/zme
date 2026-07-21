@@ -376,6 +376,12 @@ export interface MusicCollectionsRepo {
     },
   ): Promise<MusicCollectionRecord>
   setLibraryAdded(userId: string, id: string, libraryAddedAt: string | null): Promise<MusicCollectionRecord | null>
+  setLibrarySelections(
+    userId: string,
+    connectorId: string,
+    selectedCollectionIds: string[],
+    updatedAt: string,
+  ): Promise<void>
   updateSnapshot(
     userId: string,
     id: string,
@@ -522,6 +528,10 @@ export interface DispatchLanesRepo {
 
 export interface DownloadDispatchQueue {
   wake(laneKey: string, delaySeconds?: number): Promise<void>
+}
+
+export interface ConnectorSyncQueue {
+  enqueue(input: { userId: string; connectorId: string }): Promise<void>
 }
 
 export interface MusicDownloadKeysRepo {

@@ -3,13 +3,13 @@ import {
   beginNeteaseLogin,
   checkNeteaseLogin,
   deleteConnector,
+  enqueueConnectorSync,
   listConnectorPlaylists,
   listConnectors,
   loginNeteaseWithSms,
+  saveConnectorPlaylistSelection,
   saveDoubanConnector,
-  selectConnectorPlaylist,
   sendNeteaseSmsCode,
-  syncConnector,
   updateConnector,
 } from '@server/usecases/connectors'
 import type { Hono } from 'hono'
@@ -49,13 +49,8 @@ const neteaseSmsLoginSchema = neteaseSmsCodeSchema.extend({
   verificationAttemptId: z.string().uuid().optional(),
 })
 
-const playlistParamsSchema = z.object({
-  id: z.string().uuid(),
-  playlistId: z.string().uuid(),
-})
-
 const playlistSelectionSchema = z.object({
-  selected: z.boolean(),
+  selectedPlaylistIds: z.array(z.string().uuid()).max(1000),
 })
 
 export function registerConnectorRoutes(routes: Hono<AppEnv>) {
@@ -110,8 +105,8 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.post('/connectors/:id/sync', zValidator('param', idParamsSchema), async (c) => {
-    const result = await syncConnector(c.get('deps'), c.env, c.get('user').id, c.req.valid('param').id, 'manual')
-    return c.json({ result })
+    await enqueueConnectorSync(c.get('deps'), c.get('user').id, c.req.valid('param').id)
+    return c.json({ queued: true }, 202)
   })
 
   routes.get('/connectors/:id/playlists', zValidator('param', idParamsSchema), async (c) => {
@@ -120,19 +115,17 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.put(
-    '/connectors/:id/playlists/:playlistId',
-    zValidator('param', playlistParamsSchema),
+    '/connectors/:id/playlists',
+    zValidator('param', idParamsSchema),
     zValidator('json', playlistSelectionSchema),
     async (c) => {
-      const params = c.req.valid('param')
-      const item = await selectConnectorPlaylist(
+      const result = await saveConnectorPlaylistSelection(
         c.get('deps'),
         c.get('user').id,
-        params.id,
-        params.playlistId,
-        c.req.valid('json').selected,
+        c.req.valid('param').id,
+        c.req.valid('json').selectedPlaylistIds,
       )
-      return c.json({ item })
+      return c.json(result, 202)
     },
   )
 }

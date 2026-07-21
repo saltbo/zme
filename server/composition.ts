@@ -21,6 +21,7 @@ import { createMusicDownloadKeysRepo } from './adapters/repos/music-download-key
 import { createUsersRepo } from './adapters/repos/users'
 import { createDb } from './db/client'
 import type { Env } from './env'
+import type { ConnectorSyncMessage } from './usecases/connectors'
 import type { Deps } from './usecases/deps'
 
 export function createDeps(env: Env): Deps {
@@ -30,6 +31,12 @@ export function createDeps(env: Env): Deps {
     libraryRepo: createLibraryRepo(db),
     connectorsRepo: createConnectorsRepo(db),
     connectorLoginAttemptsRepo: createConnectorLoginAttemptsRepo(db),
+    connectorSyncQueue: {
+      async enqueue(input) {
+        const message: ConnectorSyncMessage = { type: 'connector_sync', ...input }
+        await env.MEDIA_DOWNLOAD_DISPATCH.send(message)
+      },
+    },
     musicCollectionsRepo: createMusicCollectionsRepo(db),
     musicDownloadKeysRepo: createMusicDownloadKeysRepo(db),
     mediaSubscriptionsRepo: createMediaSubscriptionsRepo(db),
