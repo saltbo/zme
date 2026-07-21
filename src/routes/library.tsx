@@ -5,7 +5,6 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
-import { LibraryNavigation } from '@/components/library/library-navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -54,7 +53,6 @@ export function LibraryMediaPage() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <LibraryNavigation />
       <div className="mb-5 flex flex-col gap-3 border-b pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="font-semibold text-sm text-muted-foreground">{t('myLibrary')}</div>
@@ -108,7 +106,6 @@ export function LibraryBooksPage() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <LibraryNavigation />
       <div className="mb-5 border-b pb-4">
         <div className="font-semibold text-sm text-muted-foreground">{t('books')}</div>
         <div className="mt-1 text-muted-foreground text-sm">{t('libraryResultCount', { count: items.length })}</div>

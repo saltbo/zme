@@ -22,6 +22,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   Sidebar as SidebarRoot,
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/contexts/auth'
@@ -54,7 +57,7 @@ export function AppSidebar() {
             <SidebarLink icon={Sparkles} label={t('animations')} to="/animations" />
             <SidebarLink icon={Disc3} label={t('music')} to="/music" />
             <SidebarLink icon={BookOpen} label={t('books')} to="/books" />
-            <SidebarLink icon={Bookmark} label={t('myLibrary')} to="/library" />
+            <LibrarySidebarMenu />
             <SidebarLink icon={DownloadCloud} label={t('downloads')} to="/downloads" />
             {isAdmin ? (
               <>
@@ -77,6 +80,39 @@ export function AppSidebar() {
         </SidebarFooter>
       </SidebarRoot>
     </div>
+  )
+}
+
+function LibrarySidebarMenu() {
+  const { t } = useTranslation()
+  const location = useLocation()
+  const sections = [
+    { icon: Clapperboard, label: t('filmAndTv'), to: '/library/media' },
+    { icon: BookOpen, label: t('books'), to: '/library/books' },
+    { icon: Disc3, label: t('music'), to: '/library/music' },
+  ]
+
+  return (
+    <SidebarMenuItem>
+      <div className="flex h-10 items-center gap-2 px-2 font-medium text-sidebar-foreground/72 text-sm">
+        <Bookmark className="size-4 shrink-0" />
+        <span>{t('myLibrary')}</span>
+      </div>
+      <SidebarMenuSub className="py-1">
+        {sections.map(({ icon: Icon, label, to }) => (
+          <SidebarMenuSubItem key={to}>
+            <SidebarMenuSubButton
+              render={<NavLink to={to} />}
+              isActive={location.pathname === to || location.pathname.startsWith(`${to}/`)}
+              className="relative h-10 rounded-md text-sidebar-foreground/68 before:absolute before:-left-[11px] before:h-5 before:w-0.5 before:rounded-full before:bg-transparent data-active:bg-transparent data-active:font-semibold data-active:text-sidebar-foreground data-active:before:bg-sidebar-primary data-active:[&>svg]:text-sidebar-primary [&>svg]:text-sidebar-foreground/55"
+            >
+              <Icon />
+              <span>{label}</span>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>
+        ))}
+      </SidebarMenuSub>
+    </SidebarMenuItem>
   )
 }
 

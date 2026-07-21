@@ -235,7 +235,7 @@ function getSearchPath(pathname: string) {
 }
 
 function isResourceDetailPath(pathname: string) {
-  return /^\/(?:music|books)\/[^/]+$/.test(pathname)
+  return /^\/(?:music|books)\/[^/]+$/.test(pathname) || /^\/library\/music\/(?:playlists|albums)\/[^/]+$/.test(pathname)
 }
 
 function getStateMedia(state: unknown, routeMedia: RouteMedia): MediaSearchItem | undefined {

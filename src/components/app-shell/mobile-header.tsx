@@ -1,7 +1,9 @@
 import {
   Bookmark,
+  BookOpen,
   Clapperboard,
   Database,
+  Disc3,
   DownloadCloud,
   Film,
   Home,
@@ -59,7 +61,7 @@ export function MobileHeader() {
             </SheetTitle>
           </SheetHeader>
 
-          <nav className="flex flex-1 flex-col gap-1 px-3">
+          <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 pb-3">
             <MobileMenuLink icon={Home} label={t('discover')} to="/" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Film} label={t('movies')} to="/movies" onNavigate={() => setOpen(false)} />
             <MobileMenuLink icon={Tv} label={t('series')} to="/series" onNavigate={() => setOpen(false)} />
@@ -69,7 +71,32 @@ export function MobileHeader() {
               to="/animations"
               onNavigate={() => setOpen(false)}
             />
-            <MobileMenuLink icon={Bookmark} label={t('myLibrary')} to="/library" onNavigate={() => setOpen(false)} />
+            <MobileMenuLink icon={Disc3} label={t('music')} to="/music" onNavigate={() => setOpen(false)} />
+            <MobileMenuLink icon={BookOpen} label={t('books')} to="/books" onNavigate={() => setOpen(false)} />
+            <MobileMenuGroupLabel icon={Bookmark} label={t('myLibrary')} />
+            <div className="mb-1 ml-5 flex flex-col gap-1 border-sidebar-border border-l pl-3">
+              <MobileMenuLink
+                icon={Clapperboard}
+                label={t('filmAndTv')}
+                to="/library/media"
+                nested
+                onNavigate={() => setOpen(false)}
+              />
+              <MobileMenuLink
+                icon={BookOpen}
+                label={t('books')}
+                to="/library/books"
+                nested
+                onNavigate={() => setOpen(false)}
+              />
+              <MobileMenuLink
+                icon={Disc3}
+                label={t('music')}
+                to="/library/music"
+                nested
+                onNavigate={() => setOpen(false)}
+              />
+            </div>
             <MobileMenuLink
               icon={DownloadCloud}
               label={t('downloads')}
@@ -120,21 +147,28 @@ function MobileMenuLink({
   label,
   onNavigate,
   to,
+  nested = false,
 }: {
   icon: typeof Home
   label: string
   onNavigate: () => void
   to: string
+  nested?: boolean
 }) {
   return (
     <NavLink
       to={to}
       className={({ isActive }) =>
         cn(
-          'flex h-11 items-center gap-3 rounded-xl px-3 font-medium text-sm transition',
-          isActive
-            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-            : 'text-sidebar-foreground hover:bg-sidebar-accent',
+          'relative flex items-center gap-3 rounded-xl px-3 font-medium text-sm transition-colors',
+          nested ? 'h-10' : 'h-11',
+          nested
+            ? isActive
+              ? 'bg-transparent font-semibold text-sidebar-accent-foreground before:absolute before:-left-[13px] before:h-5 before:w-0.5 before:rounded-full before:bg-sidebar-primary [&>svg]:text-sidebar-primary'
+              : 'text-sidebar-foreground/68 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
+            : isActive
+              ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+              : 'text-sidebar-foreground hover:bg-sidebar-accent',
         )
       }
       onClick={onNavigate}
@@ -142,5 +176,14 @@ function MobileMenuLink({
       <Icon className="size-4" />
       {label}
     </NavLink>
+  )
+}
+
+function MobileMenuGroupLabel({ icon: Icon, label }: { icon: typeof Home; label: string }) {
+  return (
+    <div className="flex h-10 items-center gap-3 px-3 font-medium text-sidebar-foreground/72 text-sm">
+      <Icon className="size-4 shrink-0" />
+      <span>{label}</span>
+    </div>
   )
 }

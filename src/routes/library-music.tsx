@@ -1,11 +1,14 @@
 import type { DownloaderSummary, MusicCollectionSummary, MusicLibraryTrack } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Disc3, Download, HardDriveDownload, ListMusic, LoaderCircle, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { CalendarDays, Disc3, Download, HardDriveDownload, ListMusic, LoaderCircle, Trash2 } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
 import { toast } from 'sonner'
-import { LibraryNavigation } from '@/components/library/library-navigation'
+import type { AppOutletContext } from '@/components/app-shell/types'
+import { MusicLibraryNavigation } from '@/components/library/library-navigation'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -32,20 +35,7 @@ export function MusicLibraryCollectionsPage({ kind }: { kind: 'playlist' | 'albu
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-[1680px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <LibraryNavigation musicKind={kind} />
-      <div className="mb-5 flex items-end justify-between gap-4 border-b pb-4">
-        <div>
-          <div className="font-semibold text-sm text-muted-foreground">
-            {kind === 'playlist' ? t('playlists') : t('albums')}
-          </div>
-          <div className="mt-1 text-muted-foreground text-sm">
-            {t('collectionCount', { count: collections.data?.length ?? 0 })}
-          </div>
-        </div>
-        <Button variant="outline" render={<Link to="/settings" />}>
-          {t('manageConnectors')}
-        </Button>
-      </div>
+      <MusicLibraryNavigation kind={kind} count={collections.data?.length ?? 0} />
       {collections.isLoading ? <CollectionGridSkeleton /> : null}
       {collections.data?.length ? (
         <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -72,9 +62,11 @@ export function MusicLibraryCollectionsPage({ kind }: { kind: 'playlist' | 'albu
 }
 
 export function MusicCollectionDetailPage() {
-  const { t } = useTranslation()
+  const { i18n, t } = useTranslation()
   const { collectionId = '' } = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
+  const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const queryClient = useQueryClient()
   const downloaders = useDownloaders()
   const collection = useQuery({
@@ -92,6 +84,20 @@ export function MusicCollectionDetailPage() {
     onError: (error) => toast.error(error instanceof Error ? error.message : t('collectionRemoveFailed')),
   })
 
+  useEffect(() => {
+    if (!collection.data) return
+
+    const item = collection.data
+    const title = item.kind === 'favorites' ? t('favoriteSongs') : item.title
+    setTopbarOverride({
+      pathname: location.pathname,
+      title,
+      subtitle: `${item.kind === 'album' ? t('album') : t('playlist')} / ${item.ownerName ?? t('unknownArtist')}`,
+    })
+
+    return () => setTopbarOverride(null)
+  }, [collection.data, location.pathname, setTopbarOverride, t])
+
   if (collection.isLoading) return <CollectionDetailSkeleton />
   if (!collection.data) {
     return <main className="p-8 text-center text-muted-foreground">{t('musicCollectionNotFound')}</main>
@@ -101,59 +107,180 @@ export function MusicCollectionDetailPage() {
   const httpDownloaders = (downloaders.data ?? []).filter(
     (downloader) => downloader.enabled && (downloader.kind === 'zpan' || downloader.kind === 'aria2'),
   )
-  const musicKind = item.kind === 'album' ? 'album' : 'playlist'
   const title = item.kind === 'favorites' ? t('favoriteSongs') : item.title
   return (
-    <main className="mx-auto w-full min-w-0 max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-      <LibraryNavigation musicKind={musicKind} />
-      <Button variant="ghost" render={<Link to={`/library/music/${musicKind === 'album' ? 'albums' : 'playlists'}`} />}>
-        <ArrowLeft />
-        {t('back')}
-      </Button>
-      <section className="mt-4 flex flex-col gap-5 border-b pb-6 sm:flex-row">
-        <CollectionCover item={item} className="size-40 shrink-0 sm:size-48" />
-        <div className="min-w-0 flex-1 self-end">
-          <div className="font-medium text-muted-foreground text-sm">
-            {item.kind === 'album' ? t('album') : t('playlist')}
+    <main className="mx-auto w-full min-w-0 max-w-[1520px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+      <MusicCollectionHero
+        item={item}
+        title={title}
+        language={i18n.language}
+        removing={remove.isPending}
+        onRemove={() => remove.mutate()}
+      />
+
+      <section className="mt-7">
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-xl sm:text-2xl">{t('trackList')}</h2>
+            <p className="mt-1 text-muted-foreground text-sm">{t('trackCount', { count: item.tracks.length })}</p>
           </div>
-          <h1 className="mt-2 text-balance font-semibold text-3xl sm:text-4xl">{title}</h1>
-          {item.ownerName ? <p className="mt-2 text-muted-foreground">{item.ownerName}</p> : null}
-          <p className="mt-3 text-muted-foreground text-sm">{t('trackCount', { count: item.tracks.length })}</p>
         </div>
-        <Button variant="outline" onClick={() => remove.mutate()} disabled={remove.isPending}>
-          <Trash2 />
-          {t('removeFromLibrary')}
-        </Button>
-      </section>
-      <div className="mt-4 divide-y rounded-xl border">
-        {item.tracks.map((track) => (
-          <div
-            key={track.id}
-            className="grid grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-3 sm:px-4"
-          >
-            <span className="text-right text-muted-foreground text-sm">{track.position}</span>
-            <div className="min-w-0">
-              <div className="truncate font-medium text-sm">{track.title}</div>
-              <div className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
-                <span className="truncate">{track.artists.join(', ') || t('unknownArtist')}</span>
-                {track.provider === 'netease' && track.downloadStatus === 'unavailable' ? (
-                  <span className="shrink-0 text-destructive">{t('musicTrackUnavailable')}</span>
-                ) : track.provider === 'netease' && track.downloadStatus === 'unknown' ? (
-                  <span className="shrink-0">{t('musicTrackUnknown')}</span>
-                ) : null}
+        <div className="divide-y overflow-hidden rounded-2xl border bg-card shadow-sm">
+          {item.tracks.map((track) => (
+            <div
+              key={track.id}
+              className="grid min-h-16 grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 px-3 py-3 sm:px-4"
+            >
+              <span className="text-right text-muted-foreground text-sm tabular-nums">{track.position}</span>
+              <div className="min-w-0">
+                <div className="truncate font-medium text-sm">{track.title}</div>
+                <div className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
+                  <span className="truncate">{track.artists.join(', ') || t('unknownArtist')}</span>
+                  {track.provider === 'netease' && track.downloadStatus === 'unavailable' ? (
+                    <span className="shrink-0 text-destructive">{t('musicTrackUnavailable')}</span>
+                  ) : track.provider === 'netease' && track.downloadStatus === 'unknown' ? (
+                    <span className="shrink-0">{t('musicTrackUnknown')}</span>
+                  ) : null}
+                </div>
               </div>
+              <span className="hidden text-muted-foreground text-xs tabular-nums sm:block">
+                {formatDuration(track.durationMs)}
+              </span>
+              <MusicTrackDownloadButton
+                track={track}
+                downloaders={httpDownloaders}
+                loadingDownloaders={downloaders.isLoading}
+                onSettled={() => queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })}
+              />
             </div>
-            <span className="hidden text-muted-foreground text-xs sm:block">{formatDuration(track.durationMs)}</span>
-            <MusicTrackDownloadButton
-              track={track}
-              downloaders={httpDownloaders}
-              loadingDownloaders={downloaders.isLoading}
-              onSettled={() => queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })}
-            />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </section>
     </main>
+  )
+}
+
+function MusicCollectionHero({
+  item,
+  title,
+  language,
+  removing,
+  onRemove,
+}: {
+  item: MusicCollectionSummary
+  title: string
+  language: string
+  removing: boolean
+  onRemove: () => void
+}) {
+  const { t } = useTranslation()
+  const collectionType = item.kind === 'album' ? t('album') : t('playlist')
+  const provider =
+    item.provider === 'netease' ? t('neteaseMusic') : item.provider === 'musicbrainz' ? 'MusicBrainz' : 'ZME'
+  const owner = item.ownerName ?? t('unknownArtist')
+
+  return (
+    <section className="overflow-hidden rounded-[28px] bg-[#130d1f] text-white shadow-[0_30px_90px_rgba(33,22,47,0.28)] sm:rounded-[34px]">
+      <div className="relative">
+        {item.coverUrl ? (
+          <img
+            src={item.coverUrl}
+            alt=""
+            className="absolute inset-0 h-full w-full scale-110 object-cover opacity-22 blur-2xl"
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(19,13,31,.72)_0%,#130d1f_82%)] lg:bg-[linear-gradient(90deg,#130d1f_0%,rgba(19,13,31,.94)_34%,rgba(19,13,31,.74)_72%,#130d1f_100%)]" />
+
+        <div className="relative grid gap-5 p-4 sm:p-5 lg:min-h-[440px] lg:grid-cols-[320px_minmax(0,1fr)] lg:items-start lg:gap-8 lg:p-8">
+          <div className="grid grid-cols-[116px_minmax(0,1fr)] gap-4 sm:grid-cols-[156px_minmax(0,1fr)] lg:block">
+            <CollectionCover item={item} className="aspect-square w-full lg:rounded-[30px]" />
+
+            <div className="min-w-0 lg:hidden">
+              <div className="flex items-start justify-between gap-2">
+                <CollectionTypeBadge kind={item.kind} label={collectionType} />
+                <RemoveCollectionButton removing={removing} onRemove={onRemove} />
+              </div>
+              <h1 className="mt-4 text-balance font-semibold text-2xl leading-tight sm:text-4xl sm:leading-[0.98]">
+                {title}
+              </h1>
+              <p className="mt-3 line-clamp-2 text-sm text-white/68">{owner}</p>
+            </div>
+          </div>
+
+          <div className="min-w-0 lg:pt-2">
+            <div className="mb-8 hidden items-center justify-between gap-6 lg:flex">
+              <CollectionTypeBadge kind={item.kind} label={collectionType} />
+              <RemoveCollectionButton removing={removing} onRemove={onRemove} />
+            </div>
+
+            <div className="hidden lg:block">
+              <h1 className="max-w-4xl text-balance font-semibold text-4xl leading-none sm:text-5xl lg:text-6xl">
+                {title}
+              </h1>
+              <p className="mt-4 max-w-3xl text-lg text-white/70">{owner}</p>
+            </div>
+
+            {item.description ? (
+              <p className="mt-5 line-clamp-6 max-w-4xl text-white/78 leading-7 sm:text-lg sm:leading-8 lg:mt-6 lg:line-clamp-7">
+                {item.description}
+              </p>
+            ) : null}
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <CollectionFact icon={<ListMusic />} label={t('tracks')} value={String(item.trackCount)} />
+              <CollectionFact icon={<Disc3 />} label={t('source')} value={provider} />
+              <CollectionFact
+                icon={<CalendarDays />}
+                label={t('lastSynced')}
+                value={item.lastSyncedAt ? formatCollectionDate(item.lastSyncedAt, language) : t('neverSynced')}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function CollectionTypeBadge({ kind, label }: { kind: MusicCollectionSummary['kind']; label: string }) {
+  return (
+    <Badge variant="secondary" className="gap-2 bg-white/12 text-white/82 backdrop-blur">
+      {kind === 'album' ? <Disc3 className="size-3.5" /> : <ListMusic className="size-3.5" />}
+      {label}
+    </Badge>
+  )
+}
+
+function RemoveCollectionButton({ removing, onRemove }: { removing: boolean; onRemove: () => void }) {
+  const { t } = useTranslation()
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon-lg"
+      className="size-11 shrink-0 rounded-xl border-white/18 bg-white/12 text-white shadow-lg backdrop-blur hover:bg-destructive hover:text-destructive-foreground"
+      onClick={onRemove}
+      disabled={removing}
+      aria-label={t('removeFromLibrary')}
+      title={t('removeFromLibrary')}
+    >
+      {removing ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+    </Button>
+  )
+}
+
+function CollectionFact({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10 backdrop-blur">
+      <div className="flex items-center gap-2 text-white/58 text-xs">
+        <span className="[&_svg]:size-4">{icon}</span>
+        {label}
+      </div>
+      <div className="mt-2 truncate font-medium text-sm text-white/88" title={value}>
+        {value}
+      </div>
+    </div>
   )
 }
 
@@ -280,4 +407,8 @@ function formatDuration(durationMs: number | null) {
   if (!durationMs) return '--:--'
   const totalSeconds = Math.round(durationMs / 1000)
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`
+}
+
+function formatCollectionDate(value: string, language: string) {
+  return new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(new Date(value))
 }

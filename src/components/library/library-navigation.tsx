@@ -1,60 +1,35 @@
-import { BookOpen, Clapperboard, ListMusic } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation } from 'react-router'
+import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 
-const sections = [
-  { path: '/library/media', labelKey: 'filmAndTv', icon: Clapperboard },
-  { path: '/library/books', labelKey: 'books', icon: BookOpen },
-  { path: '/library/music/playlists', labelKey: 'music', icon: ListMusic },
-] as const
-
-export function LibraryNavigation({ musicKind }: { musicKind?: 'playlist' | 'album' }) {
+export function MusicLibraryNavigation({ kind, count }: { kind: 'playlist' | 'album'; count: number }) {
   const { t } = useTranslation()
-  const location = useLocation()
+
   return (
-    <div className="mb-5 border-b">
-      <nav className="flex gap-1 overflow-x-auto" aria-label={t('librarySections')}>
-        {sections.map((section) => {
-          const active = location.pathname.startsWith(section.path.replace('/playlists', ''))
-          const Icon = section.icon
-          return (
-            <Link
-              key={section.path}
-              to={section.path}
-              className={cn(
-                'flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 font-medium text-muted-foreground text-sm transition-colors hover:text-foreground',
-                active && 'border-primary text-foreground',
-              )}
-            >
-              <Icon className="size-4" />
-              {t(section.labelKey)}
-            </Link>
-          )
-        })}
+    <div className="mb-5 flex min-h-12 items-center justify-between gap-4 border-b pb-3">
+      <nav className="flex min-w-0 items-center gap-1" aria-label={t('musicLibrarySections')}>
+        <Link
+          to="/library/music/playlists"
+          aria-current={kind === 'playlist' ? 'page' : undefined}
+          className={cn(
+            'flex min-h-10 items-center rounded-lg px-3 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            kind === 'playlist' && 'bg-primary/10 text-primary',
+          )}
+        >
+          {t('playlists')}
+        </Link>
+        <Link
+          to="/library/music/albums"
+          aria-current={kind === 'album' ? 'page' : undefined}
+          className={cn(
+            'flex min-h-10 items-center rounded-lg px-3 font-medium text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            kind === 'album' && 'bg-primary/10 text-primary',
+          )}
+        >
+          {t('albums')}
+        </Link>
       </nav>
-      {musicKind ? (
-        <nav className="flex gap-2 py-3" aria-label={t('musicLibrarySections')}>
-          <Link
-            to="/library/music/playlists"
-            className={cn(
-              'rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm hover:bg-muted hover:text-foreground',
-              musicKind === 'playlist' && 'bg-primary/10 text-primary',
-            )}
-          >
-            {t('playlists')}
-          </Link>
-          <Link
-            to="/library/music/albums"
-            className={cn(
-              'rounded-full px-3 py-1.5 font-medium text-muted-foreground text-sm hover:bg-muted hover:text-foreground',
-              musicKind === 'album' && 'bg-primary/10 text-primary',
-            )}
-          >
-            {t('albums')}
-          </Link>
-        </nav>
-      ) : null}
+      <span className="shrink-0 text-muted-foreground text-sm tabular-nums">{t('collectionCount', { count })}</span>
     </div>
   )
 }
