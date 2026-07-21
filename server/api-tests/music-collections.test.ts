@@ -48,18 +48,30 @@ describe('music collections repository in D1', () => {
 
     await repo.setTrackAvailabilities(
       USER_ID,
-      (details?.tracks ?? []).map((track, index) => ({
-        trackId: track.id,
-        status: index % 2 === 0 ? 'available' : 'unavailable',
-        checkedAt: '2026-07-21T01:00:00.000Z',
-      })),
+      CONNECTOR_ID,
+      (details?.tracks ?? []).map((track, index) => {
+        const providerDetails: Record<string, string | number | boolean | null> =
+          index % 2 === 0 ? {} : { fee: 1, payed: 0 }
+        return {
+          trackId: track.id,
+          status: index % 2 === 0 ? ('available' as const) : ('unavailable' as const),
+          reason: index % 2 === 0 ? null : ('membership_required' as const),
+          providerCode: index % 2 === 0 ? '200' : '404',
+          providerDetails,
+          checkedAt: '2026-07-21T01:00:00.000Z',
+        }
+      }),
     )
     const updated = await repo.getDetails(USER_ID, collection.id)
     expect(updated?.tracks[0]).toMatchObject({
       downloadStatus: 'available',
       downloadCheckedAt: '2026-07-21T01:00:00.000Z',
     })
-    expect(updated?.tracks[1]).toMatchObject({ downloadStatus: 'unavailable' })
+    expect(updated?.tracks[1]).toMatchObject({
+      downloadStatus: 'unavailable',
+      downloadReason: 'membership_required',
+      downloadProviderCode: '404',
+    })
   })
 
   it('shares fresh availability across playlists and returns each track once for checking', async () => {
@@ -69,43 +81,41 @@ describe('music collections repository in D1', () => {
     await repo.replaceTracks(first.id, [trackInput(1)])
     await repo.replaceTracks(second.id, [trackInput(1)])
 
-    const uncached = await repo.listTracksForAvailabilityCheck(
-      USER_ID,
-      { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T00:00:00.000Z' },
-      500,
-    )
+    const uncached = await repo.listTracksForAvailabilityCheck(USER_ID, CONNECTOR_ID, '2026-07-21T00:00:00.000Z', 500)
     expect(uncached).toHaveLength(1)
 
-    await repo.setTrackAvailabilities(USER_ID, [
-      { trackId: uncached[0]?.id ?? '', status: 'available', checkedAt: '2026-07-21T01:00:00.000Z' },
+    await repo.setTrackAvailabilities(USER_ID, CONNECTOR_ID, [
+      {
+        trackId: uncached[0]?.id ?? '',
+        status: 'available',
+        reason: null,
+        providerCode: '200',
+        providerDetails: {},
+        checkedAt: '2026-07-21T01:00:00.000Z',
+      },
     ])
-    const fresh = await repo.listTracksForAvailabilityCheck(
-      USER_ID,
-      { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T00:00:00.000Z' },
-      500,
-    )
+    const fresh = await repo.listTracksForAvailabilityCheck(USER_ID, CONNECTOR_ID, '2026-07-21T00:00:00.000Z', 500)
     expect(fresh).toEqual([])
     expect((await repo.getDetails(USER_ID, second.id))?.tracks[0]).toMatchObject({ downloadStatus: 'available' })
 
-    await repo.clearTrackAvailabilities(USER_ID)
+    await repo.clearTrackAvailabilities(CONNECTOR_ID)
     expect((await repo.getDetails(USER_ID, first.id))?.tracks[0]).toMatchObject({ downloadStatus: 'unknown' })
 
-    await repo.setTrackAvailabilities(USER_ID, [
-      { trackId: uncached[0]?.id ?? '', status: 'unknown', checkedAt: '2026-07-21T01:00:00.000Z' },
+    await repo.setTrackAvailabilities(USER_ID, CONNECTOR_ID, [
+      {
+        trackId: uncached[0]?.id ?? '',
+        status: 'unknown',
+        reason: 'provider_error',
+        providerCode: '503',
+        providerDetails: {},
+        checkedAt: '2026-07-21T01:00:00.000Z',
+      },
     ])
+    expect(await repo.listTracksForAvailabilityCheck(USER_ID, CONNECTOR_ID, '2026-07-21T00:00:00.000Z', 500)).toEqual(
+      [],
+    )
     expect(
-      await repo.listTracksForAvailabilityCheck(
-        USER_ID,
-        { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T00:00:00.000Z' },
-        500,
-      ),
-    ).toEqual([])
-    expect(
-      await repo.listTracksForAvailabilityCheck(
-        USER_ID,
-        { known: '2026-07-21T00:00:00.000Z', unknown: '2026-07-21T02:00:00.000Z' },
-        500,
-      ),
+      await repo.listTracksForAvailabilityCheck(USER_ID, CONNECTOR_ID, '2026-07-21T02:00:00.000Z', 500),
     ).toHaveLength(1)
   })
 })

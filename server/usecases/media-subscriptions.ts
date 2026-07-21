@@ -170,6 +170,14 @@ async function evaluateMusicSubscription(
           errorMessage: null,
           updatedAt: now,
         })) ?? record
+    } else if (record.status === 'waiting_source' && track.downloadStatus === 'available') {
+      record =
+        (await deps.downloadRecordsRepo.update(record.id, record.generation, {
+          status: 'queued',
+          attemptCount: 0,
+          errorMessage: null,
+          updatedAt: now,
+        })) ?? record
     }
 
     linkedRecordIds.push(record.id)

@@ -12,6 +12,7 @@ import {
   type ConnectorRecord,
   type DownloadRecordRecord,
   MusicResourceUnavailableError,
+  type MusicTrackAvailabilityResult,
   type MusicTrackRecord,
   type ResolvedMusicResource,
 } from './ports'
@@ -138,14 +139,9 @@ export async function dispatchMusicDownloadRecord(
   let resource: ResolvedMusicResource
   try {
     resource = await resolvePreferredTrackResource(deps, env, track, connector, record.config.preferredQuality, 2_000)
-    await setTrackAvailability(deps, record.userId, track.id, 'available')
+    await setTrackAvailability(deps, record.userId, connector.id, track.id, availableResult())
   } catch (error) {
-    await setTrackAvailability(
-      deps,
-      record.userId,
-      track.id,
-      error instanceof MusicResourceUnavailableError ? 'unavailable' : 'unknown',
-    )
+    await setTrackAvailability(deps, record.userId, connector.id, track.id, availabilityFromError(error))
     throw error
   }
 
@@ -245,18 +241,13 @@ export async function resolveMusicTrackDownload(
 
   try {
     const resource = await resolveTrackResource(deps, env, track, connector, access.quality)
-    await setTrackAvailability(deps, access.userId, track.id, 'available')
+    await setTrackAvailability(deps, access.userId, connector.id, track.id, availableResult())
     return {
       resource,
       filename: buildMusicFilename(track.artists, track.title, resource.extension),
     }
   } catch (error) {
-    await setTrackAvailability(
-      deps,
-      access.userId,
-      track.id,
-      error instanceof MusicResourceUnavailableError ? 'unavailable' : 'unknown',
-    )
+    await setTrackAvailability(deps, access.userId, connector.id, track.id, availabilityFromError(error))
     throw toResolutionError(error)
   }
 }
@@ -264,12 +255,22 @@ export async function resolveMusicTrackDownload(
 async function setTrackAvailability(
   deps: Deps,
   userId: string,
+  connectorId: string,
   trackId: string,
-  status: 'available' | 'unavailable' | 'unknown',
+  availability: MusicTrackAvailabilityResult,
 ): Promise<void> {
-  await deps.musicCollectionsRepo.setTrackAvailabilities(userId, [
-    { trackId, status, checkedAt: new Date().toISOString() },
+  await deps.musicCollectionsRepo.setTrackAvailabilities(userId, connectorId, [
+    { trackId, ...availability, checkedAt: new Date().toISOString() },
   ])
+}
+
+function availableResult(): MusicTrackAvailabilityResult {
+  return { status: 'available', reason: null, providerCode: '200', providerDetails: {} }
+}
+
+function availabilityFromError(error: unknown): MusicTrackAvailabilityResult {
+  if (error instanceof MusicResourceUnavailableError) return error.availability
+  return { status: 'unknown', reason: 'provider_error', providerCode: null, providerDetails: {} }
 }
 
 async function resolveTrackResource(

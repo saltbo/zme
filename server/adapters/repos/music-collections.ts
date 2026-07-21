@@ -7,7 +7,7 @@ import { and, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 type Db = ReturnType<typeof createDb>
 const D1_MAX_BOUND_PARAMETERS = 100
 const MUSIC_COLLECTION_TRACK_PARAMETERS = 4
-const MUSIC_TRACK_AVAILABILITY_PARAMETERS = 5
+const MUSIC_TRACK_AVAILABILITY_PARAMETERS = 9
 
 export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
   async function find(
@@ -78,7 +78,11 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
         .innerJoin(musicTracks, eq(musicCollectionTracks.trackId, musicTracks.id))
         .leftJoin(
           musicTrackAvailability,
-          and(eq(musicTrackAvailability.userId, userId), eq(musicTrackAvailability.trackId, musicTracks.id)),
+          and(
+            eq(musicTrackAvailability.userId, userId),
+            eq(musicTrackAvailability.connectorId, collection.connectorId ?? ''),
+            eq(musicTrackAvailability.trackId, musicTracks.id),
+          ),
         )
         .where(eq(musicCollectionTracks.collectionId, id))
         .orderBy(musicCollectionTracks.position)
@@ -86,7 +90,15 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
         ...toSummary(collection),
         subscription: null,
         tracks: rows.map(({ relation, track, availability }) =>
-          toTrack(track, relation.position, relation.addedAt, availability?.status, availability?.checkedAt),
+          toTrack(
+            track,
+            relation.position,
+            relation.addedAt,
+            availability?.status,
+            availability?.reason,
+            availability?.providerCode,
+            availability?.checkedAt,
+          ),
         ),
       } satisfies MusicCollectionDetails
     },
@@ -213,7 +225,7 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       }
     },
 
-    async listTracksForAvailabilityCheck(userId, staleBefore, limit) {
+    async listTracksForAvailabilityCheck(userId, connectorId, staleBefore, limit) {
       const rows = await db
         .selectDistinct({ track: musicTracks })
         .from(musicCollectionTracks)
@@ -221,26 +233,22 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
         .innerJoin(musicCollections, eq(musicCollectionTracks.collectionId, musicCollections.id))
         .leftJoin(
           musicTrackAvailability,
-          and(eq(musicTrackAvailability.userId, userId), eq(musicTrackAvailability.trackId, musicTracks.id)),
+          and(
+            eq(musicTrackAvailability.userId, userId),
+            eq(musicTrackAvailability.connectorId, connectorId),
+            eq(musicTrackAvailability.trackId, musicTracks.id),
+          ),
         )
         .where(
           and(
             eq(musicCollections.userId, userId),
+            eq(musicCollections.connectorId, connectorId),
             isNotNull(musicCollections.libraryAddedAt),
             eq(musicTracks.provider, 'netease'),
             or(
               isNull(musicTrackAvailability.trackId),
-              and(
-                eq(musicTrackAvailability.status, 'unknown'),
-                or(
-                  isNull(musicTrackAvailability.checkedAt),
-                  lte(musicTrackAvailability.checkedAt, staleBefore.unknown),
-                ),
-              ),
-              and(
-                inArray(musicTrackAvailability.status, ['available', 'unavailable']),
-                or(isNull(musicTrackAvailability.checkedAt), lte(musicTrackAvailability.checkedAt, staleBefore.known)),
-              ),
+              isNull(musicTrackAvailability.checkedAt),
+              lte(musicTrackAvailability.checkedAt, staleBefore),
             ),
           ),
         )
@@ -248,17 +256,26 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       return rows.map(({ track }) => toTrackRecord(track))
     },
 
-    async setTrackAvailabilities(userId, updates) {
+    async setTrackAvailabilities(userId, connectorId, updates) {
       const now = new Date().toISOString()
-      const rows = updates.map((update) => ({ userId, ...update, updatedAt: now }))
+      const rows = updates.map(({ providerDetails, ...update }) => ({
+        userId,
+        connectorId,
+        ...update,
+        providerDetailsJson: JSON.stringify(providerDetails),
+        updatedAt: now,
+      }))
       for (const values of chunks(rows, Math.floor(D1_MAX_BOUND_PARAMETERS / MUSIC_TRACK_AVAILABILITY_PARAMETERS))) {
         await db
           .insert(musicTrackAvailability)
           .values(values)
           .onConflictDoUpdate({
-            target: [musicTrackAvailability.userId, musicTrackAvailability.trackId],
+            target: [musicTrackAvailability.connectorId, musicTrackAvailability.trackId],
             set: {
               status: sql`excluded.status`,
+              reason: sql`excluded.reason`,
+              providerCode: sql`excluded.provider_code`,
+              providerDetailsJson: sql`excluded.provider_details_json`,
               checkedAt: sql`excluded.checked_at`,
               updatedAt: sql`excluded.updated_at`,
             },
@@ -266,8 +283,8 @@ export function createMusicCollectionsRepo(db: Db): MusicCollectionsRepo {
       }
     },
 
-    async clearTrackAvailabilities(userId) {
-      await db.delete(musicTrackAvailability).where(eq(musicTrackAvailability.userId, userId))
+    async clearTrackAvailabilities(connectorId) {
+      await db.delete(musicTrackAvailability).where(eq(musicTrackAvailability.connectorId, connectorId))
     },
 
     async deleteMissingConnectorCollections(connectorId, externalIds) {
@@ -326,11 +343,15 @@ function toTrack(
   position: number,
   addedAt: string | null,
   downloadStatus: 'available' | 'unavailable' | 'unknown' | undefined,
+  downloadReason: MusicLibraryTrack['downloadReason'] | undefined,
+  downloadProviderCode: string | null | undefined,
   downloadCheckedAt: string | null | undefined,
 ): MusicLibraryTrack {
   return {
     ...toTrackRecord(row),
     downloadStatus: downloadStatus ?? 'unknown',
+    downloadReason: downloadReason ?? null,
+    downloadProviderCode: downloadProviderCode ?? null,
     downloadCheckedAt: downloadCheckedAt ?? null,
     position,
     addedAt,

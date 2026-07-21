@@ -272,11 +272,11 @@ describe('Netease playlist connector', () => {
                 id: 123,
                 url: 'https://m701.music.126.net/audio.mp3',
                 type: 'mp3',
-                level: 'standard',
+                level: 'exhigh',
                 code: 200,
                 freeTrialInfo: null,
               },
-              { id: 456, url: null, type: null, level: 'standard', code: 404, freeTrialInfo: null },
+              { id: 456, url: null, type: null, level: 'standard', code: 404, freeTrialInfo: null, fee: 1, payed: 0 },
             ],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -293,10 +293,26 @@ describe('Netease playlist connector', () => {
     expect(result).toHaveLength(2)
     expect(result[0]).toMatchObject({ externalId: '123' })
     expect(result[1]).toMatchObject({ externalId: '456' })
-    expect(availability.statuses).toEqual(
+    expect(availability.results).toEqual(
       new Map([
-        ['123', 'available'],
-        ['456', 'unavailable'],
+        [
+          '123',
+          {
+            status: 'available',
+            reason: null,
+            providerCode: '200',
+            providerDetails: { level: 'exhigh', freeTrial: false },
+          },
+        ],
+        [
+          '456',
+          {
+            status: 'unavailable',
+            reason: 'membership_required',
+            providerCode: '404',
+            providerDetails: { fee: 1, payed: 0, level: 'standard', freeTrial: false },
+          },
+        ],
       ]),
     )
     expect(availability.interrupted).toBeNull()
@@ -332,8 +348,12 @@ describe('Netease playlist connector', () => {
 
     const result = await neteasePlaylistConnector.checkTrackAvailability(['MUSIC_U=session-value'], trackIds)
 
-    expect(result.statuses.size).toBe(100)
-    expect(result.interrupted).toBe('Netease request failed: 429')
+    expect(result.results.size).toBe(100)
+    expect(result.interrupted).toEqual({
+      reason: 'rate_limited',
+      providerCode: '429',
+      message: 'Netease request failed: 429',
+    })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
@@ -408,6 +428,6 @@ describe('Netease music resource resolver', () => {
 
     await expect(
       neteaseMusicResourceResolver.resolve(['MUSIC_U=session-value'], { trackId: '123', quality: 'exhigh' }),
-    ).rejects.toThrow('The full Netease track is not available for this account.')
+    ).rejects.toThrow('Netease only returned a trial preview for this track.')
   })
 })

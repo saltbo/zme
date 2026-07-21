@@ -110,7 +110,7 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.post('/connectors/:id/sync', zValidator('param', idParamsSchema), async (c) => {
-    const result = await syncConnector(c.get('deps'), c.env, c.get('user').id, c.req.valid('param').id)
+    const result = await syncConnector(c.get('deps'), c.env, c.get('user').id, c.req.valid('param').id, 'manual')
     return c.json({ result })
   })
 

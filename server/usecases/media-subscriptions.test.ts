@@ -43,6 +43,8 @@ const tracks: MusicCollectionDetails['tracks'] = [
     position: 1,
     addedAt: null,
     downloadStatus: 'available',
+    downloadReason: null,
+    downloadProviderCode: '200',
     downloadCheckedAt: null,
     downloadRecord: null,
   },
@@ -61,6 +63,8 @@ const tracks: MusicCollectionDetails['tracks'] = [
     position: 2,
     addedAt: null,
     downloadStatus: 'unavailable',
+    downloadReason: 'membership_required',
+    downloadProviderCode: '404',
     downloadCheckedAt: null,
     downloadRecord: null,
   },
@@ -204,6 +208,29 @@ describe('music collection subscriptions', () => {
     expect(fixture.records).toHaveLength(3)
     expect(fixture.records[0]).toMatchObject({ status: 'accepted', generation: 1 })
     expect(fixture.records[2]).toMatchObject({ resourceKey: 'netease:track:remote-track-3', status: 'queued' })
+    expect(fixture.wake).toHaveBeenCalledOnce()
+  })
+
+  it('requeues a waiting subscription track after availability recovers', async () => {
+    const fixture = createFixture()
+    await enableMusicCollectionSubscription(fixture.deps, 'user-1', collection.id, {
+      downloaderId: 'downloader-1',
+      quality: 'exhigh',
+    })
+    fixture.wake.mockClear()
+    fixture.setTracks([
+      tracks[0],
+      {
+        ...tracks[1],
+        downloadStatus: 'available',
+        downloadReason: null,
+        downloadProviderCode: '200',
+      },
+    ])
+
+    await evaluateMusicCollectionSubscription(fixture.deps, 'user-1', collection.id)
+
+    expect(fixture.records.map((record) => record.status)).toEqual(['queued', 'queued'])
     expect(fixture.wake).toHaveBeenCalledOnce()
   })
 

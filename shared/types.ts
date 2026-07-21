@@ -328,6 +328,18 @@ export interface ConnectorLoginAttempt {
 export type MusicCollectionKind = 'playlist' | 'album' | 'favorites'
 export type MusicCollectionProvider = 'netease' | 'musicbrainz' | 'zme'
 export type MusicDownloadStatus = 'available' | 'unavailable' | 'unknown'
+export type MusicAvailabilityReason =
+  | 'membership_required'
+  | 'purchase_required'
+  | 'trial_only'
+  | 'region_restricted'
+  | 'removed_or_unlicensed'
+  | 'authentication_required'
+  | 'risk_control'
+  | 'rate_limited'
+  | 'provider_unavailable'
+  | 'provider_error'
+  | 'malformed_response'
 export type DownloadRecordStatus =
   | 'queued'
   | 'resolving'
@@ -390,6 +402,8 @@ export interface MusicLibraryTrack {
   durationMs: number | null
   isrcs: string[]
   downloadStatus: MusicDownloadStatus
+  downloadReason: MusicAvailabilityReason | null
+  downloadProviderCode: string | null
   downloadCheckedAt: string | null
   position: number
   addedAt: string | null
@@ -398,7 +412,14 @@ export interface MusicLibraryTrack {
 
 export type MusicFavoriteTrackInput = Omit<
   MusicLibraryTrack,
-  'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt' | 'downloadRecord'
+  | 'id'
+  | 'position'
+  | 'addedAt'
+  | 'downloadStatus'
+  | 'downloadReason'
+  | 'downloadProviderCode'
+  | 'downloadCheckedAt'
+  | 'downloadRecord'
 >
 
 export interface MusicCollectionDetails extends MusicCollectionSummary {

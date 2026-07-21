@@ -216,6 +216,7 @@ describe('syncConnector', () => {
     const replacedCollections: string[] = []
     const availabilityChecks: string[][] = []
     const availabilityUpdates: unknown[] = []
+    const availabilityClears: string[] = []
     const deps = {
       connectorsRepo: {
         get: async () => ({
@@ -248,8 +249,17 @@ describe('syncConnector', () => {
           checkTrackAvailability: async (_credentials: string[], trackIds: string[]) => {
             availabilityChecks.push(trackIds)
             return {
-              statuses: new Map([[trackIds[0] ?? '', 'available' as const]]),
-              interrupted: 'Netease request failed: 429',
+              results: new Map([
+                [
+                  trackIds[0] ?? '',
+                  { status: 'available' as const, reason: null, providerCode: '200', providerDetails: {} },
+                ],
+              ]),
+              interrupted: {
+                reason: 'rate_limited' as const,
+                providerCode: '429',
+                message: 'Netease request failed: 429',
+              },
             }
           },
         },
@@ -266,25 +276,49 @@ describe('syncConnector', () => {
         },
         updateSnapshot: async () => existing[0],
         deleteMissingConnectorCollections: async () => undefined,
+        clearTrackAvailabilities: async (connectorId: string) => {
+          availabilityClears.push(connectorId)
+        },
         listTracksForAvailabilityCheck: async () => [
           musicTrackRecord('track-1', 'track-remote-1'),
           musicTrackRecord('track-2', 'track-remote-2'),
         ],
-        setTrackAvailabilities: async (_userId: string, updates: unknown[]) => {
+        setTrackAvailabilities: async (_userId: string, _connectorId: string, updates: unknown[]) => {
           availabilityUpdates.push(...updates)
         },
       },
       mediaSubscriptionsRepo: { find: async () => null },
     } as never as Deps
 
-    const result = await syncConnector(deps, { CONNECTOR_CREDENTIALS_SECRET: secret } as Env, 'user-1', 'connector-1')
+    const result = await syncConnector(
+      deps,
+      { CONNECTOR_CREDENTIALS_SECRET: secret } as Env,
+      'user-1',
+      'connector-1',
+      'manual',
+    )
 
     expect(fetchedTrackPlaylists).toEqual(['remote-1', 'remote-2'])
     expect(replacedCollections).toEqual(['playlist-1', 'playlist-2'])
+    expect(availabilityClears).toEqual(['connector-1'])
     expect(availabilityChecks).toEqual([['track-remote-1', 'track-remote-2']])
     expect(availabilityUpdates).toEqual([
-      { trackId: 'track-1', status: 'available', checkedAt: expect.any(String) },
-      { trackId: 'track-2', status: 'unknown', checkedAt: expect.any(String) },
+      {
+        trackId: 'track-1',
+        status: 'available',
+        reason: null,
+        providerCode: '200',
+        providerDetails: {},
+        checkedAt: expect.any(String),
+      },
+      {
+        trackId: 'track-2',
+        status: 'unknown',
+        reason: 'rate_limited',
+        providerCode: '429',
+        providerDetails: {},
+        checkedAt: expect.any(String),
+      },
     ])
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('connector.music_availability.interrupted'))
     expect(result).toEqual({
@@ -409,6 +443,7 @@ describe('Netease SMS login', () => {
       musicCollectionsRepo: {
         listForConnector: async () => [],
         deleteMissingConnectorCollections: async () => undefined,
+        clearTrackAvailabilities: async () => undefined,
         listTracksForAvailabilityCheck: async () => [],
       },
     } as never as Deps

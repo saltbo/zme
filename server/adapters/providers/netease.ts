@@ -11,9 +11,11 @@ import { gunzipSync } from 'node:zlib'
 import {
   type ImportedMusicPlaylist,
   type ImportedMusicTrack,
+  type MusicAvailabilityInterruption,
   type MusicPlaylistConnector,
   type MusicResourceResolver,
   MusicResourceUnavailableError,
+  type MusicTrackAvailabilityResult,
 } from '@server/usecases/ports'
 import type { MusicDownloadQuality } from '@shared/types'
 
@@ -63,6 +65,10 @@ interface NeteasePlaybackResource {
   level?: string | null
   code?: number
   freeTrialInfo?: unknown
+  fee?: number
+  payed?: number
+  st?: number
+  toast?: boolean
 }
 
 interface NeteaseRiskData {
@@ -227,31 +233,26 @@ export const neteasePlaylistConnector: MusicPlaylistConnector = {
     const uniqueTrackIds = [...new Set(trackIds)]
     if (uniqueTrackIds.some((id) => !/^\d+$/.test(id))) throw new Error('Netease track id is invalid.')
     const ids = uniqueTrackIds.map(Number)
-    const statuses = new Map<string, 'available' | 'unavailable' | 'unknown'>()
-    let interrupted: string | null = null
+    const results = new Map<string, MusicTrackAvailabilityResult>()
+    let interrupted: MusicAvailabilityInterruption | null = null
     for (let offset = 0; offset < ids.length; offset += 100) {
       const pageIds = ids.slice(offset, offset + 100)
       try {
         const resources = await getNeteasePlaybackResources(credentials, pageIds, 'standard')
-        const riskItem = resources.find(isNeteaseRiskResource)
-        if (riskItem) {
-          interrupted = `Netease availability check was interrupted by risk control (code ${riskItem.code}).`
+        interrupted = getNeteaseInterruption(resources)
+        if (interrupted) {
           break
         }
         const byId = new Map(resources.flatMap((item) => (item.id ? [[item.id, item] as const] : [])))
         for (const id of pageIds) {
-          const item = byId.get(id)
-          statuses.set(
-            String(id),
-            item ? (isFullNeteaseResource(item, 'standard') ? 'available' : 'unavailable') : 'unknown',
-          )
+          results.set(String(id), classifyNeteaseResource(byId.get(id)))
         }
       } catch (error) {
-        interrupted = error instanceof Error ? error.message : 'Netease availability check was interrupted.'
+        interrupted = classifyNeteaseInterruption(error)
         break
       }
     }
-    return { statuses, interrupted }
+    return { results, interrupted }
   },
 }
 
@@ -261,19 +262,21 @@ export const neteaseMusicResourceResolver: MusicResourceResolver = {
     const item = (await getNeteasePlaybackResources(credentials, [Number(input.trackId)], input.quality)).find(
       (value) => String(value.id) === input.trackId,
     )
-    if (!isFullNeteaseResource(item, input.quality)) {
-      throw new MusicResourceUnavailableError('The full Netease track is not available for this account.')
+    if (!isFullNeteaseResource(item)) {
+      const availability = classifyNeteaseResource(item)
+      throw new MusicResourceUnavailableError(availabilityMessage(availability), availability)
     }
 
     const url = normalizeNeteaseMediaUrl(item.url)
-    const extension = normalizeAudioExtension(item.type, input.quality)
+    const quality = normalizeResolvedQuality(item.level, input.quality)
+    const extension = normalizeAudioExtension(item.type, quality)
     return {
       url: url.toString(),
       headers: {
         Referer: `${NETEASE_BASE}/`,
         'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
       },
-      quality: input.quality,
+      quality,
       extension,
       contentType: extension === 'flac' ? 'audio/flac' : 'audio/mpeg',
       contentLength: typeof item.size === 'number' && item.size >= 0 ? item.size : null,
@@ -297,15 +300,105 @@ async function getNeteasePlaybackResources(
   return response.body.data ?? []
 }
 
-function isNeteaseRiskResource(item: NeteasePlaybackResource): boolean {
-  return item.code === 401 || item.code === 403 || item.code === 429 || item.code === -460 || item.code === -462
+function isFullNeteaseResource(item: NeteasePlaybackResource | undefined): item is NeteasePlaybackResource & {
+  url: string
+} {
+  return Boolean(item?.url && item.code === 200 && !item.freeTrialInfo)
 }
 
-function isFullNeteaseResource(
-  item: NeteasePlaybackResource | undefined,
-  quality: MusicDownloadQuality,
-): item is NeteasePlaybackResource & { url: string } {
-  return Boolean(item?.url && item.code === 200 && !item.freeTrialInfo && (!item.level || item.level === quality))
+function classifyNeteaseResource(item: NeteasePlaybackResource | undefined): MusicTrackAvailabilityResult {
+  if (!item) {
+    return {
+      status: 'unknown',
+      reason: 'malformed_response',
+      providerCode: null,
+      providerDetails: {},
+    }
+  }
+
+  const providerCode = item.code === undefined ? null : String(item.code)
+  const providerDetails = neteaseProviderDetails(item)
+  if (isFullNeteaseResource(item)) return { status: 'available', reason: null, providerCode, providerDetails }
+  if (item.freeTrialInfo) return { status: 'unavailable', reason: 'trial_only', providerCode, providerDetails }
+  if (item.fee === 1 && !item.payed) {
+    return { status: 'unavailable', reason: 'membership_required', providerCode, providerDetails }
+  }
+  if (item.fee === 4 && !item.payed) {
+    return { status: 'unavailable', reason: 'purchase_required', providerCode, providerDetails }
+  }
+  if (item.toast) return { status: 'unavailable', reason: 'region_restricted', providerCode, providerDetails }
+  if (typeof item.st === 'number' && item.st < 0) {
+    return { status: 'unavailable', reason: 'removed_or_unlicensed', providerCode, providerDetails }
+  }
+  return { status: 'unavailable', reason: 'provider_unavailable', providerCode, providerDetails }
+}
+
+function neteaseProviderDetails(item: NeteasePlaybackResource) {
+  return Object.fromEntries(
+    Object.entries({
+      fee: item.fee,
+      payed: item.payed,
+      level: item.level,
+      freeTrial: Boolean(item.freeTrialInfo),
+      st: item.st,
+      toast: item.toast,
+    }).filter((entry): entry is [string, string | number | boolean | null] => entry[1] !== undefined),
+  )
+}
+
+function getNeteaseInterruption(resources: NeteasePlaybackResource[]): MusicAvailabilityInterruption | null {
+  const item = resources.find((resource) => [401, 403, 429, -460, -462].includes(resource.code ?? 0))
+  if (!item) return null
+  const providerCode = String(item.code)
+  if (item.code === 401) {
+    return {
+      reason: 'authentication_required',
+      providerCode,
+      message: `Netease availability check requires authentication (code ${providerCode}).`,
+    }
+  }
+  if (item.code === 429) {
+    return {
+      reason: 'rate_limited',
+      providerCode,
+      message: `Netease availability check was rate limited (code ${providerCode}).`,
+    }
+  }
+  return {
+    reason: 'risk_control',
+    providerCode,
+    message: `Netease availability check was interrupted by risk control (code ${providerCode}).`,
+  }
+}
+
+function classifyNeteaseInterruption(error: unknown): MusicAvailabilityInterruption {
+  const message = error instanceof Error ? error.message : 'Netease availability check was interrupted.'
+  const providerCode = message.match(/(?:code |failed: )(-?\d+)/i)?.[1] ?? null
+  if (providerCode === '401') return { reason: 'authentication_required', providerCode, message }
+  if (providerCode === '429') return { reason: 'rate_limited', providerCode, message }
+  if (providerCode === '403' || providerCode === '-460' || providerCode === '-462') {
+    return { reason: 'risk_control', providerCode, message }
+  }
+  return { reason: 'provider_error', providerCode, message }
+}
+
+function availabilityMessage(result: MusicTrackAvailabilityResult): string {
+  if (result.reason === 'membership_required') return 'A Netease membership is required for this track.'
+  if (result.reason === 'purchase_required') return 'This Netease track must be purchased separately.'
+  if (result.reason === 'trial_only') return 'Netease only returned a trial preview for this track.'
+  if (result.reason === 'region_restricted') return 'This Netease track is unavailable in the current region.'
+  if (result.reason === 'removed_or_unlicensed') return 'This Netease track was removed or is unlicensed.'
+  if (result.reason === 'authentication_required') return 'The Netease account must be authenticated again.'
+  return 'The full Netease track is not available for this account.'
+}
+
+function normalizeResolvedQuality(
+  level: string | null | undefined,
+  requested: MusicDownloadQuality,
+): MusicDownloadQuality {
+  if (level === 'standard' || level === 'exhigh' || level === 'lossless' || level === 'hires') return level
+  if (level === 'higher') return 'standard'
+  return requested
 }
 
 function normalizeNeteaseMediaUrl(value: string): URL {

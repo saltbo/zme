@@ -30,6 +30,7 @@ import type {
   MediaSourceKind,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
+  MusicAvailabilityReason,
   MusicCollectionDetails,
   MusicCollectionKind,
   MusicCollectionProvider,
@@ -314,19 +315,37 @@ export interface MusicCollectionRecord extends MusicCollectionSummary {
 export interface MusicTrackInput
   extends Omit<
     MusicLibraryTrack,
-    'id' | 'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt' | 'downloadRecord'
+    | 'id'
+    | 'position'
+    | 'addedAt'
+    | 'downloadStatus'
+    | 'downloadReason'
+    | 'downloadProviderCode'
+    | 'downloadCheckedAt'
+    | 'downloadRecord'
   > {
   addedAt?: string | null
 }
 
 export type MusicTrackRecord = Omit<
   MusicLibraryTrack,
-  'position' | 'addedAt' | 'downloadStatus' | 'downloadCheckedAt' | 'downloadRecord'
+  | 'position'
+  | 'addedAt'
+  | 'downloadStatus'
+  | 'downloadReason'
+  | 'downloadProviderCode'
+  | 'downloadCheckedAt'
+  | 'downloadRecord'
 >
+
+export type MusicAvailabilityProviderDetails = Record<string, string | number | boolean | null>
 
 export interface MusicTrackAvailabilityUpdate {
   trackId: string
   status: MusicDownloadStatus
+  reason: MusicAvailabilityReason | null
+  providerCode: string | null
+  providerDetails: MusicAvailabilityProviderDetails
   checkedAt: string | null
 }
 
@@ -365,11 +384,12 @@ export interface MusicCollectionsRepo {
   replaceTracks(collectionId: string, tracks: MusicTrackInput[]): Promise<void>
   listTracksForAvailabilityCheck(
     userId: string,
-    staleBefore: { known: string; unknown: string },
+    connectorId: string,
+    staleBefore: string,
     limit: number,
   ): Promise<MusicTrackRecord[]>
-  setTrackAvailabilities(userId: string, updates: MusicTrackAvailabilityUpdate[]): Promise<void>
-  clearTrackAvailabilities(userId: string): Promise<void>
+  setTrackAvailabilities(userId: string, connectorId: string, updates: MusicTrackAvailabilityUpdate[]): Promise<void>
+  clearTrackAvailabilities(connectorId: string): Promise<void>
   deleteMissingConnectorCollections(connectorId: string, externalIds: string[]): Promise<void>
   delete(userId: string, id: string): Promise<boolean>
 }
@@ -642,8 +662,24 @@ export interface MusicPlaylistConnector {
 }
 
 export interface MusicTrackAvailabilityCheckResult {
-  statuses: Map<string, MusicDownloadStatus>
-  interrupted: string | null
+  results: Map<string, MusicTrackAvailabilityResult>
+  interrupted: MusicAvailabilityInterruption | null
+}
+
+export interface MusicTrackAvailabilityResult {
+  status: MusicDownloadStatus
+  reason: MusicAvailabilityReason | null
+  providerCode: string | null
+  providerDetails: MusicAvailabilityProviderDetails
+}
+
+export interface MusicAvailabilityInterruption {
+  reason: Extract<
+    MusicAvailabilityReason,
+    'authentication_required' | 'risk_control' | 'rate_limited' | 'provider_error'
+  >
+  providerCode: string | null
+  message: string
 }
 
 export interface ResolvedMusicResource {
@@ -663,7 +699,15 @@ export interface MusicResourceResolver {
 }
 
 export class MusicResourceUnavailableError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly availability: MusicTrackAvailabilityResult = {
+      status: 'unavailable',
+      reason: 'provider_unavailable',
+      providerCode: null,
+      providerDetails: {},
+    },
+  ) {
     super(message)
     this.name = 'MusicResourceUnavailableError'
   }

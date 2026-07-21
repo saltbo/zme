@@ -1,5 +1,6 @@
 import type {
   DownloaderSummary,
+  MusicAvailabilityReason,
   MusicCollectionSummary,
   MusicDownloadQuality,
   MusicLibraryTrack,
@@ -220,9 +221,17 @@ export function MusicCollectionDetailPage() {
                 <div className="flex min-w-0 items-center gap-2 text-muted-foreground text-xs">
                   <span className="truncate">{track.artists.join(', ') || t('unknownArtist')}</span>
                   {track.provider === 'netease' && track.downloadStatus === 'unavailable' ? (
-                    <span className="shrink-0 text-destructive">{t('musicTrackUnavailable')}</span>
+                    <span className="shrink-0 text-destructive">
+                      {track.downloadReason
+                        ? t(musicAvailabilityReasonKeys[track.downloadReason])
+                        : t('musicTrackUnavailable')}
+                    </span>
                   ) : track.provider === 'netease' && track.downloadStatus === 'unknown' ? (
-                    <span className="shrink-0">{t('musicTrackUnknown')}</span>
+                    <span className="shrink-0">
+                      {track.downloadReason
+                        ? t(musicAvailabilityReasonKeys[track.downloadReason])
+                        : t('musicTrackUnknown')}
+                    </span>
                   ) : null}
                   {track.downloadRecord ? <MusicDownloadRecordBadge status={track.downloadRecord.status} /> : null}
                 </div>
@@ -699,6 +708,20 @@ function formatDuration(durationMs: number | null) {
   const totalSeconds = Math.round(durationMs / 1000)
   return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`
 }
+
+const musicAvailabilityReasonKeys = {
+  membership_required: 'musicAvailabilityReason_membership_required',
+  purchase_required: 'musicAvailabilityReason_purchase_required',
+  trial_only: 'musicAvailabilityReason_trial_only',
+  region_restricted: 'musicAvailabilityReason_region_restricted',
+  removed_or_unlicensed: 'musicAvailabilityReason_removed_or_unlicensed',
+  authentication_required: 'musicAvailabilityReason_authentication_required',
+  risk_control: 'musicAvailabilityReason_risk_control',
+  rate_limited: 'musicAvailabilityReason_rate_limited',
+  provider_unavailable: 'musicAvailabilityReason_provider_unavailable',
+  provider_error: 'musicAvailabilityReason_provider_error',
+  malformed_response: 'musicAvailabilityReason_malformed_response',
+} as const satisfies Record<MusicAvailabilityReason, string>
 
 function formatCollectionDate(value: string, language: string) {
   return new Intl.DateTimeFormat(language, { dateStyle: 'medium' }).format(new Date(value))

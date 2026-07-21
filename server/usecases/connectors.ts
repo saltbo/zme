@@ -34,9 +34,10 @@ const CONNECTOR_DEFINITIONS = {
   douban: { authModes: ['profile'], capabilities: ['library.import'] },
   netease: { authModes: ['qr', 'sms'], capabilities: ['music.playlists.read', 'music.tracks.download'] },
 } as const
-const KNOWN_MUSIC_AVAILABILITY_TTL_MS = 24 * 60 * 60 * 1000
-const UNKNOWN_MUSIC_AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000
-const MAX_MUSIC_AVAILABILITY_CHECKS_PER_SYNC = 500
+const MUSIC_AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000
+const MUSIC_AVAILABILITY_CHECK_PAGE_SIZE = 500
+
+export type ConnectorSyncTrigger = 'scheduled' | 'manual' | 'login'
 
 export async function listConnectors(deps: Deps, userId: string): Promise<ConnectorSummary[]> {
   return (await deps.connectorsRepo.list(userId)).map(toSummary)
@@ -228,14 +229,20 @@ export async function loginNeteaseWithSms(
   return { connector, verification: null }
 }
 
-export async function syncConnector(deps: Deps, env: Env, userId: string, id: string): Promise<ConnectorSyncResult> {
+export async function syncConnector(
+  deps: Deps,
+  env: Env,
+  userId: string,
+  id: string,
+  trigger: ConnectorSyncTrigger = 'scheduled',
+): Promise<ConnectorSyncResult> {
   const connector = await deps.connectorsRepo.get(userId, id)
   if (!connector) throw new Error('Connector was not found.')
   try {
     const result =
       connector.kind === 'douban'
         ? await syncDoubanConnector(deps, connector)
-        : await syncNeteaseConnector(deps, env, connector)
+        : await syncNeteaseConnector(deps, env, connector, trigger !== 'scheduled')
     await deps.connectorsRepo.markSynced(connector.id, result, null)
     return result
   } catch (error) {
@@ -252,7 +259,7 @@ export async function syncEnabledConnectors(deps: Deps, env: Env): Promise<void>
   const connectors = await deps.connectorsRepo.listEnabled()
   for (const connector of connectors) {
     try {
-      await syncConnector(deps, env, connector.userId, connector.id)
+      await syncConnector(deps, env, connector.userId, connector.id, 'scheduled')
     } catch (error) {
       console.error(
         JSON.stringify({
@@ -307,6 +314,7 @@ async function syncNeteaseConnector(
   deps: Deps,
   env: Env,
   connector: ConnectorRecord,
+  forceAvailability: boolean,
 ): Promise<MusicPlaylistSyncResult> {
   if (!connector.credentialsEncrypted) throw new Error('Netease connector has no credentials.')
   const credentials = await decryptConnectorCredentials(
@@ -315,6 +323,7 @@ async function syncNeteaseConnector(
   )
   const remotePlaylists = await deps.musicPlaylistConnectors.netease.listPlaylists(credentials)
   const existing = await deps.musicCollectionsRepo.listForConnector(connector.userId, connector.id)
+  const selectedCollectionIds: string[] = []
   let selectedPlaylists = 0
   let tracks = 0
   for (const playlist of remotePlaylists) {
@@ -340,7 +349,7 @@ async function syncNeteaseConnector(
       trackCount: playlistTracks.length,
       lastSyncedAt: new Date().toISOString(),
     })
-    await evaluateMusicCollectionSubscription(deps, connector.userId, collection.id)
+    selectedCollectionIds.push(collection.id)
     selectedPlaylists += 1
     tracks += playlistTracks.length
   }
@@ -348,7 +357,10 @@ async function syncNeteaseConnector(
     connector.id,
     remotePlaylists.map((item) => item.externalId),
   )
-  await refreshNeteaseTrackAvailability(deps, connector, credentials)
+  await refreshNeteaseTrackAvailability(deps, connector, credentials, forceAvailability)
+  for (const collectionId of selectedCollectionIds) {
+    await evaluateMusicCollectionSubscription(deps, connector.userId, collectionId)
+  }
   return {
     capability: 'music.playlists.read',
     playlists: remotePlaylists.length,
@@ -361,40 +373,55 @@ async function refreshNeteaseTrackAvailability(
   deps: Deps,
   connector: ConnectorRecord,
   credentials: string[],
+  force: boolean,
 ): Promise<void> {
   const now = new Date()
-  const candidates = await deps.musicCollectionsRepo.listTracksForAvailabilityCheck(
-    connector.userId,
-    {
-      known: new Date(now.getTime() - KNOWN_MUSIC_AVAILABILITY_TTL_MS).toISOString(),
-      unknown: new Date(now.getTime() - UNKNOWN_MUSIC_AVAILABILITY_TTL_MS).toISOString(),
-    },
-    MAX_MUSIC_AVAILABILITY_CHECKS_PER_SYNC,
-  )
-  if (candidates.length === 0) return
+  if (force) await deps.musicCollectionsRepo.clearTrackAvailabilities(connector.id)
+  const staleBefore = new Date(now.getTime() - MUSIC_AVAILABILITY_TTL_MS).toISOString()
+  let checkedTracks = 0
 
-  const result = await deps.musicPlaylistConnectors.netease.checkTrackAvailability(
-    credentials,
-    candidates.map((track) => track.externalId),
-  )
-  const checkedAt = now.toISOString()
-  await deps.musicCollectionsRepo.setTrackAvailabilities(
-    connector.userId,
-    candidates.flatMap((track) => {
-      const status = result.statuses.get(track.externalId) ?? (result.interrupted ? 'unknown' : undefined)
-      return status ? [{ trackId: track.id, status, checkedAt }] : []
-    }),
-  )
-  if (result.interrupted) {
-    console.warn(
-      JSON.stringify({
-        event: 'connector.music_availability.interrupted',
-        connectorId: connector.id,
-        checkedTracks: result.statuses.size,
-        pendingTracks: candidates.length - result.statuses.size,
-        message: result.interrupted,
+  while (true) {
+    const candidates = await deps.musicCollectionsRepo.listTracksForAvailabilityCheck(
+      connector.userId,
+      connector.id,
+      staleBefore,
+      MUSIC_AVAILABILITY_CHECK_PAGE_SIZE,
+    )
+    if (candidates.length === 0) return
+
+    const result = await deps.musicPlaylistConnectors.netease.checkTrackAvailability(
+      credentials,
+      candidates.map((track) => track.externalId),
+    )
+    const checkedAt = new Date().toISOString()
+    await deps.musicCollectionsRepo.setTrackAvailabilities(
+      connector.userId,
+      connector.id,
+      candidates.map((track) => {
+        const availability = result.results.get(track.externalId) ?? {
+          status: 'unknown' as const,
+          reason: result.interrupted?.reason ?? 'malformed_response',
+          providerCode: result.interrupted?.providerCode ?? null,
+          providerDetails: {},
+        }
+        return { trackId: track.id, ...availability, checkedAt }
       }),
     )
+    checkedTracks += result.results.size
+    if (result.interrupted) {
+      console.warn(
+        JSON.stringify({
+          event: 'connector.music_availability.interrupted',
+          connectorId: connector.id,
+          checkedTracks,
+          pendingTracks: candidates.length - result.results.size,
+          reason: result.interrupted.reason,
+          providerCode: result.interrupted.providerCode,
+          message: result.interrupted.message,
+        }),
+      )
+      return
+    }
   }
 }
 
@@ -405,7 +432,6 @@ async function saveConnectedNeteaseConnector(
   account: ConnectedMusicAccount,
   credentialsEncrypted: string,
 ): Promise<ConnectorSummary> {
-  const existing = await deps.connectorsRepo.findByKind(userId, 'netease')
   const record = await deps.connectorsRepo.save(userId, 'netease', {
     externalAccountId: account.externalAccountId,
     displayName: account.displayName,
@@ -415,10 +441,7 @@ async function saveConnectedNeteaseConnector(
     status: 'connected',
     enabled: true,
   })
-  if (existing && existing.externalAccountId !== account.externalAccountId) {
-    await deps.musicCollectionsRepo.clearTrackAvailabilities(userId)
-  }
-  await syncConnector(deps, env, userId, record.id)
+  await syncConnector(deps, env, userId, record.id, 'login')
   const synced = await deps.connectorsRepo.get(userId, record.id)
   return synced ? toSummary(synced) : toSummary(record)
 }

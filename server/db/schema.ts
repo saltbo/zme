@@ -235,16 +235,36 @@ export const musicTrackAvailability = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
+    connectorId: text('connector_id')
+      .notNull()
+      .references(() => connectors.id, { onDelete: 'cascade' }),
     trackId: text('track_id')
       .notNull()
       .references(() => musicTracks.id, { onDelete: 'cascade' }),
     status: text('status', { enum: ['available', 'unavailable', 'unknown'] }).notNull(),
+    reason: text('reason', {
+      enum: [
+        'membership_required',
+        'purchase_required',
+        'trial_only',
+        'region_restricted',
+        'removed_or_unlicensed',
+        'authentication_required',
+        'risk_control',
+        'rate_limited',
+        'provider_unavailable',
+        'provider_error',
+        'malformed_response',
+      ],
+    }),
+    providerCode: text('provider_code'),
+    providerDetailsJson: text('provider_details_json').notNull().default('{}'),
     checkedAt: text('checked_at'),
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
-    uniqueIndex('music_track_availability_user_track_idx').on(table.userId, table.trackId),
-    index('music_track_availability_user_checked_idx').on(table.userId, table.checkedAt),
+    uniqueIndex('music_track_availability_connector_track_idx').on(table.connectorId, table.trackId),
+    index('music_track_availability_connector_checked_idx').on(table.connectorId, table.checkedAt),
   ],
 )
 

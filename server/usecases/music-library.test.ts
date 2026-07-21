@@ -54,6 +54,8 @@ function createDeps() {
                 position: index + 1,
                 addedAt: item.addedAt ?? null,
                 downloadStatus: 'unknown',
+                downloadReason: null,
+                downloadProviderCode: null,
                 downloadCheckedAt: null,
                 downloadRecord: null,
               })),
