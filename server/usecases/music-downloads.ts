@@ -185,12 +185,7 @@ export async function dispatchMusicDownloadRecord(
       title: filename,
       category: 'zme:music',
       targetSubdirectory: buildMusicDownloadSubdirectory(track),
-      tags: [
-        `downloadRecordId=${record.id}`,
-        `generation=${record.generation}`,
-        `mediaKey=${track.mediaKey}`,
-        'kind=music',
-      ],
+      tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
     })
     const acceptedAt = new Date().toISOString()
     await deps.downloadRecordsRepo.update(record.id, record.generation, {

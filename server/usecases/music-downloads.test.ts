@@ -265,6 +265,7 @@ describe('music downloads', () => {
       sourceType: 'http',
       title: '01-03 Track Name.mp3',
       targetSubdirectory: 'Artist/Album (2024)',
+      tags: ['mediaKey=netease:track:123', 'kind=music'],
     })
     const url = new URL(submitted?.uri ?? '')
     expect(url.origin).toBe('https://zme.test')
