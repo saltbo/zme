@@ -308,6 +308,16 @@ describe('music downloads', () => {
     await expect(resolveMusicTrackDownload(deps, env, 'track-1', 'temporary-key')).resolves.toEqual({
       resource,
       filename: '01-03 Track Name.mp3',
+      tags: {
+        title: 'Track Name',
+        artists: ['Artist'],
+        album: 'Album',
+        albumArtists: ['Artist'],
+        trackNumber: 3,
+        discNumber: 1,
+        releaseDate: '2024-03-02',
+        compilation: false,
+      },
     })
     expect(getConnector).not.toHaveBeenCalled()
     expect(resolve).not.toHaveBeenCalled()

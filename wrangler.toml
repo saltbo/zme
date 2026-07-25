@@ -5,6 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 PUBLIC_APP_ORIGIN = "https://zme.tftt.cc"
+MUSIC_AUTO_TAGGING_ENABLED = "true"
 
 [assets]
 binding = "ASSETS"

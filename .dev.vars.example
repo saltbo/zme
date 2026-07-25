@@ -10,6 +10,9 @@ CONNECTOR_CREDENTIALS_SECRET=replace-with-an-independent-32-character-secret
 # Public origin used by background download dispatch jobs.
 PUBLIC_APP_ORIGIN=http://localhost:5173
 
+# Streams MP3/FLAC files through ZME only when standard music tags need to be added or corrected.
+MUSIC_AUTO_TAGGING_ENABLED=false
+
 # Optional, only for local browser/E2E verification (see AGENTS.md):
 # LOCAL_TEST_EMAIL=admin@example.com
 # LOCAL_TEST_PASSWORD=replace-me

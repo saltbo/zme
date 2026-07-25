@@ -1,4 +1,5 @@
 import { decryptConnectorPayload, encryptConnectorPayload } from '@server/domain/connector-credentials'
+import { buildMusicFileTags, type MusicFileTags, parseMusicFileTags } from '@server/domain/music-file-tags'
 import type { Env } from '@server/env'
 import { buildMusicDownloadFilename, buildMusicDownloadSubdirectory } from '@shared/download-metadata'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
@@ -163,7 +164,11 @@ export async function dispatchMusicDownloadRecord(
     trackId: track.id,
     downloaderId: record.downloaderId,
     quality: resource.quality,
-    resourceEncrypted: await encryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, { resource, filename }),
+    resourceEncrypted: await encryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, {
+      resource,
+      filename,
+      tags: buildMusicFileTags(track),
+    }),
     expiresAt: new Date(now.getTime() + MUSIC_DOWNLOAD_KEY_TTL_MS).toISOString(),
     revokedAt: null,
     createdAt: now.toISOString(),
@@ -207,7 +212,7 @@ export async function resolveMusicTrackDownload(
   env: Env,
   trackId: string,
   key: string,
-): Promise<{ resource: ResolvedMusicResource; filename: string }> {
+): Promise<{ resource: ResolvedMusicResource; filename: string; tags: MusicFileTags }> {
   const access = await deps.musicDownloadKeysRepo.getByHash(await hashAccessKey(key))
   if (!access || access.trackId !== trackId || access.revokedAt) {
     throw new MusicDownloadError('Music download key is invalid.', 401)
@@ -242,6 +247,7 @@ export async function resolveMusicTrackDownload(
     return {
       resource,
       filename: buildMusicDownloadFilename(track, resource.extension),
+      tags: buildMusicFileTags(track),
     }
   } catch (error) {
     await setTrackAvailability(deps, access.userId, connector.id, track.id, availabilityFromError(error))
@@ -331,14 +337,22 @@ function parseResolvedMusicResource(value: unknown): ResolvedMusicResource {
 function parseStoredMusicResource(
   value: unknown,
   track: MusicTrackRecord,
-): { resource: ResolvedMusicResource; filename: string } {
+): { resource: ResolvedMusicResource; filename: string; tags: MusicFileTags } {
   if (typeof value === 'object' && value !== null && 'resource' in value && 'filename' in value) {
-    const stored = value as { resource: unknown; filename: unknown }
+    const stored = value as { resource: unknown; filename: unknown; tags?: unknown }
     if (typeof stored.filename !== 'string' || !stored.filename) throw new Error('Stored music filename is invalid.')
-    return { resource: parseResolvedMusicResource(stored.resource), filename: stored.filename }
+    return {
+      resource: parseResolvedMusicResource(stored.resource),
+      filename: stored.filename,
+      tags: stored.tags === undefined ? buildMusicFileTags(track) : parseMusicFileTags(stored.tags),
+    }
   }
   const resource = parseResolvedMusicResource(value)
-  return { resource, filename: buildMusicDownloadFilename(track, resource.extension) }
+  return {
+    resource,
+    filename: buildMusicDownloadFilename(track, resource.extension),
+    tags: buildMusicFileTags(track),
+  }
 }
 
 function qualityFallbacks(preferred: MusicDownloadQuality): MusicDownloadQuality[] {
