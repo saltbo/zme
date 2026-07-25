@@ -340,7 +340,7 @@ function parseFlacBlocks(metadata: Uint8Array): FlacBlock[] {
 }
 
 function buildFlacMetadata(blocks: FlacBlock[]): Uint8Array {
-  const encoded = [new TextEncoder().encode('fLaC')]
+  const encoded: Uint8Array[] = [new TextEncoder().encode('fLaC')]
   for (const [index, block] of blocks.entries()) {
     if (block.data.byteLength > 0xffffff) throw new Error('FLAC metadata block is too large.')
     const header = new Uint8Array(4)
