@@ -1,4 +1,4 @@
-import { decryptConnectorPayload, encryptConnectorPayload } from '@server/domain/connector-credentials'
+import { decryptConnectorPayload } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import { buildMusicFileTags, type MusicFileTags, parseMusicFileTags } from '@server/music-tags'
 import {
@@ -166,11 +166,7 @@ export async function dispatchMusicDownloadRecord(
     trackId: track.id,
     downloaderId: record.downloaderId,
     quality: resource.quality,
-    resourceEncrypted: await encryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, {
-      resource,
-      filename,
-      tags: buildMusicFileTags(track),
-    }),
+    resourceEncrypted: null,
     expiresAt: new Date(now.getTime() + MUSIC_DOWNLOAD_KEY_TTL_MS).toISOString(),
     revokedAt: null,
     createdAt: now.toISOString(),

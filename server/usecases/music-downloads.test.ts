@@ -204,7 +204,7 @@ describe('music downloads', () => {
     expect(wake).toHaveBeenCalledWith('music:connector-1')
   })
 
-  it('resolves once in the consumer, stores an encrypted source, and submits the permanent ZME URL', async () => {
+  it('resolves availability in the consumer and defers the temporary source URL until download', async () => {
     const encrypted = await encryptConnectorCredentials(secret, ['MUSIC_U=session-value'])
     const accesses: MusicDownloadKeyRecord[] = []
     const updates: Partial<DownloadRecordRecord>[] = []
@@ -257,9 +257,8 @@ describe('music downloads', () => {
       trackId: 'track-1',
       downloaderId: 'downloader-1',
       quality: 'exhigh',
-      resourceEncrypted: expect.any(String),
+      resourceEncrypted: null,
     })
-    expect(accesses[0]?.resourceEncrypted).not.toContain('music.126.net')
     expect(submit).toHaveBeenCalledOnce()
     const submitted = submittedInputs[0]
     expect(submitted).toMatchObject({

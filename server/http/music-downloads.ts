@@ -37,7 +37,13 @@ export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
           c.req.valid('param').id,
           c.req.valid('query').key,
         )
-        return deliverMusicResource(c.req.method, resource, filename, tags, c.env.MUSIC_AUTO_TAGGING_ENABLED === 'true')
+        return await deliverMusicResource(
+          c.req.method,
+          resource,
+          filename,
+          tags,
+          c.env.MUSIC_AUTO_TAGGING_ENABLED === 'true',
+        )
       } catch (error) {
         const status = error instanceof MusicDownloadError ? error.status : 502
         return c.json({ error: error instanceof Error ? error.message : 'Music download failed.' }, status)
