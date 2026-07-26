@@ -48,6 +48,9 @@ export default defineConfig({
         plugins: [
           cloudflareTest(async () => ({
             singleWorker: true,
+            wrangler: {
+              configPath: path.join(__dirname, 'wrangler.toml'),
+            },
             miniflare: {
               compatibilityDate: '2026-06-03',
               compatibilityFlags: ['nodejs_compat'],

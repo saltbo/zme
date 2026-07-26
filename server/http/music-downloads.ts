@@ -1,5 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
-import { type MusicFileCover, type MusicFileTags, prepareMusicFile } from '@server/domain/music-file-tags'
+import { type MusicFileCover, type MusicFileTags, prepareMusicFile, supportsMusicFileTagging } from '@server/music-tags'
 import {
   MusicDownloadError,
   resolveMusicTrackDownload,
@@ -90,7 +90,7 @@ export async function deliverMusicResource(
   tags: MusicFileTags,
   autoTaggingEnabled: boolean,
 ): Promise<Response> {
-  if (!autoTaggingEnabled || method === 'HEAD' || !['mp3', 'flac'].includes(resource.extension.toLowerCase())) {
+  if (!autoTaggingEnabled || method === 'HEAD' || !supportsMusicFileTagging(resource.extension)) {
     return redirectMusicResource(resource, filename)
   }
 
@@ -136,7 +136,12 @@ function parseContentLength(value: string | null): number | null {
 }
 
 function contentTypeFor(extension: string): string {
-  return extension.toLowerCase() === 'flac' ? 'audio/flac' : 'audio/mpeg'
+  const format = extension.toLowerCase()
+  if (format === 'flac') return 'audio/flac'
+  if (format === 'aac') return 'audio/aac'
+  if (format === 'm4a' || format === 'm4b' || format === 'mp4') return 'audio/mp4'
+  if (format === 'ogg' || format === 'oga') return 'audio/ogg'
+  return 'audio/mpeg'
 }
 
 async function fetchMusicCover(value: string): Promise<MusicFileCover> {

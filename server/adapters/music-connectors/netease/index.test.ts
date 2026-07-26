@@ -497,6 +497,72 @@ describe('Netease music resource resolver', () => {
     )
   })
 
+  it('uses the provider format for lossless resources instead of inferring it from requested quality', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: 200,
+            data: [
+              {
+                id: 123,
+                url: 'https://m701.music.126.net/audio.flac',
+                type: 'flac',
+                size: 8192,
+                level: 'lossless',
+                code: 200,
+                freeTrialInfo: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    )
+
+    await expect(
+      neteaseMusicConnector.open(['MUSIC_U=session-value']).resolve({ trackId: '123', quality: 'hires' }),
+    ).resolves.toMatchObject({
+      quality: 'lossless',
+      extension: 'flac',
+      contentType: 'audio/flac',
+      contentLength: 8192,
+    })
+  })
+
+  it('preserves a provider-declared container instead of relabeling it as MP3 or FLAC', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            code: 200,
+            data: [
+              {
+                id: 123,
+                url: 'https://m701.music.126.net/audio.m4a',
+                type: 'm4a',
+                size: 4096,
+                level: 'exhigh',
+                code: 200,
+                freeTrialInfo: null,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    )
+
+    await expect(
+      neteaseMusicConnector.open(['MUSIC_U=session-value']).resolve({ trackId: '123', quality: 'exhigh' }),
+    ).resolves.toMatchObject({
+      extension: 'm4a',
+      contentType: 'audio/mp4',
+    })
+  })
+
   it('rejects preview-only tracks', async () => {
     vi.stubGlobal(
       'fetch',

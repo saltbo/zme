@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p src/tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --project unit --coverage",
+    "test:music-tags": "node scripts/verify-music-tags.mjs",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "e2e:server": "rm -rf .wrangler/e2e && wrangler d1 migrations apply zme --local --persist-to .wrangler/e2e && E2E_PERSIST=.wrangler/e2e vite dev --port 7171",
@@ -55,6 +56,7 @@
     "react-router": "^7.16.0",
     "shadcn": "^4.10.0",
     "sonner": "^2.0.7",
+    "taglib-wasm": "1.5.2",
     "tailwind-merge": "^3.5.0",
     "tw-animate-css": "^1.4.0",
     "yet-another-react-lightbox": "^3.32.0",
@@ -77,6 +79,7 @@
     "husky": "^9.1.7",
     "jsdom": "^29.0.2",
     "msw": "^2.14.6",
+    "music-metadata": "11.14.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vite": "^7.3.2",
@@ -91,7 +94,10 @@
       "@swc/core",
       "esbuild",
       "workerd"
-    ]
+    ],
+    "patchedDependencies": {
+      "taglib-wasm@1.5.2": "patches/taglib-wasm@1.5.2.patch"
+    }
   },
   "volta": {
     "node": "24.14.1",

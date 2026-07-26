@@ -1,6 +1,6 @@
 import { decryptConnectorPayload, encryptConnectorPayload } from '@server/domain/connector-credentials'
-import { buildMusicFileTags, type MusicFileTags, parseMusicFileTags } from '@server/domain/music-file-tags'
 import type { Env } from '@server/env'
+import { buildMusicFileTags, type MusicFileTags, parseMusicFileTags } from '@server/music-tags'
 import {
   buildMusicDownloadFilename,
   buildMusicDownloadSubdirectory,

@@ -1,4 +1,5 @@
-import type { MusicFileTags } from '@server/domain/music-file-tags'
+import type { MusicFileTags } from '@server/music-tags'
+import { parseBuffer } from 'music-metadata'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { deliverMusicResource, redirectMusicResource } from './music-downloads'
 
@@ -105,6 +106,42 @@ describe('music download redirect', () => {
     expect(new TextDecoder().decode(bytes.subarray(0, 512))).toContain('APIC')
   })
 
+  it('streams a standards-compliant FLAC with Vorbis tags and artwork', async () => {
+    const audio = new Uint8Array([0xff, 0xf8, 0x69, 0x00, 1, 2, 3, 4])
+    const source = concat([
+      new TextEncoder().encode('fLaC'),
+      new Uint8Array([0x80, 0, 0, 34]),
+      new Uint8Array(34),
+      audio,
+    ])
+    const cover = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9])
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(source.buffer as ArrayBuffer, { headers: { 'Content-Type': 'audio/flac' } }))
+      .mockResolvedValueOnce(new Response(cover, { headers: { 'Content-Type': 'image/jpeg' } }))
+
+    const response = await deliverMusicResource(
+      'GET',
+      {
+        ...resource(),
+        url: 'https://m701.music.126.net/audio.flac',
+        extension: 'flac',
+        contentType: 'audio/flac',
+        contentLength: null,
+      },
+      'Artist - Track.flac',
+      { ...tags, coverUrl: 'https://p3.music.126.net/album.jpg' },
+      true,
+    )
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    const metadata = await parseBuffer(bytes, { mimeType: 'audio/flac', size: bytes.byteLength })
+
+    expect(response.status).toBe(200)
+    expect(metadata.common.title).toBe(tags.title)
+    expect(metadata.common.album).toBe(tags.album)
+    expect(metadata.common.picture?.[0]?.data).toEqual(cover)
+    expect(bytes.slice(-audio.byteLength)).toEqual(audio)
+  })
+
   it('follows a cover redirect only when every location remains on a trusted Netease host', async () => {
     const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
     const cover = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9])
@@ -170,4 +207,14 @@ function resource() {
     contentType: 'audio/mpeg',
     contentLength: 4096,
   }
+}
+
+function concat(chunks: Uint8Array[]): Uint8Array {
+  const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0))
+  let offset = 0
+  for (const chunk of chunks) {
+    output.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return output
 }

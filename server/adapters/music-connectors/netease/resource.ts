@@ -24,13 +24,13 @@ export async function resolveResource(
 
   const url = normalizeMediaUrl(item.url)
   const quality = normalizeResolvedQuality(item.level, input.quality)
-  const extension = normalizeAudioExtension(item.type, quality)
+  const extension = normalizeAudioExtension(item.type, url)
   return {
     url: url.toString(),
     headers: { Referer: `${NETEASE_BASE}/`, 'User-Agent': 'Mozilla/5.0 ZME/0.0.1' },
     quality,
     extension,
-    contentType: extension === 'flac' ? 'audio/flac' : 'audio/mpeg',
+    contentType: contentTypeForAudioExtension(extension),
     contentLength: typeof item.size === 'number' && item.size >= 0 ? item.size : null,
   }
 }
@@ -178,8 +178,19 @@ function normalizeMediaUrl(value: string): URL {
   return url
 }
 
-function normalizeAudioExtension(value: string | null | undefined, quality: string): string {
+function normalizeAudioExtension(value: string | null | undefined, url: URL): string {
   const extension = value?.toLowerCase()
-  if (extension === 'mp3' || extension === 'flac') return extension
-  return quality === 'lossless' || quality === 'hires' ? 'flac' : 'mp3'
+  if (extension && /^[a-z0-9]{2,5}$/.test(extension)) return extension
+  const pathnameExtension = url.pathname.match(/\.([a-z0-9]{2,5})$/i)?.[1]?.toLowerCase()
+  if (pathnameExtension) return pathnameExtension
+  throw new Error('Netease returned a music resource without a usable format.')
+}
+
+function contentTypeForAudioExtension(extension: string): string | null {
+  if (extension === 'mp3') return 'audio/mpeg'
+  if (extension === 'flac') return 'audio/flac'
+  if (extension === 'aac') return 'audio/aac'
+  if (extension === 'm4a' || extension === 'm4b' || extension === 'mp4') return 'audio/mp4'
+  if (extension === 'ogg' || extension === 'oga' || extension === 'opus') return 'audio/ogg'
+  return null
 }

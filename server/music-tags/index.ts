@@ -1,4 +1,7 @@
+import { type BufferedTagValues, inspectBufferedFile, writeBufferedFile } from './taglib-engine.ts'
+
 const MAX_METADATA_BYTES = 16 * 1024 * 1024
+const MAX_BUFFERED_FILE_BYTES = 24 * 1024 * 1024
 const MANAGED_ID3_FRAMES = new Set(['TIT2', 'TPE1', 'TALB', 'TPE2', 'TRCK', 'TPOS', 'TDRC', 'TYER', 'TCMP'])
 const MANAGED_VORBIS_FIELDS = new Set([
   'TITLE',
@@ -59,6 +62,14 @@ interface FlacBlock {
   data: Uint8Array
 }
 
+const STREAMING_FORMATS = new Set(['mp3', 'flac'])
+const BUFFERED_FORMATS = new Set(['aac', 'm4a', 'm4b', 'mp4', 'ogg', 'oga'])
+
+export function supportsMusicFileTagging(extension: string): boolean {
+  const format = extension.toLowerCase()
+  return STREAMING_FORMATS.has(format) || BUFFERED_FORMATS.has(format)
+}
+
 export function buildMusicFileTags(track: MusicTagSource): MusicFileTags {
   const albumArtists = track.release?.artists.length ? track.release.artists : track.artists
   return {
@@ -111,22 +122,26 @@ export async function prepareMusicFile(
   loadCover?: (url: string) => Promise<MusicFileCover>,
 ): Promise<PreparedMusicFile> {
   const format = extension.toLowerCase()
-  if (format !== 'mp3' && format !== 'flac') throw new Error(`Unsupported music tag format: ${extension}.`)
+  if (BUFFERED_FORMATS.has(format)) {
+    return prepareBufferedMusicFile(body, format, tags, originalContentLength, loadCover)
+  }
+  if (!STREAMING_FORMATS.has(format)) throw new Error(`Unsupported music tag format: ${extension}.`)
 
   const reader = body.getReader()
-  const prefix = await readMetadataPrefix(reader, format)
-  const metadataLength = requiredMetadataLength(prefix.bytes, format)
+  const streamingFormat = format as 'mp3' | 'flac'
+  const prefix = await readMetadataPrefix(reader, streamingFormat)
+  const metadataLength = requiredMetadataLength(prefix.bytes, streamingFormat)
   if (metadataLength === null) throw new Error('Audio metadata header is incomplete.')
 
   let rewrite =
-    format === 'mp3'
+    streamingFormat === 'mp3'
       ? rewriteId3(prefix.bytes.subarray(0, metadataLength), tags, null)
       : rewriteFlac(prefix.bytes.subarray(0, metadataLength), tags, null)
   if (rewrite.needsCover && tags.coverUrl) {
     if (!loadCover) throw new Error('Music cover loader is required.')
     const cover = await loadCover(tags.coverUrl)
     rewrite =
-      format === 'mp3'
+      streamingFormat === 'mp3'
         ? rewriteId3(prefix.bytes.subarray(0, metadataLength), tags, cover)
         : rewriteFlac(prefix.bytes.subarray(0, metadataLength), tags, cover)
   }
@@ -134,6 +149,7 @@ export async function prepareMusicFile(
     await reader.cancel()
     return { changed: false, body: null, contentLength: originalContentLength }
   }
+  validateStreamingMetadata(rewrite.bytes, streamingFormat)
 
   const firstChunk = concatBytes([rewrite.bytes, prefix.bytes.subarray(metadataLength)])
   const contentLength =
@@ -142,6 +158,178 @@ export async function prepareMusicFile(
     changed: true,
     body: streamWithPrefix(firstChunk, reader),
     contentLength,
+  }
+}
+
+function validateStreamingMetadata(metadata: Uint8Array, format: 'mp3' | 'flac'): void {
+  if (format === 'mp3') {
+    if (metadata.byteLength < 10 || !hasAscii(metadata, 0, 'ID3')) throw new Error('Generated ID3 tag is invalid.')
+    const size = readSynchsafe(metadata, 6)
+    if (size + 10 !== metadata.byteLength) throw new Error('Generated ID3 tag size is invalid.')
+    parseId3Frames(metadata.subarray(10), metadata[3])
+    return
+  }
+  parseFlacBlocks(metadata)
+}
+
+async function prepareBufferedMusicFile(
+  body: ReadableStream<Uint8Array>,
+  extension: string,
+  tags: MusicFileTags,
+  originalContentLength: number | null,
+  loadCover?: (url: string) => Promise<MusicFileCover>,
+): Promise<PreparedMusicFile> {
+  if (originalContentLength !== null && originalContentLength > MAX_BUFFERED_FILE_BYTES) {
+    throw new Error(`The ${extension.toUpperCase()} file exceeds the ${MAX_BUFFERED_FILE_BYTES}-byte tagging limit.`)
+  }
+  const bytes = await readStream(body, MAX_BUFFERED_FILE_BYTES)
+  if (extension === 'm4a' || extension === 'm4b' || extension === 'mp4') {
+    validateAudioOnlyMp4(bytes)
+  }
+  const current = await inspectBufferedFile(bytes, extension)
+  const needsCover = Boolean(tags.coverUrl && current.pictures.length === 0)
+  if (containsExpectedBufferedTags(current, tags) && !needsCover) {
+    return { changed: false, body: null, contentLength: originalContentLength }
+  }
+
+  let cover: MusicFileCover | null = null
+  if (needsCover) {
+    if (!loadCover || !tags.coverUrl) throw new Error('Music cover loader is required.')
+    cover = await loadCover(tags.coverUrl)
+  }
+  const output = await writeBufferedFile(bytes, extension, bufferedTagValues(tags), coverPicture(cover))
+  await validateBufferedMusicFile(output, extension, tags, Boolean(tags.coverUrl))
+  return {
+    changed: true,
+    body: streamBytes(output),
+    contentLength: output.byteLength,
+  }
+}
+
+function validateAudioOnlyMp4(bytes: Uint8Array): void {
+  const topLevel = readMp4Boxes(bytes, 0, bytes.byteLength)
+  if (!topLevel.some((box) => box.type === 'ftyp')) throw new Error('MP4 resource is missing its file type box.')
+  const moov = topLevel.find((box) => box.type === 'moov')
+  if (!moov) throw new Error('MP4 resource is missing its movie box.')
+
+  const handlers = readMp4Boxes(bytes, moov.dataOffset, moov.end)
+    .filter((box) => box.type === 'trak')
+    .map((track) => readMp4TrackHandler(bytes, track))
+  if (handlers.length !== 1 || handlers[0] !== 'soun') {
+    throw new Error('MP4 music tagging requires exactly one audio track and no video tracks.')
+  }
+}
+
+interface Mp4Box {
+  type: string
+  dataOffset: number
+  end: number
+}
+
+function readMp4Boxes(bytes: Uint8Array, start: number, end: number): Mp4Box[] {
+  const boxes: Mp4Box[] = []
+  let offset = start
+  while (offset < end) {
+    if (offset + 8 > end) throw new Error('MP4 box header is incomplete.')
+    const size32 = readUint32Be(bytes, offset)
+    const type = ascii(bytes.subarray(offset + 4, offset + 8))
+    let headerSize = 8
+    let size = size32
+    if (size32 === 1) {
+      if (offset + 16 > end) throw new Error('MP4 extended box header is incomplete.')
+      const high = readUint32Be(bytes, offset + 8)
+      const low = readUint32Be(bytes, offset + 12)
+      size = high * 0x100000000 + low
+      headerSize = 16
+    } else if (size32 === 0) {
+      size = end - offset
+    }
+    if (!Number.isSafeInteger(size) || size < headerSize || offset + size > end) {
+      throw new Error(`MP4 ${type} box has an invalid size.`)
+    }
+    boxes.push({ type, dataOffset: offset + headerSize, end: offset + size })
+    offset += size
+  }
+  return boxes
+}
+
+function readMp4TrackHandler(bytes: Uint8Array, track: Mp4Box): string {
+  const mdia = readMp4Boxes(bytes, track.dataOffset, track.end).find((box) => box.type === 'mdia')
+  if (!mdia) throw new Error('MP4 track is missing its media box.')
+  const handler = readMp4Boxes(bytes, mdia.dataOffset, mdia.end).find((box) => box.type === 'hdlr')
+  if (!handler || handler.dataOffset + 12 > handler.end) throw new Error('MP4 track is missing its handler.')
+  return ascii(bytes.subarray(handler.dataOffset + 8, handler.dataOffset + 12))
+}
+
+function bufferedTagValues(tags: MusicFileTags): BufferedTagValues {
+  return {
+    title: tags.title,
+    artist: tags.artists.join('; '),
+    album: tags.album,
+    albumArtist: tags.albumArtists.join('; '),
+    trackNumber: tags.trackNumber,
+    discNumber: tags.discNumber,
+    releaseDate: tags.releaseDate,
+    compilation: tags.compilation,
+  }
+}
+
+function coverPicture(cover: MusicFileCover | null) {
+  return cover ? { type: 'FrontCover' as const, mimeType: cover.mimeType, data: cover.bytes } : null
+}
+
+async function readStream(body: ReadableStream<Uint8Array>, limit: number): Promise<Uint8Array> {
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let length = 0
+  while (true) {
+    const next = await reader.read()
+    if (next.done) return concatBytes(chunks)
+    length += next.value.byteLength
+    if (length > limit) {
+      await reader.cancel()
+      throw new Error(`Music file exceeds the ${limit}-byte tagging limit.`)
+    }
+    chunks.push(next.value)
+  }
+}
+
+function streamBytes(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes)
+      controller.close()
+    },
+  })
+}
+
+function containsExpectedBufferedTags(current: BufferedTagValues, tags: MusicFileTags): boolean {
+  return (
+    normalizeTagValue(current.title) === normalizeTagValue(tags.title) &&
+    normalizeTagValue(current.artist) === normalizeTagValue(tags.artists.join('; ')) &&
+    normalizeTagValue(current.album) === normalizeTagValue(tags.album) &&
+    normalizeTagValue(current.albumArtist) === normalizeTagValue(tags.albumArtists.join('; ')) &&
+    (tags.trackNumber === null || current.trackNumber === tags.trackNumber) &&
+    (tags.discNumber === null || current.discNumber === tags.discNumber) &&
+    (tags.releaseDate === null ||
+      normalizeTagValue(current.releaseDate ?? '') === normalizeTagValue(tags.releaseDate)) &&
+    Boolean(current.compilation) === tags.compilation
+  )
+}
+
+async function validateBufferedMusicFile(
+  bytes: Uint8Array,
+  extension: string,
+  tags: MusicFileTags,
+  expectsCover: boolean,
+): Promise<void> {
+  const current = await inspectBufferedFile(bytes, extension)
+  if (current.format === 'unknown') throw new Error(`Tagged ${extension.toUpperCase()} file is invalid.`)
+  if (!containsExpectedBufferedTags(current, tags)) {
+    throw new Error(`Tagged ${extension.toUpperCase()} file did not retain the requested metadata.`)
+  }
+  if (expectsCover && current.pictures.length === 0) {
+    throw new Error(`Tagged ${extension.toUpperCase()} file did not retain its cover artwork.`)
   }
 }
 
@@ -213,6 +401,7 @@ function rewriteId3(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileC
   let version = 4
   let preservedFrames: Uint8Array[] = []
   let hasCover = false
+  let hadInvalidCover = false
   const current = new Map<string, string>()
 
   if (metadata.byteLength > 0) {
@@ -223,12 +412,13 @@ function rewriteId3(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileC
     const parsed = parseId3Frames(metadata.subarray(10), version)
     preservedFrames = parsed.preserved
     hasCover = parsed.hasCover
+    hadInvalidCover = parsed.hadInvalidCover
     for (const [key, value] of parsed.values) current.set(key, value)
   }
 
   const expected = expectedId3Values(tags, version)
   const needsCover = Boolean(tags.coverUrl && !hasCover)
-  if (metadata.byteLength > 0 && containsExpectedValues(current, expected) && !needsCover) {
+  if (metadata.byteLength > 0 && containsExpectedValues(current, expected) && !needsCover && !hadInvalidCover) {
     return { complete: true, bytes: metadata, needsCover: false }
   }
 
@@ -246,10 +436,11 @@ function rewriteId3(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileC
 function parseId3Frames(
   body: Uint8Array,
   version: number,
-): { values: Map<string, string>; preserved: Uint8Array[]; hasCover: boolean } {
+): { values: Map<string, string>; preserved: Uint8Array[]; hasCover: boolean; hadInvalidCover: boolean } {
   const values = new Map<string, string>()
   const preserved: Uint8Array[] = []
   let hasCover = false
+  let hadInvalidCover = false
   let offset = 0
 
   while (offset + 10 <= body.byteLength) {
@@ -262,14 +453,43 @@ function parseId3Frames(
     const frame = body.subarray(offset, end)
     if (MANAGED_ID3_FRAMES.has(id)) {
       values.set(id, decodeId3Text(frame.subarray(10)))
+    } else if (id === 'APIC') {
+      try {
+        validateId3Picture(frame.subarray(10))
+        preserved.push(frame.slice())
+        hasCover = true
+      } catch {
+        hadInvalidCover = true
+      }
     } else {
       preserved.push(frame.slice())
-      if (id === 'APIC' && size > 4) hasCover = true
     }
     offset = end
   }
 
-  return { values, preserved, hasCover }
+  return { values, preserved, hasCover, hadInvalidCover }
+}
+
+function validateId3Picture(payload: Uint8Array): void {
+  if (payload.byteLength < 5) throw new Error('ID3 APIC frame is incomplete.')
+  const encoding = payload[0]
+  const mimeEnd = payload.indexOf(0, 1)
+  if (mimeEnd === -1 || mimeEnd + 2 >= payload.byteLength) throw new Error('ID3 APIC MIME type is incomplete.')
+  const descriptionStart = mimeEnd + 2
+  const descriptionEnd =
+    encoding === 0 || encoding === 3
+      ? payload.indexOf(0, descriptionStart)
+      : findUtf16Terminator(payload, descriptionStart)
+  if (descriptionEnd === -1) throw new Error('ID3 APIC description is incomplete.')
+  const imageStart = descriptionEnd + (encoding === 0 || encoding === 3 ? 1 : 2)
+  if (imageStart >= payload.byteLength) throw new Error('ID3 APIC image is empty.')
+}
+
+function findUtf16Terminator(bytes: Uint8Array, offset: number): number {
+  for (let index = offset; index + 1 < bytes.byteLength; index += 2) {
+    if (bytes[index] === 0 && bytes[index + 1] === 0) return index
+  }
+  return -1
 }
 
 function expectedId3Values(tags: MusicFileTags, version: number): Map<string, string> {
@@ -351,14 +571,26 @@ function decodeUtf16(bytes: Uint8Array, littleEndian: boolean): string {
 }
 
 function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileCover | null): MetadataRewrite {
-  const blocks = parseFlacBlocks(metadata)
-  const hasCover = blocks.some((block) => block.type === 6 && block.data.byteLength > 32)
+  let blocks = parseFlacBlocks(metadata)
+  let hasCover = false
+  let hadInvalidCover = false
+  blocks = blocks.filter((block) => {
+    if (block.type !== 6) return true
+    try {
+      validateFlacPicture(block.data)
+      hasCover = true
+      return true
+    } catch {
+      hadInvalidCover = true
+      return false
+    }
+  })
   const commentIndex = blocks.findIndex((block) => block.type === 4)
   const comments = commentIndex === -1 ? emptyVorbisComments() : parseVorbisComments(blocks[commentIndex].data)
   const expected = expectedVorbisValues(tags)
   const current = groupVorbisComments(comments.entries)
   const needsCover = Boolean(tags.coverUrl && !hasCover)
-  if (commentIndex !== -1 && containsExpectedLists(current, expected) && !needsCover) {
+  if (commentIndex !== -1 && containsExpectedLists(current, expected) && !needsCover && !hadInvalidCover) {
     return { complete: true, bytes: metadata, needsCover: false }
   }
 
@@ -386,9 +618,37 @@ function buildFlacPictureBlock(cover: MusicFileCover): FlacBlock {
       writeUint32Be(0),
       writeUint32Be(0),
       writeUint32Be(0),
+      writeUint32Be(cover.bytes.byteLength),
       cover.bytes,
     ]),
   }
+}
+
+function validateFlacPicture(data: Uint8Array): true {
+  let offset = 0
+  readUint32Be(data, offset)
+  offset += 4
+  const mimeLength = readUint32Be(data, offset)
+  offset += 4
+  if (offset + mimeLength > data.byteLength) throw new Error('FLAC picture MIME type exceeds the block boundary.')
+  offset += mimeLength
+  const descriptionLength = readUint32Be(data, offset)
+  offset += 4
+  if (offset + descriptionLength > data.byteLength) {
+    throw new Error('FLAC picture description exceeds the block boundary.')
+  }
+  offset += descriptionLength
+  for (let index = 0; index < 4; index += 1) {
+    readUint32Be(data, offset)
+    offset += 4
+  }
+  const pictureLength = readUint32Be(data, offset)
+  offset += 4
+  if (pictureLength === 0) throw new Error('FLAC picture image is empty.')
+  if (offset + pictureLength !== data.byteLength) {
+    throw new Error('FLAC picture image length does not match the block boundary.')
+  }
+  return true
 }
 
 function parseFlacBlocks(metadata: Uint8Array): FlacBlock[] {
