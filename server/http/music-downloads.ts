@@ -23,6 +23,7 @@ const submitMusicDownloadSchema = z.object({
 })
 
 const MAX_MUSIC_COVER_BYTES = 5 * 1024 * 1024
+const MAX_MUSIC_COVER_REDIRECTS = 3
 
 export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
   routes.on(
@@ -139,14 +140,7 @@ function contentTypeFor(extension: string): string {
 }
 
 async function fetchMusicCover(value: string): Promise<MusicFileCover> {
-  const url = normalizeNeteaseCoverUrl(value)
-  const response = await fetch(url, {
-    headers: {
-      Referer: 'https://music.163.com/',
-      'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
-    },
-    redirect: 'error',
-  })
+  const response = await fetchNeteaseCover(value)
   if (!response.ok) {
     await response.body?.cancel()
     throw new Error(`Music cover returned HTTP ${response.status}.`)
@@ -162,6 +156,28 @@ async function fetchMusicCover(value: string): Promise<MusicFileCover> {
     throw new Error(`Music cover exceeds ${MAX_MUSIC_COVER_BYTES} bytes.`)
   }
   return { mimeType: detectCoverMimeType(bytes), bytes }
+}
+
+async function fetchNeteaseCover(value: string): Promise<Response> {
+  let url = normalizeNeteaseCoverUrl(value)
+  for (let redirects = 0; ; redirects += 1) {
+    const response = await fetch(url, {
+      headers: {
+        Referer: 'https://music.163.com/',
+        'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
+      },
+      redirect: 'manual',
+    })
+    if (response.status < 300 || response.status >= 400) return response
+
+    const location = response.headers.get('location')
+    await response.body?.cancel()
+    if (!location) throw new Error(`Music cover redirect returned HTTP ${response.status} without a location.`)
+    if (redirects >= MAX_MUSIC_COVER_REDIRECTS) {
+      throw new Error(`Music cover exceeded ${MAX_MUSIC_COVER_REDIRECTS} redirects.`)
+    }
+    url = normalizeNeteaseCoverUrl(new URL(location, url).toString())
+  }
 }
 
 function normalizeNeteaseCoverUrl(value: string): URL {

@@ -100,9 +100,64 @@ describe('music download redirect', () => {
         Referer: 'https://music.163.com/',
         'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
       },
-      redirect: 'error',
+      redirect: 'manual',
     })
     expect(new TextDecoder().decode(bytes.subarray(0, 512))).toContain('APIC')
+  })
+
+  it('follows a cover redirect only when every location remains on a trusted Netease host', async () => {
+    const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
+    const cover = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9])
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(audio))
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { Location: 'https://p4.music.126.net/redirected-album.jpg' },
+        }),
+      )
+      .mockResolvedValueOnce(new Response(cover))
+
+    const response = await deliverMusicResource(
+      'GET',
+      { ...resource(), contentLength: null },
+      'Artist - Track.mp3',
+      { ...tags, coverUrl: 'https://p3.music.126.net/album.jpg' },
+      true,
+    )
+
+    expect(response.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(fetchSpy).toHaveBeenNthCalledWith(3, new URL('https://p4.music.126.net/redirected-album.jpg'), {
+      headers: {
+        Referer: 'https://music.163.com/',
+        'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
+      },
+      redirect: 'manual',
+    })
+  })
+
+  it('rejects a cover redirect to an untrusted host', async () => {
+    const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(audio))
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { Location: 'https://example.com/album.jpg' },
+        }),
+      )
+
+    await expect(
+      deliverMusicResource(
+        'GET',
+        { ...resource(), contentLength: null },
+        'Artist - Track.mp3',
+        { ...tags, coverUrl: 'https://p3.music.126.net/album.jpg' },
+        true,
+      ),
+    ).rejects.toThrow('Netease returned an untrusted cover URL.')
   })
 })
 
