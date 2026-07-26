@@ -79,11 +79,11 @@ describe('music download redirect', () => {
 
   it('downloads a trusted Netease cover when the file has no embedded artwork', async () => {
     const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
-    const cover = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9])
+    const cover = jpegCover()
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(audio, { headers: { 'Content-Type': 'audio/mpeg' } }))
-      .mockResolvedValueOnce(new Response(cover, { headers: { 'Content-Type': 'image/jpeg' } }))
+      .mockResolvedValueOnce(new Response(cover.buffer as ArrayBuffer, { headers: { 'Content-Type': 'image/jpeg' } }))
 
     const response = await deliverMusicResource(
       'GET',
@@ -114,10 +114,10 @@ describe('music download redirect', () => {
       new Uint8Array(34),
       audio,
     ])
-    const cover = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9])
+    const cover = jpegCover()
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(source.buffer as ArrayBuffer, { headers: { 'Content-Type': 'audio/flac' } }))
-      .mockResolvedValueOnce(new Response(cover, { headers: { 'Content-Type': 'image/jpeg' } }))
+      .mockResolvedValueOnce(new Response(cover.buffer as ArrayBuffer, { headers: { 'Content-Type': 'image/jpeg' } }))
 
     const response = await deliverMusicResource(
       'GET',
@@ -217,4 +217,13 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength
   }
   return output
+}
+
+function jpegCover(): Uint8Array {
+  return Uint8Array.from(
+    atob(
+      '/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjI4LjEwMQD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAACAAIDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAE1/f//Z',
+    ),
+    (character) => character.charCodeAt(0),
+  )
 }

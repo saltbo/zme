@@ -62,6 +62,13 @@ interface FlacBlock {
   data: Uint8Array
 }
 
+interface CoverImageProperties {
+  width: number
+  height: number
+  depth: number
+  colors: number
+}
+
 const STREAMING_FORMATS = new Set(['mp3', 'flac'])
 const BUFFERED_FORMATS = new Set(['aac', 'm4a', 'm4b', 'mp4', 'ogg', 'oga'])
 
@@ -607,6 +614,7 @@ function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFile
 
 function buildFlacPictureBlock(cover: MusicFileCover): FlacBlock {
   const mimeType = new TextEncoder().encode(cover.mimeType)
+  const properties = readCoverImageProperties(cover)
   return {
     type: 6,
     data: concatBytes([
@@ -614,10 +622,10 @@ function buildFlacPictureBlock(cover: MusicFileCover): FlacBlock {
       writeUint32Be(mimeType.byteLength),
       mimeType,
       writeUint32Be(0),
-      writeUint32Be(0),
-      writeUint32Be(0),
-      writeUint32Be(0),
-      writeUint32Be(0),
+      writeUint32Be(properties.width),
+      writeUint32Be(properties.height),
+      writeUint32Be(properties.depth),
+      writeUint32Be(properties.colors),
       writeUint32Be(cover.bytes.byteLength),
       cover.bytes,
     ]),
@@ -638,9 +646,16 @@ function validateFlacPicture(data: Uint8Array): true {
     throw new Error('FLAC picture description exceeds the block boundary.')
   }
   offset += descriptionLength
-  for (let index = 0; index < 4; index += 1) {
-    readUint32Be(data, offset)
-    offset += 4
+  const width = readUint32Be(data, offset)
+  offset += 4
+  const height = readUint32Be(data, offset)
+  offset += 4
+  const depth = readUint32Be(data, offset)
+  offset += 4
+  readUint32Be(data, offset)
+  offset += 4
+  if (width === 0 || height === 0 || depth === 0) {
+    throw new Error('FLAC picture dimensions and color depth are required.')
   }
   const pictureLength = readUint32Be(data, offset)
   offset += 4
@@ -649,6 +664,138 @@ function validateFlacPicture(data: Uint8Array): true {
     throw new Error('FLAC picture image length does not match the block boundary.')
   }
   return true
+}
+
+function readCoverImageProperties(cover: MusicFileCover): CoverImageProperties {
+  if (cover.mimeType === 'image/jpeg') return readJpegProperties(cover.bytes)
+  if (cover.mimeType === 'image/png') return readPngProperties(cover.bytes)
+  return readWebpProperties(cover.bytes)
+}
+
+function readJpegProperties(bytes: Uint8Array): CoverImageProperties {
+  if (bytes.byteLength < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error('JPEG cover header is invalid.')
+  }
+  let offset = 2
+  while (offset < bytes.byteLength) {
+    while (offset < bytes.byteLength && bytes[offset] === 0xff) offset += 1
+    if (offset >= bytes.byteLength) break
+    const marker = bytes[offset]
+    offset += 1
+    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue
+    if (offset + 2 > bytes.byteLength) throw new Error('JPEG cover segment is incomplete.')
+    const length = readUint16Be(bytes, offset)
+    if (length < 2 || offset + length > bytes.byteLength) throw new Error('JPEG cover segment has an invalid size.')
+    if (isJpegStartOfFrame(marker)) {
+      if (length < 8) throw new Error('JPEG cover frame is incomplete.')
+      const precision = bytes[offset + 2]
+      const height = readUint16Be(bytes, offset + 3)
+      const width = readUint16Be(bytes, offset + 5)
+      const components = bytes[offset + 7]
+      return checkedCoverProperties(width, height, precision * components, 0)
+    }
+    offset += length
+  }
+  throw new Error('JPEG cover is missing its frame dimensions.')
+}
+
+function isJpegStartOfFrame(marker: number): boolean {
+  return (
+    (marker >= 0xc0 && marker <= 0xc3) ||
+    (marker >= 0xc5 && marker <= 0xc7) ||
+    (marker >= 0xc9 && marker <= 0xcb) ||
+    (marker >= 0xcd && marker <= 0xcf)
+  )
+}
+
+function readPngProperties(bytes: Uint8Array): CoverImageProperties {
+  const signature = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  if (bytes.byteLength < 33 || !signature.every((byte, index) => bytes[index] === byte)) {
+    throw new Error('PNG cover header is invalid.')
+  }
+  if (readUint32Be(bytes, 8) !== 13 || ascii(bytes.subarray(12, 16)) !== 'IHDR') {
+    throw new Error('PNG cover is missing its IHDR chunk.')
+  }
+  const width = readUint32Be(bytes, 16)
+  const height = readUint32Be(bytes, 20)
+  const bitDepth = bytes[24]
+  const colorType = bytes[25]
+  const channels = new Map([
+    [0, 1],
+    [2, 3],
+    [3, 1],
+    [4, 2],
+    [6, 4],
+  ]).get(colorType)
+  if (!channels) throw new Error(`PNG cover has an unsupported color type: ${colorType}.`)
+  const colors = colorType === 3 ? readPngPaletteSize(bytes) : 0
+  return checkedCoverProperties(width, height, bitDepth * channels, colors)
+}
+
+function readPngPaletteSize(bytes: Uint8Array): number {
+  let offset = 8
+  while (offset + 12 <= bytes.byteLength) {
+    const length = readUint32Be(bytes, offset)
+    const end = offset + 12 + length
+    if (end > bytes.byteLength) throw new Error('PNG cover chunk exceeds the image boundary.')
+    const type = ascii(bytes.subarray(offset + 4, offset + 8))
+    if (type === 'PLTE') {
+      if (length === 0 || length % 3 !== 0) throw new Error('PNG cover palette has an invalid size.')
+      return length / 3
+    }
+    if (type === 'IEND') break
+    offset = end
+  }
+  throw new Error('Indexed PNG cover is missing its palette.')
+}
+
+function readWebpProperties(bytes: Uint8Array): CoverImageProperties {
+  if (bytes.byteLength < 20 || ascii(bytes.subarray(0, 4)) !== 'RIFF' || ascii(bytes.subarray(8, 12)) !== 'WEBP') {
+    throw new Error('WebP cover header is invalid.')
+  }
+  let offset = 12
+  while (offset + 8 <= bytes.byteLength) {
+    const type = ascii(bytes.subarray(offset, offset + 4))
+    const length = readUint32Le(bytes, offset + 4)
+    const dataOffset = offset + 8
+    const end = dataOffset + length
+    if (end > bytes.byteLength) throw new Error('WebP cover chunk exceeds the image boundary.')
+    if (type === 'VP8X') {
+      if (length < 10) throw new Error('WebP VP8X cover header is incomplete.')
+      const width = 1 + readUint24Le(bytes, dataOffset + 4)
+      const height = 1 + readUint24Le(bytes, dataOffset + 7)
+      const depth = bytes[dataOffset] & 0x10 ? 32 : 24
+      return checkedCoverProperties(width, height, depth, 0)
+    }
+    if (type === 'VP8 ') {
+      if (
+        length < 10 ||
+        bytes[dataOffset + 3] !== 0x9d ||
+        bytes[dataOffset + 4] !== 0x01 ||
+        bytes[dataOffset + 5] !== 0x2a
+      ) {
+        throw new Error('WebP VP8 cover header is invalid.')
+      }
+      const width = readUint16Le(bytes, dataOffset + 6) & 0x3fff
+      const height = readUint16Le(bytes, dataOffset + 8) & 0x3fff
+      return checkedCoverProperties(width, height, 24, 0)
+    }
+    if (type === 'VP8L') {
+      if (length < 5 || bytes[dataOffset] !== 0x2f) throw new Error('WebP VP8L cover header is invalid.')
+      const width = 1 + bytes[dataOffset + 1] + ((bytes[dataOffset + 2] & 0x3f) << 8)
+      const height =
+        1 + (bytes[dataOffset + 2] >>> 6) + (bytes[dataOffset + 3] << 2) + ((bytes[dataOffset + 4] & 0x0f) << 10)
+      const depth = bytes[dataOffset + 4] & 0x10 ? 32 : 24
+      return checkedCoverProperties(width, height, depth, 0)
+    }
+    offset = end + (length % 2)
+  }
+  throw new Error('WebP cover is missing a supported image chunk.')
+}
+
+function checkedCoverProperties(width: number, height: number, depth: number, colors: number): CoverImageProperties {
+  if (width <= 0 || height <= 0 || depth <= 0) throw new Error('Cover image dimensions are invalid.')
+  return { width, height, depth, colors }
 }
 
 function parseFlacBlocks(metadata: Uint8Array): FlacBlock[] {
@@ -833,6 +980,16 @@ function writeSynchsafe(value: number): Uint8Array {
   return new Uint8Array([(value >> 21) & 0x7f, (value >> 14) & 0x7f, (value >> 7) & 0x7f, value & 0x7f])
 }
 
+function readUint16Be(bytes: Uint8Array, offset: number): number {
+  if (offset + 2 > bytes.byteLength) throw new Error('Big-endian integer is incomplete.')
+  return (bytes[offset] << 8) | bytes[offset + 1]
+}
+
+function readUint16Le(bytes: Uint8Array, offset: number): number {
+  if (offset + 2 > bytes.byteLength) throw new Error('Little-endian integer is incomplete.')
+  return bytes[offset] | (bytes[offset + 1] << 8)
+}
+
 function readUint32Be(bytes: Uint8Array, offset: number): number {
   if (offset + 4 > bytes.byteLength) throw new Error('Big-endian integer is incomplete.')
   return bytes[offset] * 0x1000000 + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]
@@ -845,6 +1002,11 @@ function writeUint32Be(value: number): Uint8Array {
 function readUint32Le(bytes: Uint8Array, offset: number): number {
   if (offset + 4 > bytes.byteLength) throw new Error('Little-endian integer is incomplete.')
   return bytes[offset] + bytes[offset + 1] * 0x100 + bytes[offset + 2] * 0x10000 + bytes[offset + 3] * 0x1000000
+}
+
+function readUint24Le(bytes: Uint8Array, offset: number): number {
+  if (offset + 3 > bytes.byteLength) throw new Error('Little-endian integer is incomplete.')
+  return bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16)
 }
 
 function writeUint32Le(value: number): Uint8Array {

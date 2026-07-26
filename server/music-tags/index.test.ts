@@ -31,8 +31,31 @@ const track: MusicTrackRecord = {
 const tags = buildMusicFileTags(track)
 const cover = {
   mimeType: 'image/jpeg' as const,
-  bytes: new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9]),
+  bytes: Uint8Array.from(
+    atob(
+      '/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjI4LjEwMQD/2wBDAAgEBAQEBAUFBQUFBQYGBgYGBgYGBgYGBgYHBwcICAgHBwcGBgcHCAgICAkJCQgICAgJCQoKCgwMCwsODg4RERT/xABMAAEBAAAAAAAAAAAAAAAAAAAABgEBAQAAAAAAAAAAAAAAAAAABgcQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAACAAIDASIAAhEAAxEA/9oADAMBAAIRAxEAPwCLAE1/f//Z',
+    ),
+    (character) => character.charCodeAt(0),
+  ),
 }
+const alternateCovers = [
+  {
+    mimeType: 'image/png' as const,
+    bytes: Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAIAAAAECAIAAAArjXluAAAACXBIWXMAAAABAAAAAQBPJcTWAAAAFElEQVR4nGNkYPjLwMDAwgAGqBQAGZUBC0Q3XicAAAAASUVORK5CYII=',
+      ),
+      (character) => character.charCodeAt(0),
+    ),
+  },
+  {
+    mimeType: 'image/webp' as const,
+    bytes: Uint8Array.from(
+      atob('UklGRjoAAABXRUJQVlA4IC4AAACwAQCdASoCAAQAAgA0JaACdLoABDAAAP75k2//kB//kB//kB//ID/iF3sYUAAA'),
+      (character) => character.charCodeAt(0),
+    ),
+  },
+]
 
 describe('music file tags', () => {
   it('adds ID3 tags without changing MP3 audio bytes and then recognizes them as complete', async () => {
@@ -73,7 +96,13 @@ describe('music file tags', () => {
     const tagged = await readAll(first.body)
     expect(tagged.slice(-audio.byteLength)).toEqual(audio)
     expect(contains(tagged, cover.bytes)).toBe(true)
-    expect(readFlacPictureLength(tagged)).toBe(cover.bytes.byteLength)
+    expect(readFlacPicture(tagged)).toEqual({
+      width: 2,
+      height: 2,
+      depth: 24,
+      colors: 0,
+      imageLength: cover.bytes.byteLength,
+    })
     const metadata = await parseBuffer(tagged, { mimeType: 'audio/flac', size: tagged.byteLength })
     expect(metadata.common).toMatchObject({
       title: tags.title,
@@ -97,6 +126,25 @@ describe('music file tags', () => {
     })
     expect(repairedMetadata.common.picture?.[0]?.data).toEqual(cover.bytes)
     expect(repairedBytes.slice(-audio.byteLength)).toEqual(audio)
+  })
+
+  it.each(alternateCovers)('writes $mimeType dimensions into FLAC artwork metadata', async (alternateCover) => {
+    const source = concat([
+      new TextEncoder().encode('fLaC'),
+      new Uint8Array([0x80, 0, 0, 34]),
+      new Uint8Array(34),
+      new Uint8Array([0xff, 0xf8, 0x69, 0x00]),
+    ])
+    const prepared = await prepareMusicFile(stream(source), 'flac', tags, source.byteLength, async () => alternateCover)
+    const tagged = await readAll(prepared.body)
+
+    expect(readFlacPicture(tagged)).toMatchObject({
+      width: 2,
+      height: 4,
+      depth: 24,
+      colors: 0,
+      imageLength: alternateCover.bytes.byteLength,
+    })
   })
 
   it('uses a stable unknown album for tracks without release metadata', () => {
@@ -164,7 +212,7 @@ function contains(value: Uint8Array, expected: Uint8Array): boolean {
   return value.some((_, offset) => expected.every((byte, index) => value[offset + index] === byte))
 }
 
-function readFlacPictureLength(bytes: Uint8Array): number {
+function readFlacPicture(bytes: Uint8Array) {
   let offset = 4
   while (offset + 4 <= bytes.byteLength) {
     const type = bytes[offset] & 0x7f
@@ -175,10 +223,18 @@ function readFlacPictureLength(bytes: Uint8Array): number {
       const mimeLength = readUint32Be(data, pictureOffset)
       pictureOffset += 4 + mimeLength
       const descriptionLength = readUint32Be(data, pictureOffset)
-      pictureOffset += 4 + descriptionLength + 16
+      pictureOffset += 4 + descriptionLength
+      const width = readUint32Be(data, pictureOffset)
+      pictureOffset += 4
+      const height = readUint32Be(data, pictureOffset)
+      pictureOffset += 4
+      const depth = readUint32Be(data, pictureOffset)
+      pictureOffset += 4
+      const colors = readUint32Be(data, pictureOffset)
+      pictureOffset += 4
       const pictureLength = readUint32Be(data, pictureOffset)
       expect(pictureOffset + 4 + pictureLength).toBe(data.byteLength)
-      return pictureLength
+      return { width, height, depth, colors, imageLength: pictureLength }
     }
     offset += 4 + length
   }
