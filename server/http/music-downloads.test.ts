@@ -11,6 +11,7 @@ const tags: MusicFileTags = {
   discNumber: 1,
   releaseDate: '2024-01-02',
   compilation: false,
+  coverUrl: null,
 }
 
 afterEach(() => {
@@ -73,6 +74,35 @@ describe('music download redirect', () => {
     expect(response.headers.get('location')).toBeNull()
     expect(response.headers.get('accept-ranges')).toBe('none')
     expect(bytes.slice(-audio.byteLength)).toEqual(audio)
+  })
+
+  it('downloads a trusted Netease cover when the file has no embedded artwork', async () => {
+    const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
+    const cover = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9])
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(audio, { headers: { 'Content-Type': 'audio/mpeg' } }))
+      .mockResolvedValueOnce(new Response(cover, { headers: { 'Content-Type': 'image/jpeg' } }))
+
+    const response = await deliverMusicResource(
+      'GET',
+      { ...resource(), contentLength: null },
+      'Artist - Track.mp3',
+      { ...tags, coverUrl: 'https://p3.music.126.net/album.jpg' },
+      true,
+    )
+    const bytes = new Uint8Array(await response.arrayBuffer())
+
+    expect(response.status).toBe(200)
+    expect(fetchSpy).toHaveBeenCalledTimes(2)
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, new URL('https://p3.music.126.net/album.jpg'), {
+      headers: {
+        Referer: 'https://music.163.com/',
+        'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
+      },
+      redirect: 'error',
+    })
+    expect(new TextDecoder().decode(bytes.subarray(0, 512))).toContain('APIC')
   })
 })
 

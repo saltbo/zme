@@ -18,26 +18,31 @@ const track: MusicTrackRecord = {
     releaseDate: '2024-03-02',
     releaseType: 'album',
     providerReleaseType: '专辑',
-    coverUrl: null,
+    coverUrl: 'https://p3.music.126.net/album-cover.jpg',
     discNumber: 1,
     trackNumber: 3,
   },
-  coverUrl: null,
+  coverUrl: 'https://p3.music.126.net/track-cover.jpg',
   durationMs: 180_000,
   isrcs: [],
 }
 
 const tags = buildMusicFileTags(track)
+const cover = {
+  mimeType: 'image/jpeg' as const,
+  bytes: new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3, 0xff, 0xd9]),
+}
 
 describe('music file tags', () => {
   it('adds ID3 tags without changing MP3 audio bytes and then recognizes them as complete', async () => {
     const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
-    const first = await prepareMusicFile(stream(audio), 'mp3', tags, audio.byteLength)
+    const first = await prepareMusicFile(stream(audio), 'mp3', tags, audio.byteLength, async () => cover)
 
     expect(first.changed).toBe(true)
     expect(first.contentLength).toBeGreaterThan(audio.byteLength)
     const tagged = await readAll(first.body)
     expect(tagged.slice(-audio.byteLength)).toEqual(audio)
+    expect(contains(tagged, cover.bytes)).toBe(true)
 
     const second = await prepareMusicFile(stream(tagged), 'mp3', tags, tagged.byteLength)
     expect(second).toEqual({ changed: false, body: null, contentLength: tagged.byteLength })
@@ -51,12 +56,13 @@ describe('music file tags', () => {
       new Uint8Array(34),
       audio,
     ])
-    const first = await prepareMusicFile(stream(source), 'flac', tags, source.byteLength)
+    const first = await prepareMusicFile(stream(source), 'flac', tags, source.byteLength, async () => cover)
 
     expect(first.changed).toBe(true)
     expect(first.contentLength).toBeGreaterThan(source.byteLength)
     const tagged = await readAll(first.body)
     expect(tagged.slice(-audio.byteLength)).toEqual(audio)
+    expect(contains(tagged, cover.bytes)).toBe(true)
 
     const second = await prepareMusicFile(stream(tagged), 'flac', tags, tagged.byteLength)
     expect(second).toEqual({ changed: false, body: null, contentLength: tagged.byteLength })
@@ -69,6 +75,7 @@ describe('music file tags', () => {
       trackNumber: null,
       discNumber: null,
       releaseDate: null,
+      coverUrl: 'https://p3.music.126.net/track-cover.jpg',
     })
   })
 })
@@ -104,4 +111,8 @@ function concat(chunks: Uint8Array[]): Uint8Array {
     offset += chunk.byteLength
   }
   return output
+}
+
+function contains(value: Uint8Array, expected: Uint8Array): boolean {
+  return value.some((_, offset) => expected.every((byte, index) => value[offset + index] === byte))
 }

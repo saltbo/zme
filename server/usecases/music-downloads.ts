@@ -341,10 +341,12 @@ function parseStoredMusicResource(
   if (typeof value === 'object' && value !== null && 'resource' in value && 'filename' in value) {
     const stored = value as { resource: unknown; filename: unknown; tags?: unknown }
     if (typeof stored.filename !== 'string' || !stored.filename) throw new Error('Stored music filename is invalid.')
+    const currentTags = buildMusicFileTags(track)
+    const storedTags = stored.tags === undefined ? currentTags : parseMusicFileTags(stored.tags)
     return {
       resource: parseResolvedMusicResource(stored.resource),
       filename: stored.filename,
-      tags: stored.tags === undefined ? buildMusicFileTags(track) : parseMusicFileTags(stored.tags),
+      tags: { ...storedTags, coverUrl: storedTags.coverUrl ?? currentTags.coverUrl },
     }
   }
   const resource = parseResolvedMusicResource(value)

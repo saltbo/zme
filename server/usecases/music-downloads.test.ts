@@ -317,6 +317,7 @@ describe('music downloads', () => {
         discNumber: 1,
         releaseDate: '2024-03-02',
         compilation: false,
+        coverUrl: null,
       },
     })
     expect(getConnector).not.toHaveBeenCalled()

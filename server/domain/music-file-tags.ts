@@ -20,6 +20,12 @@ export interface MusicFileTags {
   discNumber: number | null
   releaseDate: string | null
   compilation: boolean
+  coverUrl: string | null
+}
+
+export interface MusicFileCover {
+  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
+  bytes: Uint8Array
 }
 
 export interface PreparedMusicFile {
@@ -31,18 +37,21 @@ export interface PreparedMusicFile {
 interface MusicTagSource {
   title: string
   artists: string[]
+  coverUrl: string | null
   release: {
     title: string
     artists: string[]
     trackNumber: number | null
     discNumber: number | null
     releaseDate: string | null
+    coverUrl: string | null
   } | null
 }
 
 interface MetadataRewrite {
   complete: boolean
   bytes: Uint8Array
+  needsCover: boolean
 }
 
 interface FlacBlock {
@@ -61,6 +70,7 @@ export function buildMusicFileTags(track: MusicTagSource): MusicFileTags {
     discNumber: track.release?.discNumber ?? null,
     releaseDate: track.release?.releaseDate ?? null,
     compilation: albumArtists.some((artist) => /^(群星|various artists)$/i.test(artist.trim())),
+    coverUrl: track.release?.coverUrl ?? track.coverUrl,
   }
 }
 
@@ -75,11 +85,22 @@ export function parseMusicFileTags(value: unknown): MusicFileTags {
     !isNullableNumber(tags.trackNumber) ||
     !isNullableNumber(tags.discNumber) ||
     (typeof tags.releaseDate !== 'string' && tags.releaseDate !== null) ||
-    typeof tags.compilation !== 'boolean'
+    typeof tags.compilation !== 'boolean' ||
+    (tags.coverUrl !== undefined && typeof tags.coverUrl !== 'string' && tags.coverUrl !== null)
   ) {
     throw new Error('Stored music file tags are invalid.')
   }
-  return tags as unknown as MusicFileTags
+  return {
+    title: tags.title,
+    artists: tags.artists,
+    album: tags.album,
+    albumArtists: tags.albumArtists,
+    trackNumber: tags.trackNumber,
+    discNumber: tags.discNumber,
+    releaseDate: tags.releaseDate,
+    compilation: tags.compilation,
+    coverUrl: typeof tags.coverUrl === 'string' ? tags.coverUrl : null,
+  }
 }
 
 export async function prepareMusicFile(
@@ -87,6 +108,7 @@ export async function prepareMusicFile(
   extension: string,
   tags: MusicFileTags,
   originalContentLength: number | null,
+  loadCover?: (url: string) => Promise<MusicFileCover>,
 ): Promise<PreparedMusicFile> {
   const format = extension.toLowerCase()
   if (format !== 'mp3' && format !== 'flac') throw new Error(`Unsupported music tag format: ${extension}.`)
@@ -96,10 +118,18 @@ export async function prepareMusicFile(
   const metadataLength = requiredMetadataLength(prefix.bytes, format)
   if (metadataLength === null) throw new Error('Audio metadata header is incomplete.')
 
-  const rewrite =
+  let rewrite =
     format === 'mp3'
-      ? rewriteId3(prefix.bytes.subarray(0, metadataLength), tags)
-      : rewriteFlac(prefix.bytes.subarray(0, metadataLength), tags)
+      ? rewriteId3(prefix.bytes.subarray(0, metadataLength), tags, null)
+      : rewriteFlac(prefix.bytes.subarray(0, metadataLength), tags, null)
+  if (rewrite.needsCover && tags.coverUrl) {
+    if (!loadCover) throw new Error('Music cover loader is required.')
+    const cover = await loadCover(tags.coverUrl)
+    rewrite =
+      format === 'mp3'
+        ? rewriteId3(prefix.bytes.subarray(0, metadataLength), tags, cover)
+        : rewriteFlac(prefix.bytes.subarray(0, metadataLength), tags, cover)
+  }
   if (rewrite.complete) {
     await reader.cancel()
     return { changed: false, body: null, contentLength: originalContentLength }
@@ -179,9 +209,10 @@ function requiredMetadataLength(bytes: Uint8Array, format: 'mp3' | 'flac'): numb
   }
 }
 
-function rewriteId3(metadata: Uint8Array, tags: MusicFileTags): MetadataRewrite {
+function rewriteId3(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileCover | null): MetadataRewrite {
   let version = 4
   let preservedFrames: Uint8Array[] = []
+  let hasCover = false
   const current = new Map<string, string>()
 
   if (metadata.byteLength > 0) {
@@ -191,26 +222,34 @@ function rewriteId3(metadata: Uint8Array, tags: MusicFileTags): MetadataRewrite 
     if (metadata[5] !== 0) throw new Error('ID3 tags with header flags are not supported.')
     const parsed = parseId3Frames(metadata.subarray(10), version)
     preservedFrames = parsed.preserved
+    hasCover = parsed.hasCover
     for (const [key, value] of parsed.values) current.set(key, value)
   }
 
   const expected = expectedId3Values(tags, version)
-  if (metadata.byteLength > 0 && containsExpectedValues(current, expected)) {
-    return { complete: true, bytes: metadata }
+  const needsCover = Boolean(tags.coverUrl && !hasCover)
+  if (metadata.byteLength > 0 && containsExpectedValues(current, expected) && !needsCover) {
+    return { complete: true, bytes: metadata, needsCover: false }
   }
 
   const frames = [...preservedFrames, ...[...expected].map(([id, value]) => buildId3TextFrame(id, value, version))]
+  if (cover && !hasCover) frames.push(buildId3CoverFrame(cover, version))
   const body = concatBytes(frames)
+  if (body.byteLength > MAX_METADATA_BYTES) throw new Error(`Audio metadata exceeds ${MAX_METADATA_BYTES} bytes.`)
   const header = new Uint8Array(10)
   header.set(new TextEncoder().encode('ID3'))
   header[3] = version
   header.set(writeSynchsafe(body.byteLength), 6)
-  return { complete: false, bytes: concatBytes([header, body]) }
+  return { complete: false, bytes: concatBytes([header, body]), needsCover }
 }
 
-function parseId3Frames(body: Uint8Array, version: number): { values: Map<string, string>; preserved: Uint8Array[] } {
+function parseId3Frames(
+  body: Uint8Array,
+  version: number,
+): { values: Map<string, string>; preserved: Uint8Array[]; hasCover: boolean } {
   const values = new Map<string, string>()
   const preserved: Uint8Array[] = []
+  let hasCover = false
   let offset = 0
 
   while (offset + 10 <= body.byteLength) {
@@ -225,11 +264,12 @@ function parseId3Frames(body: Uint8Array, version: number): { values: Map<string
       values.set(id, decodeId3Text(frame.subarray(10)))
     } else {
       preserved.push(frame.slice())
+      if (id === 'APIC' && size > 4) hasCover = true
     }
     offset = end
   }
 
-  return { values, preserved }
+  return { values, preserved, hasCover }
 }
 
 function expectedId3Values(tags: MusicFileTags, version: number): Map<string, string> {
@@ -249,6 +289,16 @@ function expectedId3Values(tags: MusicFileTags, version: number): Map<string, st
 
 function buildId3TextFrame(id: string, value: string, version: number): Uint8Array {
   const payload = version === 4 ? encodeUtf8Id3(value) : encodeUtf16Id3(value)
+  return buildId3Frame(id, payload, version)
+}
+
+function buildId3CoverFrame(cover: MusicFileCover, version: number): Uint8Array {
+  const mimeType = new TextEncoder().encode(cover.mimeType)
+  const payload = concatBytes([new Uint8Array([0]), mimeType, new Uint8Array([0, 3, 0]), cover.bytes])
+  return buildId3Frame('APIC', payload, version)
+}
+
+function buildId3Frame(id: string, payload: Uint8Array, version: number): Uint8Array {
   const frame = new Uint8Array(10 + payload.byteLength)
   frame.set(new TextEncoder().encode(id))
   frame.set(version === 4 ? writeSynchsafe(payload.byteLength) : writeUint32Be(payload.byteLength), 4)
@@ -300,14 +350,16 @@ function decodeUtf16(bytes: Uint8Array, littleEndian: boolean): string {
   return String.fromCharCode(...units)
 }
 
-function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags): MetadataRewrite {
+function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileCover | null): MetadataRewrite {
   const blocks = parseFlacBlocks(metadata)
+  const hasCover = blocks.some((block) => block.type === 6 && block.data.byteLength > 32)
   const commentIndex = blocks.findIndex((block) => block.type === 4)
   const comments = commentIndex === -1 ? emptyVorbisComments() : parseVorbisComments(blocks[commentIndex].data)
   const expected = expectedVorbisValues(tags)
   const current = groupVorbisComments(comments.entries)
-  if (commentIndex !== -1 && containsExpectedLists(current, expected)) {
-    return { complete: true, bytes: metadata }
+  const needsCover = Boolean(tags.coverUrl && !hasCover)
+  if (commentIndex !== -1 && containsExpectedLists(current, expected) && !needsCover) {
+    return { complete: true, bytes: metadata, needsCover: false }
   }
 
   const entries = comments.entries.filter((entry) => !MANAGED_VORBIS_FIELDS.has(vorbisKey(entry)))
@@ -317,7 +369,26 @@ function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags): MetadataRewrite
   const commentBlock = { type: 4, data: buildVorbisComments(comments.vendor, entries) }
   if (commentIndex === -1) blocks.splice(1, 0, commentBlock)
   else blocks[commentIndex] = commentBlock
-  return { complete: false, bytes: buildFlacMetadata(blocks) }
+  if (cover && !hasCover) blocks.splice(commentIndex === -1 ? 2 : commentIndex + 1, 0, buildFlacPictureBlock(cover))
+  return { complete: false, bytes: buildFlacMetadata(blocks), needsCover }
+}
+
+function buildFlacPictureBlock(cover: MusicFileCover): FlacBlock {
+  const mimeType = new TextEncoder().encode(cover.mimeType)
+  return {
+    type: 6,
+    data: concatBytes([
+      writeUint32Be(3),
+      writeUint32Be(mimeType.byteLength),
+      mimeType,
+      writeUint32Be(0),
+      writeUint32Be(0),
+      writeUint32Be(0),
+      writeUint32Be(0),
+      writeUint32Be(0),
+      cover.bytes,
+    ]),
+  }
 }
 
 function parseFlacBlocks(metadata: Uint8Array): FlacBlock[] {
