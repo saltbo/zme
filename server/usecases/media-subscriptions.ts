@@ -1,6 +1,6 @@
+import { DEFAULT_MUSIC_DOWNLOAD_QUALITY } from '@shared/download-metadata'
 import type {
   MusicCollectionDetails,
-  MusicDownloadQuality,
   MusicDownloadRecordSummary,
   MusicSubscriptionInput,
   MusicSubscriptionMutationResult,
@@ -8,8 +8,6 @@ import type {
 } from '@shared/types'
 import type { Deps } from './deps'
 import type { DownloadRecordRecord, MediaSubscriptionRecord } from './ports'
-
-const AUTOMATIC_MUSIC_DOWNLOAD_QUALITY: MusicDownloadQuality = 'hires'
 
 export class MusicSubscriptionError extends Error {
   constructor(
@@ -138,7 +136,7 @@ async function evaluateMusicSubscription(
       generation: 1,
       downloaderId: subscription.downloaderId,
       config: {
-        preferredQuality: AUTOMATIC_MUSIC_DOWNLOAD_QUALITY,
+        preferredQuality: DEFAULT_MUSIC_DOWNLOAD_QUALITY,
         resolvedQuality: null,
         releaseId: track.release?.id ?? null,
       },
@@ -175,7 +173,7 @@ async function evaluateMusicSubscription(
           generation: record.generation + 1,
           downloaderId: subscription.downloaderId,
           config: {
-            preferredQuality: AUTOMATIC_MUSIC_DOWNLOAD_QUALITY,
+            preferredQuality: DEFAULT_MUSIC_DOWNLOAD_QUALITY,
             resolvedQuality: null,
             releaseId: track.release?.id ?? null,
           },

@@ -1,6 +1,7 @@
-import type { MediaKind } from './types'
+import type { MediaKind, MusicDownloadQuality } from './types'
 
 const zmeCategoryPrefix = 'zme:'
+export const DEFAULT_MUSIC_DOWNLOAD_QUALITY: MusicDownloadQuality = 'hires'
 
 export function toZmeDownloadCategory(kind: MediaKind) {
   return `${zmeCategoryPrefix}${kind === 'tv' ? 'series' : kind}`

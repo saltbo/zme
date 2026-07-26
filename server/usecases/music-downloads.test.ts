@@ -159,6 +159,7 @@ describe('music downloads', () => {
       resourceKind: 'music_track',
       resourceKey: 'netease:track:123',
       laneKey: 'music:connector-1',
+      config: { preferredQuality: 'hires' },
       status: 'queued',
       manualRequestedAt: expect.any(String),
     })

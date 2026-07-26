@@ -1,7 +1,11 @@
 import { decryptConnectorPayload, encryptConnectorPayload } from '@server/domain/connector-credentials'
 import { buildMusicFileTags, type MusicFileTags, parseMusicFileTags } from '@server/domain/music-file-tags'
 import type { Env } from '@server/env'
-import { buildMusicDownloadFilename, buildMusicDownloadSubdirectory } from '@shared/download-metadata'
+import {
+  buildMusicDownloadFilename,
+  buildMusicDownloadSubdirectory,
+  DEFAULT_MUSIC_DOWNLOAD_QUALITY,
+} from '@shared/download-metadata'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
 import type { Deps } from './deps'
 import { submitDownload } from './downloaders'
@@ -16,8 +20,6 @@ import {
 } from './ports'
 
 const MUSIC_DOWNLOAD_KEY_TTL_MS = 24 * 60 * 60 * 1000
-const DEFAULT_MUSIC_DOWNLOAD_QUALITY: MusicDownloadQuality = 'exhigh'
-
 export class MusicDownloadError extends Error {
   constructor(
     message: string,
