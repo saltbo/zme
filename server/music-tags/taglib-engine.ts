@@ -44,7 +44,10 @@ export async function writeBufferedFile(
     file.setProperty('ALBUMARTIST', tags.albumArtist)
     if (tags.discNumber !== null) file.setProperty('DISCNUMBER', String(tags.discNumber))
     file.setProperty('COMPILATION', tags.compilation ? '1' : '0')
-    if (cover && file.getPictures().length === 0) file.addPicture(cover)
+    if (cover) {
+      file.removePictures()
+      file.addPicture(cover)
+    }
   })
 }
 

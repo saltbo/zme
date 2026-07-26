@@ -27,6 +27,8 @@ const tags = {
   coverUrl: 'https://p3.music.126.net/test-cover.jpg',
 }
 
+const MAX_WEBDAV_METADATA_PREFIX_BYTES = 128 * 1024
+
 const directory = await mkdtemp(path.join(tmpdir(), 'zme-music-tags-'))
 try {
   const coverPath = path.join(directory, 'cover.jpg')
@@ -82,12 +84,38 @@ async function verifySource(sourcePath, taggedPath, extension, cover, label) {
   assert.equal(metadata.common.albumartist, tags.albumArtists.join('; '))
   assert.equal(metadata.common.track.no, tags.trackNumber)
   assert.equal(metadata.common.disk.no, tags.discNumber)
-  assert.equal(metadata.common.date, tags.releaseDate)
+  if (extension === 'mp3' && metadata.common.date === undefined) {
+    assert.equal(metadata.common.year, Number(tags.releaseDate.slice(0, 4)))
+  } else {
+    assert.equal(metadata.common.date, tags.releaseDate)
+  }
   assert.deepEqual(metadata.common.picture?.[0]?.data, cover)
+  if (extension === 'mp3' || extension === 'flac') {
+    assert.ok(
+      metadataPrefixLength(output, extension) <= MAX_WEBDAV_METADATA_PREFIX_BYTES,
+      `${label} metadata exceeds the WebDAV scan prefix`,
+    )
+  }
 
   const second = await prepareMusicFile(stream(output), extension, tags, output.byteLength)
   assert.deepEqual(second, { changed: false, body: null, contentLength: output.byteLength })
   process.stdout.write(`verified ${label}: tags, artwork, decoding, and idempotence\n`)
+}
+
+function metadataPrefixLength(bytes, extension) {
+  if (extension === 'mp3') {
+    assert.equal(new TextDecoder().decode(bytes.subarray(0, 3)), 'ID3')
+    return 10 + ((bytes[6] & 0x7f) << 21) + ((bytes[7] & 0x7f) << 14) + ((bytes[8] & 0x7f) << 7) + (bytes[9] & 0x7f)
+  }
+
+  assert.equal(new TextDecoder().decode(bytes.subarray(0, 4)), 'fLaC')
+  let offset = 4
+  while (true) {
+    const last = (bytes[offset] & 0x80) !== 0
+    const length = (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    offset += 4 + length
+    if (last) return offset
+  }
 }
 
 function run(command, args, options = {}) {

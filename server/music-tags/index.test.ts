@@ -38,6 +38,10 @@ const cover = {
     (character) => character.charCodeAt(0),
   ),
 }
+const oversizedCover = {
+  ...cover,
+  bytes: concat([cover.bytes, new Uint8Array(70 * 1024)]),
+}
 const alternateCovers = [
   {
     mimeType: 'image/png' as const,
@@ -79,6 +83,28 @@ describe('music file tags', () => {
 
     const second = await prepareMusicFile(stream(tagged), 'mp3', tags, tagged.byteLength)
     expect(second).toEqual({ changed: false, body: null, contentLength: tagged.byteLength })
+  })
+
+  it('replaces an oversized MP3 cover with WebDAV-compatible artwork', async () => {
+    const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
+    const original = await prepareMusicFile(stream(audio), 'mp3', tags, audio.byteLength, async () => oversizedCover)
+    const originalBytes = await readAll(original.body)
+
+    const repaired = await prepareMusicFile(
+      stream(originalBytes),
+      'mp3',
+      tags,
+      originalBytes.byteLength,
+      async () => cover,
+    )
+    const repairedBytes = await readAll(repaired.body)
+    const metadata = await parseBuffer(repairedBytes, { mimeType: 'audio/mpeg', size: repairedBytes.byteLength })
+
+    expect(repaired.changed).toBe(true)
+    expect(metadata.common.picture).toHaveLength(1)
+    expect(metadata.common.picture?.[0]?.data).toEqual(cover.bytes)
+    expect(id3Length(repairedBytes)).toBeLessThanOrEqual(128 * 1024)
+    expect(repairedBytes.slice(-audio.byteLength)).toEqual(audio)
   })
 
   it('adds FLAC Vorbis comments without changing audio frames and then recognizes them as complete', async () => {
@@ -125,6 +151,34 @@ describe('music file tags', () => {
       size: repairedBytes.byteLength,
     })
     expect(repairedMetadata.common.picture?.[0]?.data).toEqual(cover.bytes)
+    expect(repairedBytes.slice(-audio.byteLength)).toEqual(audio)
+  })
+
+  it('replaces an oversized FLAC cover with WebDAV-compatible artwork', async () => {
+    const audio = new Uint8Array([0xff, 0xf8, 0x69, 0x00, 1, 2, 3, 4])
+    const source = concat([
+      new TextEncoder().encode('fLaC'),
+      new Uint8Array([0x80, 0, 0, 34]),
+      new Uint8Array(34),
+      audio,
+    ])
+    const original = await prepareMusicFile(stream(source), 'flac', tags, source.byteLength, async () => oversizedCover)
+    const originalBytes = await readAll(original.body)
+
+    const repaired = await prepareMusicFile(
+      stream(originalBytes),
+      'flac',
+      tags,
+      originalBytes.byteLength,
+      async () => cover,
+    )
+    const repairedBytes = await readAll(repaired.body)
+    const metadata = await parseBuffer(repairedBytes, { mimeType: 'audio/flac', size: repairedBytes.byteLength })
+
+    expect(repaired.changed).toBe(true)
+    expect(metadata.common.picture).toHaveLength(1)
+    expect(metadata.common.picture?.[0]?.data).toEqual(cover.bytes)
+    expect(flacMetadataLength(repairedBytes)).toBeLessThanOrEqual(128 * 1024)
     expect(repairedBytes.slice(-audio.byteLength)).toEqual(audio)
   })
 
@@ -243,6 +297,21 @@ function readFlacPicture(bytes: Uint8Array) {
 
 function readUint32Be(bytes: Uint8Array, offset: number): number {
   return bytes[offset] * 0x1000000 + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]
+}
+
+function id3Length(bytes: Uint8Array): number {
+  return 10 + (bytes[6] << 21) + (bytes[7] << 14) + (bytes[8] << 7) + bytes[9]
+}
+
+function flacMetadataLength(bytes: Uint8Array): number {
+  let offset = 4
+  while (offset + 4 <= bytes.byteLength) {
+    const isLast = (bytes[offset] & 0x80) !== 0
+    const length = (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    offset += 4 + length
+    if (isLast) return offset
+  }
+  throw new Error('Expected complete FLAC metadata.')
 }
 
 function removeFlacPictureLength(bytes: Uint8Array): Uint8Array {

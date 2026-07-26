@@ -1,6 +1,11 @@
+import { MAX_EMBEDDED_MUSIC_COVER_BYTES } from './cover-loader.ts'
 import { type BufferedTagValues, inspectBufferedFile, writeBufferedFile } from './taglib-engine.ts'
+import type { MusicFileCover, MusicFileTags, PreparedMusicFile } from './types.ts'
+
+export type { MusicFileCover, MusicFileTags, PreparedMusicFile } from './types.ts'
 
 const MAX_METADATA_BYTES = 16 * 1024 * 1024
+const MAX_WEBDAV_METADATA_PREFIX_BYTES = 128 * 1024
 const MAX_BUFFERED_FILE_BYTES = 24 * 1024 * 1024
 const MANAGED_ID3_FRAMES = new Set(['TIT2', 'TPE1', 'TALB', 'TPE2', 'TRCK', 'TPOS', 'TDRC', 'TYER', 'TCMP'])
 const MANAGED_VORBIS_FIELDS = new Set([
@@ -13,29 +18,6 @@ const MANAGED_VORBIS_FIELDS = new Set([
   'DATE',
   'COMPILATION',
 ])
-
-export interface MusicFileTags {
-  title: string
-  artists: string[]
-  album: string
-  albumArtists: string[]
-  trackNumber: number | null
-  discNumber: number | null
-  releaseDate: string | null
-  compilation: boolean
-  coverUrl: string | null
-}
-
-export interface MusicFileCover {
-  mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
-  bytes: Uint8Array
-}
-
-export interface PreparedMusicFile {
-  changed: boolean
-  body: ReadableStream<Uint8Array> | null
-  contentLength: number | null
-}
 
 interface MusicTagSource {
   title: string
@@ -169,6 +151,9 @@ export async function prepareMusicFile(
 }
 
 function validateStreamingMetadata(metadata: Uint8Array, format: 'mp3' | 'flac'): void {
+  if (metadata.byteLength > MAX_WEBDAV_METADATA_PREFIX_BYTES) {
+    throw new Error(`Generated music metadata exceeds the ${MAX_WEBDAV_METADATA_PREFIX_BYTES}-byte WebDAV scan limit.`)
+  }
   if (format === 'mp3') {
     if (metadata.byteLength < 10 || !hasAscii(metadata, 0, 'ID3')) throw new Error('Generated ID3 tag is invalid.')
     const size = readSynchsafe(metadata, 6)
@@ -194,7 +179,10 @@ async function prepareBufferedMusicFile(
     validateAudioOnlyMp4(bytes)
   }
   const current = await inspectBufferedFile(bytes, extension)
-  const needsCover = Boolean(tags.coverUrl && current.pictures.length === 0)
+  const hasCompatibleCover = current.pictures.some(
+    (picture) => picture.data.byteLength <= MAX_EMBEDDED_MUSIC_COVER_BYTES,
+  )
+  const needsCover = Boolean(tags.coverUrl && !hasCompatibleCover)
   if (containsExpectedBufferedTags(current, tags) && !needsCover) {
     return { changed: false, body: null, contentLength: originalContentLength }
   }
@@ -338,6 +326,9 @@ async function validateBufferedMusicFile(
   if (expectsCover && current.pictures.length === 0) {
     throw new Error(`Tagged ${extension.toUpperCase()} file did not retain its cover artwork.`)
   }
+  if (expectsCover && !current.pictures.some((picture) => picture.data.byteLength <= MAX_EMBEDDED_MUSIC_COVER_BYTES)) {
+    throw new Error(`Tagged ${extension.toUpperCase()} file did not retain WebDAV-compatible cover artwork.`)
+  }
 }
 
 function isStringArray(value: unknown): value is string[] {
@@ -417,15 +408,24 @@ function rewriteId3(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileC
     if (version !== 3 && version !== 4) throw new Error(`Unsupported ID3 version: 2.${version}.`)
     if (metadata[5] !== 0) throw new Error('ID3 tags with header flags are not supported.')
     const parsed = parseId3Frames(metadata.subarray(10), version)
-    preservedFrames = parsed.preserved
-    hasCover = parsed.hasCover
-    hadInvalidCover = parsed.hadInvalidCover
+    const compatiblePictures = tags.coverUrl
+      ? parsed.pictures.filter((picture) => picture.imageLength <= MAX_EMBEDDED_MUSIC_COVER_BYTES)
+      : parsed.pictures
+    preservedFrames = [...parsed.preserved, ...compatiblePictures.map((picture) => picture.frame)]
+    hasCover = compatiblePictures.length > 0
+    hadInvalidCover = parsed.hadInvalidCover || compatiblePictures.length !== parsed.pictures.length
     for (const [key, value] of parsed.values) current.set(key, value)
   }
 
   const expected = expectedId3Values(tags, version)
   const needsCover = Boolean(tags.coverUrl && !hasCover)
-  if (metadata.byteLength > 0 && containsExpectedValues(current, expected) && !needsCover && !hadInvalidCover) {
+  if (
+    metadata.byteLength > 0 &&
+    metadata.byteLength <= MAX_WEBDAV_METADATA_PREFIX_BYTES &&
+    containsExpectedValues(current, expected) &&
+    !needsCover &&
+    !hadInvalidCover
+  ) {
     return { complete: true, bytes: metadata, needsCover: false }
   }
 
@@ -443,10 +443,15 @@ function rewriteId3(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFileC
 function parseId3Frames(
   body: Uint8Array,
   version: number,
-): { values: Map<string, string>; preserved: Uint8Array[]; hasCover: boolean; hadInvalidCover: boolean } {
+): {
+  values: Map<string, string>
+  preserved: Uint8Array[]
+  pictures: Array<{ frame: Uint8Array; imageLength: number }>
+  hadInvalidCover: boolean
+} {
   const values = new Map<string, string>()
   const preserved: Uint8Array[] = []
-  let hasCover = false
+  const pictures: Array<{ frame: Uint8Array; imageLength: number }> = []
   let hadInvalidCover = false
   let offset = 0
 
@@ -462,9 +467,7 @@ function parseId3Frames(
       values.set(id, decodeId3Text(frame.subarray(10)))
     } else if (id === 'APIC') {
       try {
-        validateId3Picture(frame.subarray(10))
-        preserved.push(frame.slice())
-        hasCover = true
+        pictures.push({ frame: frame.slice(), imageLength: validateId3Picture(frame.subarray(10)) })
       } catch {
         hadInvalidCover = true
       }
@@ -474,10 +477,10 @@ function parseId3Frames(
     offset = end
   }
 
-  return { values, preserved, hasCover, hadInvalidCover }
+  return { values, preserved, pictures, hadInvalidCover }
 }
 
-function validateId3Picture(payload: Uint8Array): void {
+function validateId3Picture(payload: Uint8Array): number {
   if (payload.byteLength < 5) throw new Error('ID3 APIC frame is incomplete.')
   const encoding = payload[0]
   const mimeEnd = payload.indexOf(0, 1)
@@ -490,6 +493,7 @@ function validateId3Picture(payload: Uint8Array): void {
   if (descriptionEnd === -1) throw new Error('ID3 APIC description is incomplete.')
   const imageStart = descriptionEnd + (encoding === 0 || encoding === 3 ? 1 : 2)
   if (imageStart >= payload.byteLength) throw new Error('ID3 APIC image is empty.')
+  return payload.byteLength - imageStart
 }
 
 function findUtf16Terminator(bytes: Uint8Array, offset: number): number {
@@ -584,9 +588,11 @@ function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFile
   blocks = blocks.filter((block) => {
     if (block.type !== 6) return true
     try {
-      validateFlacPicture(block.data)
-      hasCover = true
-      return true
+      const imageLength = validateFlacPicture(block.data)
+      const compatible = !tags.coverUrl || imageLength <= MAX_EMBEDDED_MUSIC_COVER_BYTES
+      hasCover ||= compatible
+      hadInvalidCover ||= !compatible
+      return compatible
     } catch {
       hadInvalidCover = true
       return false
@@ -597,7 +603,13 @@ function rewriteFlac(metadata: Uint8Array, tags: MusicFileTags, cover: MusicFile
   const expected = expectedVorbisValues(tags)
   const current = groupVorbisComments(comments.entries)
   const needsCover = Boolean(tags.coverUrl && !hasCover)
-  if (commentIndex !== -1 && containsExpectedLists(current, expected) && !needsCover && !hadInvalidCover) {
+  if (
+    metadata.byteLength <= MAX_WEBDAV_METADATA_PREFIX_BYTES &&
+    commentIndex !== -1 &&
+    containsExpectedLists(current, expected) &&
+    !needsCover &&
+    !hadInvalidCover
+  ) {
     return { complete: true, bytes: metadata, needsCover: false }
   }
 
@@ -632,7 +644,7 @@ function buildFlacPictureBlock(cover: MusicFileCover): FlacBlock {
   }
 }
 
-function validateFlacPicture(data: Uint8Array): true {
+function validateFlacPicture(data: Uint8Array): number {
   let offset = 0
   readUint32Be(data, offset)
   offset += 4
@@ -663,7 +675,7 @@ function validateFlacPicture(data: Uint8Array): true {
   if (offset + pictureLength !== data.byteLength) {
     throw new Error('FLAC picture image length does not match the block boundary.')
   }
-  return true
+  return pictureLength
 }
 
 function readCoverImageProperties(cover: MusicFileCover): CoverImageProperties {

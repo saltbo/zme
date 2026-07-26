@@ -96,7 +96,7 @@ describe('music download redirect', () => {
 
     expect(response.status).toBe(200)
     expect(fetchSpy).toHaveBeenCalledTimes(2)
-    expect(fetchSpy).toHaveBeenNthCalledWith(2, new URL('https://p3.music.126.net/album.jpg'), {
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, new URL('https://p3.music.126.net/album.jpg?param=600y600'), {
       headers: {
         Referer: 'https://music.163.com/',
         'User-Agent': 'Mozilla/5.0 ZME/0.0.1',
