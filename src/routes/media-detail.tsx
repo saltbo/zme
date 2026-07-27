@@ -24,7 +24,7 @@ import {
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useNavigate, useOutletContext, useParams } from 'react-router'
+import { Link, useLocation, useOutletContext, useParams } from 'react-router'
 import { toast } from 'sonner'
 import Lightbox from 'yet-another-react-lightbox'
 import FullscreenPlugin from 'yet-another-react-lightbox/plugins/fullscreen'
@@ -40,8 +40,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
+import { useReleaseSearchTasks } from '@/contexts/release-search-tasks'
 import { useMediaDetails, useMediaWatchClickouts } from '@/hooks/use-media-queries'
 import { getTmdbLanguage } from '@/i18n'
+import { getMediaReleaseSearchContext } from '@/lib/release-search-context'
 import { cn } from '@/lib/utils'
 
 const watchRegionOptions = ['US', 'JP', 'CN', 'HK', 'TW', 'GB', 'CA', 'AU', 'KR', 'TH'] as const
@@ -82,11 +84,11 @@ const railItemSkeletonKeys = [
 
 export function MediaDetailPage({ kind }: { kind: MediaKind }) {
   const location = useLocation()
-  const navigate = useNavigate()
   const { id } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { i18n, t } = useTranslation()
   const { getMediaStatus, setMediaStatus } = useLibrary()
+  const { startTask } = useReleaseSearchTasks()
   const routeId = Number(id)
   const tmdbLanguage = getTmdbLanguage(i18n.language)
   const [watchRegion, setWatchRegion] = useState('US')
@@ -109,7 +111,11 @@ export function MediaDetailPage({ kind }: { kind: MediaKind }) {
 
   function handleFindReleases() {
     if (!media) return
-    navigate(`${location.pathname}/releases`, { state: { origin: `${location.pathname}${location.search}` } })
+    startTask({
+      ...getMediaReleaseSearchContext(media),
+      resultPath: `${location.pathname}/releases`,
+      originPath: `${location.pathname}${location.search}`,
+    })
   }
 
   async function handleMediaStatusChange(status: MediaStatus) {

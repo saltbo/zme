@@ -3,10 +3,10 @@ import {
   filterExactMediaMatches,
   getResourceSearchQueries,
   type ReleaseMatchCriteria,
+  type ReleaseTitleSearchKind,
   type ResourceDownloadSearchInput,
-  type ResourceSearchQuery,
   scoreResourceResults,
-  uniqueById,
+  uniqueReleases,
 } from '@shared/indexer-search'
 import type { IndexerSearchItem } from '@shared/types'
 import { searchIndexerOnce } from '@/lib/api'
@@ -15,52 +15,111 @@ export interface ReleaseSearchProgress {
   completed: number
   total: number
   active: number
-  phase: 'primary' | 'fallback'
+  phase: 'automatic' | 'exhaustive' | 'fallback'
   steps: ReleaseSearchStepProgress[]
 }
 
 export interface ReleaseSearchStepProgress {
   id: string
   query: string
-  phase: ReleaseSearchProgress['phase']
+  kind: ReleaseSearchStepKind
   status: 'pending' | 'running' | 'completed' | 'failed'
   resultCount: number | null
 }
 
+export type ReleaseSearchStepKind = ReleaseTitleSearchKind | 'targeted' | 'fallback'
+
+export interface ReleaseSearchOutcome {
+  items: IndexerSearchItem[]
+  stoppedEarly: boolean
+}
+
+export interface MediaReleaseSearchOptions {
+  exhaustive?: boolean
+}
+
 export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: IndexerSearchItem[]) => void
 
-const releaseSearchConcurrency = 3
+interface SearchTask {
+  query: string
+  kind: ReleaseSearchStepKind
+  searchType?: 'search' | 'audiosearch' | 'booksearch'
+  categories?: number[]
+}
+
+export const automaticReleaseResultLimit = 30
+const supplementarySearchBatchSize = 2
+const resourceSearchConcurrency = 3
 
 export async function searchMediaReleasesInSteps(
   input: ReleaseMatchCriteria,
   onProgress: ReleaseSearchProgressHandler,
-): Promise<IndexerSearchItem[]> {
+  options: MediaReleaseSearchOptions = {},
+): Promise<ReleaseSearchOutcome> {
   const searches = buildTitleSearches(input)
   const collected: IndexerSearchItem[] = []
-  const firstError = await runSearches(searches, 'primary', collected, onProgress, (items) =>
-    uniqueById(filterExactMediaMatches(items, input)),
-  )
-  const results = uniqueById(filterExactMediaMatches(collected, input))
+  const getResults = (items: IndexerSearchItem[]) => uniqueReleases(filterExactMediaMatches(items, input))
+  let firstError: Error | null = null
+  const preferred = searches.filter((search) => search.titleKind === 'original' || search.titleKind === 'english')
+  const supplemental = searches.filter((search) => search.titleKind !== 'original' && search.titleKind !== 'english')
+  const batches = [
+    preferred,
+    ...Array.from({ length: Math.ceil(supplemental.length / supplementarySearchBatchSize) }, (_, index) =>
+      supplemental.slice(index * supplementarySearchBatchSize, (index + 1) * supplementarySearchBatchSize),
+    ),
+  ]
 
+  for (const [batchIndex, searchesInBatch] of batches.entries()) {
+    const batch = searchesInBatch.map((search) => ({
+      query: search.query,
+      kind: search.titleKind,
+    }))
+    const error = await runSearches(
+      batch,
+      options.exhaustive ? 'exhaustive' : 'automatic',
+      collected,
+      onProgress,
+      getResults,
+      batch.length,
+    )
+    firstError ??= error
+
+    const results = getResults(collected)
+    if (!options.exhaustive && results.length >= automaticReleaseResultLimit && batchIndex < batches.length - 1) {
+      return { items: results, stoppedEarly: true }
+    }
+  }
+
+  const results = getResults(collected)
   if (results.length === 0 && firstError && collected.length === 0) throw firstError
-  return results
+  return { items: results, stoppedEarly: false }
 }
 
 export async function searchResourceReleasesInSteps(
   input: ResourceDownloadSearchInput,
   onProgress: ReleaseSearchProgressHandler,
-): Promise<IndexerSearchItem[]> {
+): Promise<ReleaseSearchOutcome> {
   const collected: IndexerSearchItem[] = []
-  const primary = getResourceSearchQueries(input, true)
-  const primaryError = await runSearches(primary, 'primary', collected, onProgress, (items) =>
-    scoreResourceResults(items, input),
+  const targeted = getResourceSearchQueries(input, true).map((search) => ({ ...search, kind: 'targeted' as const }))
+  const primaryError = await runSearches(
+    targeted,
+    'automatic',
+    collected,
+    onProgress,
+    (items) => scoreResourceResults(items, input),
+    resourceSearchConcurrency,
   )
   const primaryResults = scoreResourceResults(collected, input)
-  if (primaryResults.length > 0) return primaryResults
+  if (primaryResults.length > 0) return { items: primaryResults, stoppedEarly: false }
 
-  const fallback = getResourceSearchQueries(input, false)
-  const fallbackError = await runSearches(fallback, 'fallback', collected, onProgress, (items) =>
-    scoreResourceResults(items, input),
+  const fallback = getResourceSearchQueries(input, false).map((search) => ({ ...search, kind: 'fallback' as const }))
+  const fallbackError = await runSearches(
+    fallback,
+    'fallback',
+    collected,
+    onProgress,
+    (items) => scoreResourceResults(items, input),
+    resourceSearchConcurrency,
   )
   const fallbackResults = scoreResourceResults(collected, input)
 
@@ -68,15 +127,16 @@ export async function searchResourceReleasesInSteps(
     const error = primaryError ?? fallbackError
     if (error) throw error
   }
-  return fallbackResults
+  return { items: fallbackResults, stoppedEarly: false }
 }
 
-async function runSearches<T extends ResourceSearchQuery | ReleaseMatchCriteria>(
-  searches: T[],
+async function runSearches(
+  searches: SearchTask[],
   phase: ReleaseSearchProgress['phase'],
   collected: IndexerSearchItem[],
   onProgress: ReleaseSearchProgressHandler,
   getResults: (items: IndexerSearchItem[]) => IndexerSearchItem[],
+  concurrency: number,
 ): Promise<Error | null> {
   let firstError: Error | null = null
   let nextIndex = 0
@@ -85,7 +145,7 @@ async function runSearches<T extends ResourceSearchQuery | ReleaseMatchCriteria>
   const steps: ReleaseSearchStepProgress[] = searches.map((search, index) => ({
     id: `${phase}-${index}-${search.query}`,
     query: search.query,
-    phase,
+    kind: search.kind,
     status: 'pending',
     resultCount: null,
   }))
@@ -101,7 +161,7 @@ async function runSearches<T extends ResourceSearchQuery | ReleaseMatchCriteria>
     }
 
     const startNext = () => {
-      while (active < releaseSearchConcurrency && nextIndex < searches.length) {
+      while (active < concurrency && nextIndex < searches.length) {
         const index = nextIndex
         nextIndex += 1
         active += 1
@@ -110,12 +170,14 @@ async function runSearches<T extends ResourceSearchQuery | ReleaseMatchCriteria>
 
         void searchIndexerOnce({
           query: searches[index].query,
-          searchType: 'searchType' in searches[index] ? searches[index].searchType : undefined,
-          categories: 'categories' in searches[index] ? searches[index].categories : undefined,
+          searchType: searches[index].searchType,
+          categories: searches[index].categories,
         })
           .then((payload) => {
+            const previousResultCount = getResults(collected).length
             collected.push(...payload.results)
-            steps[index] = { ...steps[index], status: 'completed', resultCount: payload.results.length }
+            const resultCount = getResults(collected).length - previousResultCount
+            steps[index] = { ...steps[index], status: 'completed', resultCount }
           })
           .catch((error) => {
             firstError ??= error instanceof Error ? error : new Error('Indexer search failed.')

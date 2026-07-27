@@ -38,7 +38,7 @@ import {
 import type { MouseEvent, ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useLocation, useNavigate, useOutletContext, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import type { AppOutletContext } from '@/components/app-shell/types'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +50,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { type MediaStatus, useLibrary } from '@/contexts/library'
+import { useReleaseSearchTasks } from '@/contexts/release-search-tasks'
 import { useBookDetails, useBookSearch, useMusicAlbumDetails, useMusicSearch } from '@/hooks/use-resource-queries'
 import {
   getFavoriteSongs,
@@ -59,6 +60,7 @@ import {
   setFavoriteSong,
 } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
+import { getBookReleaseSearchContext } from '@/lib/release-search-context'
 import {
   compareResourceTitle,
   getResourceSearchSort,
@@ -1127,10 +1129,10 @@ export function MusicDetailPage() {
 
 export function BookDetailPage() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { key } = useParams()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
   const { t } = useTranslation()
+  const { startTask } = useReleaseSearchTasks()
   const mediaKey = key ?? ''
   const details = useBookDetails(mediaKey)
   const book = details.data ?? null
@@ -1147,7 +1149,11 @@ export function BookDetailPage() {
 
   function openBookReleaseSearch(target: 'ebook' | 'audiobook') {
     if (!book) return
-    navigate(`${location.pathname}/releases/${target}`, { state: { origin: `${location.pathname}${location.search}` } })
+    startTask({
+      ...getBookReleaseSearchContext(book, target),
+      resultPath: `${location.pathname}/releases/${target}`,
+      originPath: `${location.pathname}${location.search}`,
+    })
   }
 
   if (details.isLoading) return <ResourceDetailSkeleton />

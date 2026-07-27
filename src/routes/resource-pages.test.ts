@@ -7,19 +7,21 @@ describe('media release search inputs', () => {
     const input = getMediaReleaseSearchInput(movieFixture)
 
     expect(input).toMatchObject({
-      query: 'The Matrix 1999',
-      title: 'The Matrix',
+      query: 'Matrix 1999',
+      title: 'Matrix',
+      originalTitle: 'Matrix',
+      localizedTitle: 'The Matrix',
       aliases: ['Matrix'],
       year: '1999',
       kind: 'movie',
       tmdbId: 603,
       imdbId: 'tt0133093',
       tvdbId: undefined,
-      label: 'IMDb tt0133093',
+      label: 'Matrix 1999',
     })
   })
 
-  it('uses TVDB as the series release search label when available', () => {
+  it('uses the original series title as the release search label', () => {
     const input = getMediaReleaseSearchInput(seriesFixture)
 
     expect(input).toMatchObject({
@@ -30,9 +32,9 @@ describe('media release search inputs', () => {
       tmdbId: 1399,
       imdbId: 'tt0944947',
       tvdbId: 121361,
-      label: 'TVDB 121361',
+      label: 'Game of Thrones 2011',
     })
-    expect(input.aliases).toEqual(expect.arrayContaining(['Game of Thrones', 'A Song of Ice and Fire']))
+    expect(input.aliases).toEqual(['A Song of Ice and Fire'])
   })
 })
 
@@ -88,6 +90,7 @@ const movieFixture: MediaDetails = {
   rating: 8.2,
   genres: ['Action', 'Science Fiction'],
   aliases: ['Matrix'],
+  englishTitle: 'The Matrix',
   tagline: null,
   status: 'Released',
   homepage: null,

@@ -3,6 +3,10 @@ import type { DownloadSearchTarget, IndexerSearchItem, MediaKind } from './types
 export interface ReleaseMatchCriteria {
   query: string
   title?: string
+  originalTitle?: string
+  localizedTitle?: string
+  englishTitle?: string | null
+  originalLanguage?: string | null
   aliases?: string[]
   year?: string | null
   kind?: MediaKind
@@ -60,14 +64,37 @@ const targetConfigs: Record<DownloadSearchTarget, TargetConfig> = {
   },
 }
 
-export function buildTitleSearches<T extends ReleaseMatchCriteria>(input: T): T[] {
-  const titles = uniqueStrings([input.title, ...(input.aliases ?? [])]).slice(0, 8)
-  if (titles.length === 0) return [input]
+export type ReleaseTitleSearchKind = 'original' | 'localized' | 'english' | 'alternative'
 
-  return titles.map((title) => ({
-    ...input,
-    query: [title, input.year].filter(Boolean).join(' '),
-  }))
+export interface ReleaseTitleSearch extends ReleaseMatchCriteria {
+  titleKind: ReleaseTitleSearchKind
+}
+
+export function buildTitleSearches(input: ReleaseMatchCriteria): ReleaseTitleSearch[] {
+  const candidates: Array<{ title: string | null | undefined; titleKind: ReleaseTitleSearchKind }> = [
+    { title: input.originalTitle || input.title, titleKind: 'original' },
+    { title: input.englishTitle, titleKind: 'english' },
+    { title: input.localizedTitle, titleKind: 'localized' },
+    ...(input.aliases ?? []).map((title) => ({ title, titleKind: 'alternative' as const })),
+  ]
+  const seen = new Set<string>()
+  const searches: ReleaseTitleSearch[] = []
+
+  for (const candidate of candidates) {
+    const title = candidate.title?.trim()
+    if (!title) continue
+    const key = title.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    searches.push({
+      ...input,
+      query: [title, input.year].filter(Boolean).join(' '),
+      titleKind: candidate.titleKind,
+    })
+    if (searches.length === 8) break
+  }
+
+  return searches.length > 0 ? searches : [{ ...input, titleKind: 'original' }]
 }
 
 export function filterExactMediaMatches(items: IndexerSearchItem[], input: ReleaseMatchCriteria): IndexerSearchItem[] {
@@ -114,6 +141,19 @@ export function uniqueById(items: IndexerSearchItem[]): IndexerSearchItem[] {
   for (const item of items) {
     if (seen.has(item.id)) continue
     seen.add(item.id)
+    unique.push(item)
+  }
+  return unique
+}
+
+export function uniqueReleases(items: IndexerSearchItem[]): IndexerSearchItem[] {
+  const seen = new Set<string>()
+  const unique: IndexerSearchItem[] = []
+  for (const item of items) {
+    const infoHash = item.infoHash?.trim().toLowerCase() || getMagnetInfoHash(item.magnetUrl)
+    const key = infoHash ? `hash:${infoHash}` : `id:${item.id}`
+    if (seen.has(key)) continue
+    seen.add(key)
     unique.push(item)
   }
   return unique
@@ -198,7 +238,14 @@ function scoreResourceResult(item: IndexerSearchItem, input: ResourceDownloadSea
 function matchesExpectedTitle(item: IndexerSearchItem, input: ReleaseMatchCriteria): boolean {
   if (input.kind === 'movie' && looksLikeMovieCollection(item.title)) return false
 
-  const expectedTitles = uniqueStrings([input.title, ...(input.aliases ?? []), stripYear(input.query)])
+  const expectedTitles = uniqueStrings([
+    input.originalTitle,
+    input.localizedTitle,
+    input.englishTitle,
+    input.title,
+    ...(input.aliases ?? []),
+    stripYear(input.query),
+  ])
     .map(normalizeReleaseText)
     .filter(Boolean)
   const releaseTitle = normalizeReleaseText(item.title)
@@ -245,6 +292,16 @@ function parseImdbNumber(value: string | undefined): number | null {
   if (!match) return null
   const parsed = Number(match[1])
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+}
+
+function getMagnetInfoHash(value: string | null): string | null {
+  if (!value?.startsWith('magnet:')) return null
+  try {
+    const hash = new URL(value).searchParams.get('xt')?.match(/^urn:btih:(.+)$/i)?.[1]
+    return hash?.toLowerCase() ?? null
+  } catch {
+    return null
+  }
 }
 
 function joinTerms(values: Array<string | undefined | null>): string {

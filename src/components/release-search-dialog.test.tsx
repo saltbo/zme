@@ -2,7 +2,7 @@ import type { IndexerSearchItem } from '@shared/types'
 import type { ReleaseSearchMedia } from '@/components/release-search-dialog'
 import { ReleaseSearchDialog, ReleaseSearchSurface } from '@/components/release-search-dialog'
 import '@/i18n'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReleaseSearchProgress } from '@/lib/release-search'
 
@@ -74,6 +74,35 @@ describe('ReleaseSearchSurface standalone page', () => {
     expect(screen.getAllByText('Showing 0 / 0 results').length).toBeGreaterThan(0)
     expect(screen.queryByText(/Search query/i)).not.toBeInTheDocument()
   })
+
+  it('shows accepted releases immediately while supplemental searches continue', () => {
+    renderReleaseSearchSurface({
+      items: [release],
+      loading: true,
+      progress: releaseSearchProgress,
+    })
+
+    expect(screen.getByText(release.title)).toBeInTheDocument()
+    expect(screen.getAllByText('1 results available to browse now').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('heading', { name: 'Searching indexers' })).not.toBeInTheDocument()
+  })
+
+  it('offers exhaustive alias search after automatic early stopping', () => {
+    const onSearchMore = vi.fn()
+    render(
+      renderReleaseSearchSurfaceElement({
+        items: [release],
+        loading: false,
+        progress: null,
+        canSearchMore: true,
+        onSearchMore,
+      }),
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Search other titles' })[0])
+
+    expect(onSearchMore).toHaveBeenCalledOnce()
+  })
 })
 
 function renderReleaseSearchDialog({
@@ -113,10 +142,14 @@ function renderReleaseSearchSurfaceElement({
   items,
   loading,
   progress,
+  canSearchMore = false,
+  onSearchMore = () => {},
 }: {
   items: IndexerSearchItem[]
   loading: boolean
   progress: ReleaseSearchProgress | null
+  canSearchMore?: boolean
+  onSearchMore?: () => void
 }) {
   return (
     <ReleaseSearchSurface
@@ -126,7 +159,9 @@ function renderReleaseSearchSurfaceElement({
       loading={loading}
       error={null}
       progress={progress}
+      canSearchMore={canSearchMore}
       onSearch={() => {}}
+      onSearchMore={onSearchMore}
     />
   )
 }
@@ -164,28 +199,52 @@ const releaseSearchProgress: ReleaseSearchProgress = {
   completed: 1,
   total: 3,
   active: 2,
-  phase: 'primary',
+  phase: 'automatic',
   steps: [
     {
       id: 'primary-0-kind-of-blue',
       query: 'Kind of Blue Miles Davis',
-      phase: 'primary',
+      kind: 'original',
       status: 'completed',
       resultCount: 1,
     },
     {
       id: 'primary-1-kind-of-blue-vinyl',
       query: 'Kind of Blue Vinyl',
-      phase: 'primary',
+      kind: 'localized',
       status: 'running',
       resultCount: null,
     },
     {
       id: 'primary-2-kind-of-blue-flac',
       query: 'Kind of Blue FLAC',
-      phase: 'primary',
+      kind: 'english',
       status: 'pending',
       resultCount: null,
     },
   ],
+}
+
+const release: IndexerSearchItem = {
+  id: 'release-1',
+  downloadTarget: null,
+  title: 'Test Movie 2026 1080p WEB-DL',
+  fileName: null,
+  indexer: 'Test Indexer',
+  size: 1_000,
+  seeders: 10,
+  leechers: 0,
+  files: 1,
+  protocol: 'torrent',
+  publishDate: null,
+  downloadUrl: 'https://example.test/release-1.torrent',
+  magnetUrl: null,
+  infoUrl: null,
+  infoHash: null,
+  categories: [],
+  categoryIds: [],
+  indexerFlags: [],
+  imdbId: null,
+  tmdbId: null,
+  tvdbId: null,
 }

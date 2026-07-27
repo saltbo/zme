@@ -12,6 +12,11 @@ const MOBILE_VIEWPORTS = [
   { width: 390, height: 844 },
   { width: 430, height: 932 },
 ]
+const BACKGROUND_TASK_VIEWPORTS = [
+  { width: 375, height: 812 },
+  { width: 820, height: 1180 },
+  { width: 1180, height: 820 },
+]
 const SEARCH_PLACEHOLDER = 'Search resources'
 
 test.describe('mobile search regressions', () => {
@@ -80,31 +85,58 @@ test.describe('mobile search regressions', () => {
     await expectNoHorizontalOverflow(page)
   })
 
-  test('release search app back returns to book detail without leaving release search behind', async ({ page }) => {
+  test('release search runs in the background and opens completed results from notifications', async ({ page }) => {
     await signIn(page)
     await stubResourceSearchApis(page)
-    await stubReleaseSearchApis(page)
+    let searchGate = Promise.resolve()
+    await stubReleaseSearchApis(page, () => searchGate)
 
-    for (const viewport of [DESKTOP_VIEWPORT, ...MOBILE_VIEWPORTS]) {
-      await test.step(`back stack from ${viewport.width}px`, async () => {
+    for (const viewport of BACKGROUND_TASK_VIEWPORTS) {
+      await test.step(`background task at ${viewport.width}px`, async () => {
+        let finishSearch: (() => void) | undefined
+        searchGate = new Promise<void>((resolve) => {
+          finishSearch = resolve
+        })
         await page.setViewportSize(viewport)
-        await page.goto('/books')
-        await expect(page.getByRole('heading', { name: 'Books' })).toBeVisible()
         await page.goto(BOOK_DETAIL_PATH)
         await expect(bookDetailHeading(page)).toBeVisible()
 
         await page.getByRole('button', { name: 'Search downloads' }).click()
         await page.getByRole('menuitem', { name: 'Ebook' }).click()
+        expect(new URL(page.url()).pathname).toBe(BOOK_DETAIL_PATH)
+        await expect(page.getByText('Search started')).toBeVisible()
+        const taskToaster = page.locator('[data-sonner-toaster][data-y-position="top"][data-x-position="right"]')
+        await expect(taskToaster).toHaveCount(1)
+        await expect(taskToaster).toHaveCSS('--offset-top', '5rem')
+        await expect(taskToaster).toHaveCSS('--mobile-offset-top', '8rem')
+        await expect(page.getByRole('button', { name: '1 search tasks running' })).toBeVisible()
+
+        if (viewport.width < 1024) await page.getByRole('button', { name: 'Open navigation' }).click()
+        const booksLink = await visibleLocator(page.locator('a[href="/books"]'))
+        if (!booksLink) throw new Error('Expected a visible books navigation link.')
+        await booksLink.click()
+        await page.waitForURL((url) => url.pathname === '/books')
+        await expect(page.getByRole('heading', { name: 'Books', exact: true })).toBeVisible()
+
+        finishSearch?.()
+        await expect(page.getByRole('button', { name: '1 unread search notifications' })).toBeVisible()
+        await page.getByRole('button', { name: '1 unread search notifications' }).click()
+
+        const taskDrawer = page.getByRole('dialog')
+        await expect(taskDrawer.getByRole('heading', { name: 'Search tasks' })).toBeVisible()
+        await expect(taskDrawer.getByText('Matilda', { exact: true })).toBeVisible()
+        await expect(taskDrawer.getByText('Completed', { exact: true })).toBeVisible()
+        await expect(taskDrawer.getByText('1 results', { exact: true })).toBeVisible()
+        await expectNoHorizontalOverflow(page)
+        if (viewport.width >= 768) {
+          const drawerBox = await taskDrawer.boundingBox()
+          expect(drawerBox?.width).toBeLessThanOrEqual(448)
+        }
+
+        await taskDrawer.getByRole('button', { name: 'View results' }).click()
         await page.waitForURL((url) => url.pathname === BOOK_RELEASE_PATH)
         await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
-
-        await page.getByRole('button', { name: 'Back' }).click()
-        await page.waitForURL((url) => url.pathname === BOOK_DETAIL_PATH)
-        await expect(bookDetailHeading(page)).toBeVisible()
-
-        await page.goBack()
-        await page.waitForURL((url) => url.pathname === '/books')
-        expect(new URL(page.url()).pathname).toBe('/books')
+        await expect(page.getByText('Roald Dahl Matilda 1988 EPUB')).toBeVisible()
       })
     }
   })
@@ -135,17 +167,18 @@ async function stubResourceSearchApis(page: Page) {
   })
 }
 
-async function stubReleaseSearchApis(page: Page) {
+async function stubReleaseSearchApis(page: Page, getSearchGate: () => Promise<void> = () => Promise.resolve()) {
   await page.route(/\/api\/library\/states(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { items: [] } })
   })
   await page.route(/\/api\/downloaders(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { items: [] } })
   })
-  await page.route(/\/api\/books\/[^/?]+(?:\?.*)?$/, async (route) => {
+  await page.route(`**/api/books/${encodeURIComponent(BOOK_RELEASE_KEY)}*`, async (route) => {
     await route.fulfill({ json: { item: bookDetails() } })
   })
   await page.route(/\/api\/indexers\/search(?:\?.*)?$/, async (route) => {
+    await getSearchGate()
     await route.fulfill({ json: { results: [indexerRelease()] } })
   })
 }

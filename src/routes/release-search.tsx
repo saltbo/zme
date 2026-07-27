@@ -1,66 +1,29 @@
-import type { ReleaseMatchCriteria, ResourceDownloadSearchInput } from '@shared/indexer-search'
-import type { DownloadSearchTarget, IndexerSearchItem, MediaKind } from '@shared/types'
+import type { DownloadSearchTarget, MediaKind } from '@shared/types'
 import { AlertTriangle, LoaderCircle, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useLocation, useOutletContext, useParams } from 'react-router'
 import type { AppOutletContext } from '@/components/app-shell/types'
-import {
-  type ReleaseSearchError,
-  type ReleaseSearchMedia,
-  ReleaseSearchSurface,
-} from '@/components/release-search-dialog'
+import { ReleaseSearchSurface } from '@/components/release-search-dialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useReleaseSearchTasks } from '@/contexts/release-search-tasks'
 import { useMediaDetails } from '@/hooks/use-media-queries'
 import { useBookDetails } from '@/hooks/use-resource-queries'
 import { getTmdbLanguage } from '@/i18n'
-import { ApiError } from '@/lib/api'
 import {
-  type ReleaseSearchProgress,
-  type ReleaseSearchProgressHandler,
-  searchMediaReleasesInSteps,
-  searchResourceReleasesInSteps,
-} from '@/lib/release-search'
-import {
-  getBookReleaseSearchInput,
-  getMediaReleaseSearchInput,
-  type ResourceReleaseSearchInput,
+  getBookReleaseSearchContext,
+  getMediaReleaseSearchContext,
+  type ReleaseSearchContext,
+  type ReleaseSearchTaskRequest,
 } from '@/lib/release-search-context'
-
-type ReleaseSearchContext =
-  | {
-      mode: 'media'
-      media: ReleaseSearchMedia
-      displayQuery: string
-      search: ReleaseMatchCriteria
-      fingerprint: string
-    }
-  | {
-      mode: 'resource'
-      media: ReleaseSearchMedia
-      displayQuery: string
-      search: ResourceDownloadSearchInput
-      fingerprint: string
-    }
-
-interface ReleaseSearchRun {
-  items: IndexerSearchItem[]
-  progress: ReleaseSearchProgress | null
-  loading: boolean
-  error: ReleaseSearchError | null
-  listeners: Set<() => void>
-  promise: Promise<void>
-}
 
 interface ReleaseRouteState {
   origin?: string
 }
-
-const releaseSearchRuns = new Map<string, ReleaseSearchRun>()
 
 export function MediaReleaseSearchPage({ kind }: { kind: MediaKind }) {
   const { id } = useParams()
@@ -74,14 +37,7 @@ export function MediaReleaseSearchPage({ kind }: { kind: MediaKind }) {
   const parentPath = isValidRouteId ? `/${kind === 'movie' ? 'movies' : 'series'}/${routeId}` : getMediaIndexPath(kind)
   const context = useMemo<ReleaseSearchContext | null>(() => {
     if (!media) return null
-    const search = getMediaReleaseSearchInput(media)
-    return {
-      mode: 'media',
-      media,
-      displayQuery: search.label,
-      search,
-      fingerprint: getSearchFingerprint('media', search, media),
-    }
+    return getMediaReleaseSearchContext(media)
   }, [media])
 
   return (
@@ -118,8 +74,7 @@ export function BookReleaseSearchPage() {
   const parentPath = mediaKey ? `/books/${encodeURIComponent(mediaKey)}` : '/books'
   const context = useMemo<ReleaseSearchContext | null>(() => {
     if (!book || !parsedTarget) return null
-    const input = getBookReleaseSearchInput(book, parsedTarget)
-    return getResourceSearchContext(input)
+    return getBookReleaseSearchContext(book, parsedTarget)
   }, [book, parsedTarget])
 
   return (
@@ -160,16 +115,23 @@ function ReleaseSearchPageLayout({
   const { t } = useTranslation()
   const location = useLocation()
   const { setTopbarOverride } = useOutletContext<AppOutletContext>()
-  const [retryNonce, setRetryNonce] = useState(0)
+  const { tasks, startTask, markTaskRead } = useReleaseSearchTasks()
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const originPath = getOriginPath(location.state)
   const backTo = originPath ?? parentPath
-  const [searchState, setSearchState] = useState<{
-    items: IndexerSearchItem[]
-    progress: ReleaseSearchProgress | null
-    loading: boolean
-    error: ReleaseSearchError | null
-  }>({ items: [], progress: null, loading: false, error: null })
+  const task = context ? tasks.find((item) => item.id === context.fingerprint) : undefined
+  const request = useMemo<ReleaseSearchTaskRequest | null>(
+    () =>
+      context
+        ? {
+            ...context,
+            resultPath: location.pathname,
+            originPath: originPath ?? undefined,
+          }
+        : null,
+    [context, location.pathname, originPath],
+  )
+  const loading = task?.status === 'searching'
 
   useEffect(() => {
     setTopbarOverride({
@@ -180,7 +142,7 @@ function ReleaseSearchPageLayout({
       backMode: originPath ? 'history' : 'replace',
       hideSearch: true,
       actions:
-        context && !searchState.loading ? (
+        context && !loading ? (
           <Button
             type="button"
             variant="outline"
@@ -196,30 +158,17 @@ function ReleaseSearchPageLayout({
     })
 
     return () => setTopbarOverride(null)
-  }, [backTo, context, location.pathname, originPath, searchState.loading, setTopbarOverride, t])
+  }, [backTo, context, loading, location.pathname, originPath, setTopbarOverride, t])
 
   useEffect(() => {
-    if (!context) {
-      setSearchState({ items: [], progress: null, loading: false, error: null })
-      return
-    }
+    if (!request || task) return
+    startTask(request, { announce: false })
+  }, [request, startTask, task])
 
-    const run = getOrStartReleaseSearchRun(`${context.fingerprint}:${retryNonce}`, context, t)
-    const sync = () => {
-      setSearchState({
-        items: run.items,
-        progress: run.progress,
-        loading: run.loading,
-        error: run.error,
-      })
-    }
-
-    run.listeners.add(sync)
-    sync()
-    return () => {
-      run.listeners.delete(sync)
-    }
-  }, [context, retryNonce, t])
+  useEffect(() => {
+    if (!task || task.status === 'searching') return
+    markTaskRead(task.id)
+  }, [markTaskRead, task, task?.status, task?.unread])
 
   return (
     <div className="mx-auto flex w-full min-w-0 max-w-[1520px] flex-col px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
@@ -227,18 +176,22 @@ function ReleaseSearchPageLayout({
         <ReleaseSearchPlaceholder>{t('searchingIndexers')}</ReleaseSearchPlaceholder>
       ) : contextError ? (
         <ReleaseSearchRouteError message={contextError} fallbackPath={fallbackPath} onRetry={onContextRetry} />
-      ) : context ? (
+      ) : context && task && request ? (
         <ReleaseSearchSurface
           media={context.media}
           query={context.displayQuery}
-          items={searchState.items}
-          loading={searchState.loading}
-          error={searchState.error}
-          progress={searchState.progress}
-          onSearch={() => setRetryNonce((current) => current + 1)}
+          items={task.items}
+          loading={task.status === 'searching'}
+          canSearchMore={task.canSearchMore}
+          error={task.error}
+          progress={task.progress}
+          onSearch={() => startTask(request)}
+          onSearchMore={() => startTask(request, { exhaustive: true })}
           mobileFiltersOpen={mobileFiltersOpen}
           onMobileFiltersOpenChange={setMobileFiltersOpen}
         />
+      ) : context ? (
+        <ReleaseSearchPlaceholder>{t('searchingIndexers')}</ReleaseSearchPlaceholder>
       ) : (
         <ReleaseSearchRouteError message={t('indexerSearchMissingContext')} fallbackPath={fallbackPath} />
       )}
@@ -309,106 +262,6 @@ function ReleaseSearchRouteError({
       </div>
     </Alert>
   )
-}
-
-function getOrStartReleaseSearchRun(key: string, context: ReleaseSearchContext, t: (key: string) => string) {
-  const existing = releaseSearchRuns.get(key)
-  if (existing) return existing
-
-  const run: ReleaseSearchRun = {
-    items: [],
-    progress: null,
-    loading: true,
-    error: null,
-    listeners: new Set(),
-    promise: Promise.resolve(),
-  }
-  const notify = () => {
-    for (const listener of run.listeners) listener()
-  }
-  const onProgress: ReleaseSearchProgressHandler = (progress, results) => {
-    run.progress = progress
-    run.items = results
-    notify()
-  }
-
-  run.promise = (
-    context.mode === 'media'
-      ? searchMediaReleasesInSteps(context.search, onProgress)
-      : searchResourceReleasesInSteps(context.search, onProgress)
-  )
-    .then((results) => {
-      run.items = results
-      run.error = null
-    })
-    .catch((error) => {
-      run.items = []
-      run.error = getReleaseSearchError(error, t)
-    })
-    .finally(() => {
-      run.loading = false
-      run.progress = null
-      notify()
-    })
-
-  releaseSearchRuns.set(key, run)
-  return run
-}
-
-function getResourceSearchContext(input: ResourceReleaseSearchInput): ReleaseSearchContext {
-  return {
-    mode: 'resource',
-    media: input.item,
-    displayQuery: input.query,
-    search: input,
-    fingerprint: getSearchFingerprint('resource', input, input.item),
-  }
-}
-
-function getSearchFingerprint(
-  mode: ReleaseSearchContext['mode'],
-  search: ReleaseMatchCriteria | ResourceDownloadSearchInput,
-  media: ReleaseSearchMedia,
-) {
-  return JSON.stringify({
-    mode,
-    search,
-    media: {
-      id: media.id,
-      kind: media.kind,
-      title: media.title,
-      year: media.releaseYear,
-      category: media.downloadCategory,
-      tags: media.downloadTags,
-    },
-  })
-}
-
-function getReleaseSearchError(error: unknown, t: (key: string) => string): ReleaseSearchError {
-  if (error instanceof ApiError && (error.code === 'INDEXER_NOT_CONFIGURED' || error.status === 404)) {
-    return {
-      title: t('indexerNotConfiguredTitle'),
-      description: t('indexerNotConfiguredDescription'),
-      action: t('retrySearch'),
-      tone: 'configuration',
-    }
-  }
-
-  if (error instanceof ApiError && error.status === 502) {
-    return {
-      title: t('indexerConnectionFailedTitle'),
-      description: t('indexerConnectionFailedDescription'),
-      action: t('retrySearch'),
-      tone: 'connection',
-    }
-  }
-
-  return {
-    title: t('indexerSearchFailedTitle'),
-    description: error instanceof Error ? error.message : t('indexerSearchFailedDescription'),
-    action: t('retrySearch'),
-    tone: 'generic',
-  }
 }
 
 function getOriginPath(state: unknown) {

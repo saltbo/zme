@@ -6,8 +6,17 @@ import { AppTopbar } from '@/components/app-shell/app-topbar'
 import { MobileHeader } from '@/components/app-shell/mobile-header'
 import type { TopbarOverride } from '@/components/app-shell/types'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { ReleaseSearchTasksProvider } from '@/contexts/release-search-tasks'
 
 export function AuthenticatedShell() {
+  return (
+    <ReleaseSearchTasksProvider>
+      <AuthenticatedShellContent />
+    </ReleaseSearchTasksProvider>
+  )
+}
+
+function AuthenticatedShellContent() {
   const [topbarOverride, setTopbarOverride] = useState<TopbarOverride | null>(null)
 
   return (

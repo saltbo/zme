@@ -16,6 +16,14 @@ export function App() {
       <TooltipProvider>
         <RouterProvider router={router} />
         <Toaster richColors />
+        <Toaster
+          id="release-search"
+          position="top-right"
+          offset={{ top: '5rem', right: '1.5rem' }}
+          mobileOffset={{ top: '8rem', right: '1rem', left: '1rem' }}
+          richColors
+          containerAriaLabel="Search notifications"
+        />
       </TooltipProvider>
     </QueryClientProvider>
   )

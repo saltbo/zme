@@ -4,6 +4,7 @@ import type { FormEvent } from 'react'
 import { useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router'
+import { ReleaseSearchTasksButton } from '@/components/app-shell/release-search-tasks'
 import type { TopbarBackMode, TopbarOverride } from '@/components/app-shell/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -84,6 +85,7 @@ export function AppTopbar({ override }: { override: TopbarOverride | null }) {
                 inputClassName="h-10 rounded-full bg-background/80 pl-9 shadow-sm"
               />
             ) : null}
+            <ReleaseSearchTasksButton />
           </div>
         </div>
         {!hideSearch ? (

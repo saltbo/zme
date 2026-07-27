@@ -71,6 +71,8 @@ interface ReleaseSearchSurfaceProps {
   error: ReleaseSearchError | null
   progress?: ReleaseSearchProgress | null
   onSearch: () => void
+  canSearchMore?: boolean
+  onSearchMore?: () => void
   className?: string
   mobileFiltersOpen?: boolean
   onMobileFiltersOpenChange?: (open: boolean) => void
@@ -145,6 +147,8 @@ function ReleaseSearchContent({
   error,
   progress,
   onSearch,
+  canSearchMore,
+  onSearchMore,
   className,
   mobileFiltersOpen,
   onMobileFiltersOpenChange,
@@ -207,7 +211,9 @@ function ReleaseSearchContent({
       error={error}
       shown={visibleItems.length}
       total={items.length}
+      canSearchMore={Boolean(canSearchMore)}
       hasFilters={hasFilters}
+      onSearchMore={onSearchMore}
       onClearFilters={clearFilters}
     />
   )
@@ -561,7 +567,9 @@ function ReleaseSearchSummary({
   error,
   shown,
   total,
+  canSearchMore,
   hasFilters,
+  onSearchMore,
   onClearFilters,
 }: {
   loading: boolean
@@ -569,7 +577,9 @@ function ReleaseSearchSummary({
   error: ReleaseSearchError | null
   shown: number
   total: number
+  canSearchMore: boolean
   hasFilters: boolean
+  onSearchMore?: () => void
   onClearFilters: () => void
 }) {
   const { t } = useTranslation()
@@ -585,6 +595,7 @@ function ReleaseSearchSummary({
             active: progress.active,
           })}
         </span>
+        {total > 0 ? <span>{t('releaseSearchResultsAvailable', { count: total })}</span> : null}
       </div>
     )
   }
@@ -598,6 +609,11 @@ function ReleaseSearchSummary({
       {hasFilters ? (
         <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onClearFilters}>
           {t('clearFilters')}
+        </Button>
+      ) : null}
+      {canSearchMore && onSearchMore ? (
+        <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onSearchMore}>
+          {t('searchOtherTitles')}
         </Button>
       ) : null}
     </div>
@@ -856,7 +872,7 @@ function ReleasePanel({
 }) {
   const { t } = useTranslation()
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return <ReleaseSearchProgressPanel progress={progress} />
   }
 
@@ -954,9 +970,7 @@ function ReleaseSearchProgressPanel({ progress }: { progress?: ReleaseSearchProg
               <ReleaseSearchStepIcon status={step.status} />
               <div className="min-w-0">
                 <div className="truncate font-medium text-sm">{step.query}</div>
-                <div className="text-muted-foreground text-xs">
-                  {t(step.phase === 'fallback' ? 'fallbackSearchPhase' : 'primarySearchPhase')}
-                </div>
+                <div className="text-muted-foreground text-xs">{t(getReleaseSearchStepLabel(step.kind))}</div>
               </div>
               <div className="shrink-0 text-right text-muted-foreground text-xs">
                 {step.status === 'completed'
@@ -980,6 +994,15 @@ function ReleaseSearchStepIcon({ status }: { status: ReleaseSearchProgress['step
   if (status === 'failed') return <AlertTriangle className="size-4 text-destructive" />
   if (status === 'running') return <LoaderCircle className="size-4 animate-spin text-primary" />
   return <Search className="size-4 text-muted-foreground" />
+}
+
+function getReleaseSearchStepLabel(kind: ReleaseSearchProgress['steps'][number]['kind']) {
+  if (kind === 'original') return 'originalTitleSearchPhase'
+  if (kind === 'localized') return 'localizedTitleSearchPhase'
+  if (kind === 'english') return 'englishTitleSearchPhase'
+  if (kind === 'alternative') return 'alternativeTitleSearchPhase'
+  if (kind === 'targeted') return 'targetedSearchPhase'
+  return 'fallbackSearchPhase'
 }
 
 function ReleaseRow({

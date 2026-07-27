@@ -613,6 +613,7 @@ export interface MediaSeasonDetails extends MediaSeasonSummary {
 
 export interface MediaDetails extends MediaSearchItem {
   aliases: string[]
+  englishTitle: string | null
   genres: string[]
   tagline: string | null
   status: string | null

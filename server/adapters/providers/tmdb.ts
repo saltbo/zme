@@ -494,7 +494,8 @@ function toMediaDetails(
 
   return {
     ...searchItem,
-    aliases: getAliasTitles(kind, item, searchItem),
+    aliases: getAliasTitles(item, searchItem),
+    englishTitle: getEnglishTitle(kind, item, searchItem),
     genres: (item.genres ?? []).map((genre) => genre.name).filter((name): name is string => Boolean(name)),
     tagline: item.tagline?.trim() || null,
     status: item.status ?? null,
@@ -711,18 +712,13 @@ function toTvReleaseInfo(payload: TmdbDetailsResponse['content_ratings']): Media
   }
 }
 
-function getAliasTitles(kind: MediaKind, item: TmdbDetailsResponse, searchItem: MediaSearchItem): string[] {
+function getAliasTitles(item: TmdbDetailsResponse, searchItem: MediaSearchItem): string[] {
   const values = new Set<string>()
   const add = (value: string | undefined) => {
     const normalized = value?.trim()
     if (normalized && normalized !== searchItem.title && normalized !== searchItem.originalTitle) {
       values.add(normalized)
     }
-  }
-
-  for (const translation of item.translations?.translations ?? []) {
-    if (translation.iso_639_1 !== 'en') continue
-    add(kind === 'movie' ? translation.data?.title : translation.data?.name)
   }
 
   for (const title of item.alternative_titles?.titles ?? []) {
@@ -733,6 +729,13 @@ function getAliasTitles(kind: MediaKind, item: TmdbDetailsResponse, searchItem: 
   }
 
   return [...values].slice(0, 6)
+}
+
+function getEnglishTitle(kind: MediaKind, item: TmdbDetailsResponse, searchItem: MediaSearchItem): string | null {
+  const translation = item.translations?.translations?.find((candidate) => candidate.iso_639_1 === 'en')
+  const title = (kind === 'movie' ? translation?.data?.title : translation?.data?.name)?.trim()
+  if (!title || title === searchItem.originalTitle) return null
+  return title
 }
 
 function getCrewNames(crew: TmdbCredit[] | undefined, jobs: string[]): string[] {
