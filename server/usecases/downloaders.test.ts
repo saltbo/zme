@@ -51,6 +51,7 @@ const httpInput: CreateDownloadInput = {
 function createSubmitDeps(options: {
   matches?: boolean
   resolved?: ResolvedDownloadSource | null
+  resolveError?: Error
   indexers?: IndexerRecord[]
 }) {
   const submit = vi.fn(async () => ({ externalTaskId: null }))
@@ -67,7 +68,10 @@ function createSubmitDeps(options: {
     indexerGateways: {
       prowlarr: {
         matchesDownloadUrl: () => options.matches ?? false,
-        resolveDownloadSource: async () => options.resolved ?? null,
+        resolveDownloadSource: async () => {
+          if (options.resolveError) throw options.resolveError
+          return options.resolved ?? null
+        },
       },
     },
   }
@@ -142,6 +146,18 @@ describe('submitDownload', () => {
 
     await expect(submitDownload(deps, 'user-1', torrentUrlInput)).rejects.toThrow(
       'Prowlarr download URL could not be resolved.',
+    )
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('preserves the concrete indexer resolution error', async () => {
+    const { deps, submit } = createSubmitDeps({
+      matches: true,
+      resolveError: new Error('Prowlarr download URL returned HTTP 401 Unauthorized.'),
+    })
+
+    await expect(submitDownload(deps, 'user-1', torrentUrlInput)).rejects.toThrow(
+      'Prowlarr download URL returned HTTP 401 Unauthorized.',
     )
     expect(submit).not.toHaveBeenCalled()
   })

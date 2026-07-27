@@ -5,7 +5,7 @@ export interface DownloadSource {
   sourceType: DownloadSourceType
 }
 
-const resolveTimeoutMs = 5000
+const resolveTimeoutMs = 30_000
 
 export async function resolveProwlarrProxyDownloadUrl(uri: string): Promise<DownloadSource | null> {
   let current = uri
@@ -15,10 +15,17 @@ export async function resolveProwlarrProxyDownloadUrl(uri: string): Promise<Down
       redirect: 'manual',
     })
 
-    if (!isRedirect(response.status)) return null
+    if (!isRedirect(response.status)) {
+      const detail = await readResponseDetail(response)
+      throw new Error(
+        `Prowlarr download URL returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${detail ? `: ${detail}` : ''}; expected a redirect.`,
+      )
+    }
 
     const location = response.headers.get('location')
-    if (!location) return null
+    if (!location) {
+      throw new Error(`Prowlarr download URL returned HTTP ${response.status} without a Location header.`)
+    }
     if (location.startsWith('magnet:')) return { uri: location, sourceType: 'magnet' }
 
     current = new URL(location, current).toString()
@@ -66,6 +73,11 @@ async function fetchWithTimeout(input: string, init: RequestInit) {
       ...init,
       signal: controller.signal,
     })
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Prowlarr download URL timed out after ${resolveTimeoutMs / 1000} seconds.`, { cause: error })
+    }
+    throw error
   } finally {
     clearTimeout(timeout)
   }
@@ -73,4 +85,14 @@ async function fetchWithTimeout(input: string, init: RequestInit) {
 
 function isRedirect(status: number) {
   return status >= 300 && status < 400
+}
+
+async function readResponseDetail(response: Response) {
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0]
+  if (!contentType) return null
+  if (contentType !== 'application/json' && !contentType.startsWith('text/')) return contentType
+
+  const body = (await response.text()).replace(/\s+/g, ' ').trim()
+  if (!body) return contentType
+  return `${contentType} ${body.slice(0, 500)}`
 }

@@ -59,8 +59,14 @@ export const prowlarrIndexerGateway: IndexerGateway = {
 
   async resolveDownloadSource(config, uri) {
     const apiKey = config.credentials.apiKey
-    if (!apiKey) return null
-    return resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, apiKey)).catch(() => null)
+    if (!apiKey) throw new Error('Prowlarr API key is missing.')
+
+    try {
+      return await resolveProwlarrProxyDownloadUrl(withProwlarrApiKey(uri, apiKey))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Prowlarr download URL request failed: ${message}`, { cause: error })
+    }
   },
 }
 
