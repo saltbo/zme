@@ -7,7 +7,7 @@ trace back to scenarios by id.
 
 ## Convention
 
-- One `.feature` file per capability (`onboarding.feature`, `auth.feature`, …).
+- One `.feature` file per capability (`auth.feature`, `library.feature`, …).
 - Each scenario carries two tags: the **id** `@<capability>/<slug>` and the **layer**
   that proves it (`@domain` / `@usecase` / `@web` / `@api` / `@e2e`):
 

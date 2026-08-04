@@ -2,13 +2,6 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { expect, type Page, test } from '@playwright/test'
 
-const BASE_URL = 'http://localhost:7171'
-const ADMIN = {
-  name: process.env.LOCAL_TEST_NAME ?? 'E2E Admin',
-  email: process.env.LOCAL_TEST_EMAIL ?? 'e2e-admin@zme.test',
-  password: process.env.LOCAL_TEST_PASSWORD ?? 'e2e-password-123',
-}
-
 test('one live stream reconciles task changes across views [spec: downloads/live-task-monitoring]', async ({
   page,
 }) => {
@@ -43,15 +36,9 @@ test('one live stream reconciles task changes across views [spec: downloads/live
 
 async function signIn(page: Page) {
   await page.addInitScript(() => window.localStorage.setItem('zme.language', 'en-US'))
-
-  const setup = await page.request.post('/api/setup/admin', { data: ADMIN })
-  expect([201, 409]).toContain(setup.status())
-
-  const signInResponse = await page.request.post('/api/auth/sign-in/email', {
-    data: { email: ADMIN.email, password: ADMIN.password },
-    headers: { Origin: BASE_URL },
-  })
-  await expect(signInResponse).toBeOK()
+  await page.goto('/login')
+  await page.getByRole('link', { name: 'Continue with identity provider' }).click()
+  await expect(page).not.toHaveURL(/\/login/)
 }
 
 async function replaceDownloaders(page: Page, endpoint: string) {

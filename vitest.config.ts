@@ -14,9 +14,10 @@ export default defineConfig({
     // Coverage is collected from the unit project only (`pnpm test:coverage`);
     // the workerd pool does not support the v8 provider.
     coverage: {
-      include: ['server/**', 'shared/**'],
+      include: ['server/**/*.{ts,tsx}', 'shared/**/*.{ts,tsx}'],
       exclude: ['server/clients/**', 'server/api-tests/**', '**/*.test.ts', '**/*.d.ts'],
-      reporter: ['text', 'text-summary'],
+      reporter: ['text', 'text-summary', 'lcov'],
+      thresholds: { statements: 55 },
     },
     projects: [
       // Server fast suite: pure domain rules, usecases over fake ports, adapters
@@ -54,10 +55,19 @@ export default defineConfig({
             miniflare: {
               compatibilityDate: '2026-06-03',
               compatibilityFlags: ['nodejs_compat'],
-              d1Databases: ['DB'],
+              d1Databases: ['DB', 'MIGRATION_DB'],
               bindings: {
                 TEST_MIGRATIONS: await readD1Migrations(path.join(__dirname, 'migrations')),
-                BETTER_AUTH_SECRET: 'vitest-secret-vitest-secret-vitest-secret',
+                PUBLIC_APP_ORIGIN: 'https://zme.test',
+                OIDC_ISSUER: 'https://issuer.zme.test',
+                OIDC_CLIENT_ID: 'zme-test-client',
+                OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'none',
+                OIDC_REDIRECT_URI: 'https://zme.test/auth/callback',
+                OIDC_POST_LOGOUT_REDIRECT_URI: 'https://zme.test/login',
+                OIDC_ALLOWED_ALGS: 'ES256',
+                OIDC_ADMIN_SUBJECTS: 'https://issuer.zme.test|admin-subject',
+                OIDC_LEGACY_BINDINGS_JSON: '[]',
+                REALMROOT_RESOURCE_URL: 'https://zme.test/api',
               },
             },
           })),

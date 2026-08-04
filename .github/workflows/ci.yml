@@ -8,8 +8,12 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -29,6 +33,18 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: OpenAPI contract lint
+        run: pnpm openapi:lint
+
+      - name: OpenAPI semantic signature
+        run: pnpm openapi:diff
+
+      - name: BDD and native evidence inventory
+        run: pnpm quality:inventory
+
+      - name: Validate migration history
+        run: pnpm db:check
+
       - name: Migrations are generated from schema
         run: |
           pnpm db:generate
@@ -39,18 +55,25 @@ jobs:
           fi
 
       - name: Test (unit + api)
-        run: pnpm test
+        run: pnpm test:ci
 
       - name: Coverage report
         run: pnpm test:coverage
+
+      - name: Changed architecture coverage threshold
+        run: pnpm test:coverage:task
 
       - name: Build
         run: pnpm build
 
   e2e:
     runs-on: ubuntu-latest
+    env:
+      COVERAGE_DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -67,4 +90,4 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: E2E (real stack)
-        run: pnpm e2e
+        run: pnpm e2e:ci
