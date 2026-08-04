@@ -4,6 +4,7 @@ import {
   createIndexer,
   deleteIndexer,
   getIndexer,
+  getIndexerHealth,
   listIndexers,
   searchIndexers,
   updateIndexer,
@@ -12,6 +13,7 @@ import { IndexerNotConfiguredError } from '@server/usecases/ports'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
+import { entityTag, ifMatchRevision, problem } from './protocol'
 import { idParamsSchema } from './schemas'
 
 const indexerSearchQuerySchema = z.object({
@@ -30,8 +32,7 @@ const indexerSchema = z.object({
 })
 
 export function registerIndexerRoutes(routes: Hono<AppEnv>) {
-  // /indexers/search must be registered before /indexers/:id.
-  routes.get('/indexers/search', zValidator('query', indexerSearchQuerySchema), async (c) => {
+  routes.get('/release-candidates', zValidator('query', indexerSearchQuerySchema), async (c) => {
     const { q, searchType, categories } = c.req.valid('query')
     try {
       const deps = c.get('deps')
@@ -64,31 +65,44 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
     const { id } = c.req.valid('param')
     const item = await getIndexer(c.get('deps'), id)
     if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item })
   })
 
   routes.post('/indexers', zValidator('json', indexerSchema), async (c) => {
     const item = await createIndexer(c.get('deps'), c.req.valid('json'))
+    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item }, 201)
   })
 
   routes.patch('/indexers/:id', zValidator('param', idParamsSchema), zValidator('json', indexerSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'))
+    const expectedUpdatedAt = ifMatchRevision(c)
+    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
+    const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'), expectedUpdatedAt)
     if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item })
   })
 
   routes.delete('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const deleted = await deleteIndexer(c.get('deps'), id)
+    const expectedUpdatedAt = ifMatchRevision(c)
+    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
+    const deleted = await deleteIndexer(c.get('deps'), id, expectedUpdatedAt)
     if (!deleted) return c.json({ error: 'Indexer not found.' }, 404)
-    return c.json({ id })
+    return c.body(null, 204)
   })
 
-  routes.post('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
+  routes.put('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
     const health = await checkIndexerHealth(c.get('deps'), id)
+    if (!health) return c.json({ error: 'Indexer not found.' }, 404)
+    return c.json({ health })
+  })
+
+  routes.get('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
+    const health = await getIndexerHealth(c.get('deps'), c.req.valid('param').id)
     if (!health) return c.json({ error: 'Indexer not found.' }, 404)
     return c.json({ health })
   })

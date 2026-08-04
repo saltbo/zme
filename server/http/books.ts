@@ -23,7 +23,7 @@ export const mediaKeyParamsSchema = z.object({
 })
 
 export function registerBookRoutes(routes: Hono<AppEnv>) {
-  routes.get('/books/search', zValidator('query', bookSearchQuerySchema), async (c) => {
+  routes.get('/books', zValidator('query', bookSearchQuerySchema), async (c) => {
     const { q, page, pageSize } = c.req.valid('query')
     try {
       return c.json(await c.get('deps').bookProvider.search(q, page, pageSize))
@@ -32,7 +32,7 @@ export function registerBookRoutes(routes: Hono<AppEnv>) {
     }
   })
 
-  routes.get('/books/discover', zValidator('query', bookDiscoverQuerySchema), async (c) => {
+  routes.get('/book-recommendations', zValidator('query', bookDiscoverQuerySchema), async (c) => {
     try {
       return c.json(await c.get('deps').bookProvider.discover(c.req.valid('query')))
     } catch (error) {

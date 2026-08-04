@@ -15,17 +15,12 @@ import { PersonCreditsPage } from '@/routes/person-credits'
 import { BookReleaseSearchPage, MediaReleaseSearchPage } from '@/routes/release-search'
 import { BookDetailPage, BooksPage, MusicDetailPage, MusicPage } from '@/routes/resource-pages'
 import { SettingsPage } from '@/routes/settings'
-import { UsersPage } from '@/routes/users'
 
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <AuthGate />,
     children: [
-      {
-        path: 'onboarding',
-        element: null,
-      },
       {
         path: 'login',
         element: null,
@@ -132,14 +127,6 @@ export const router = createBrowserRouter([
           {
             path: 'settings',
             element: <SettingsPage />,
-          },
-          {
-            path: 'admin/users',
-            element: (
-              <AdminRoute>
-                <UsersPage />
-              </AdminRoute>
-            ),
           },
           {
             path: 'admin/media-sources',

@@ -11,8 +11,8 @@ beforeEach(async () => {
   const now = new Date().toISOString()
   await env.DB.batch([
     env.DB.prepare(
-      'INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(USER_ID, 'Music Tester', 'music-repo@zme.test', 1, 'admin', Date.now(), Date.now()),
+      'INSERT INTO users (id, name, oidc_email, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).bind(USER_ID, 'Music Tester', 'music-repo@zme.test', 'admin', Date.now(), Date.now()),
     env.DB.prepare(
       'INSERT INTO connectors (id, user_id, kind, external_account_id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).bind(CONNECTOR_ID, USER_ID, 'netease', 'netease-user', 'Netease User', now, now),

@@ -10,6 +10,10 @@ import {
   searchIndexerOnce,
   searchMusicAlbums,
 } from '.'
+import { continueConnectorLogin, syncConnector } from './connectors'
+import { checkDownloaderHealth } from './downloaders'
+import { checkIndexerHealth } from './indexers'
+import { checkMediaSourceHealth } from './media-sources'
 
 describe('resource api client', () => {
   afterEach(() => {
@@ -24,7 +28,7 @@ describe('resource api client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/books/search?q=matilda+dahl&page=2',
+      '/api/books?q=matilda+dahl&page=2',
       expect.objectContaining({ credentials: 'include' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
@@ -51,12 +55,12 @@ describe('resource api client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/books/discover?mode=subject&period=daily&subject=fantasy&page=3&pageSize=30',
+      '/api/book-recommendations?mode=subject&period=daily&subject=fantasy&page=3&pageSize=30',
       expect.objectContaining({ credentials: 'include' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
       2,
-      '/api/music/discover?mode=genre&range=week&chartType=tracks&genre=jazz&releaseType=ep&year=2024&page=2&pageSize=30',
+      '/api/music-recommendations?mode=genre&range=week&chartType=tracks&genre=jazz&releaseType=ep&year=2024&page=2&pageSize=30',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
@@ -76,7 +80,7 @@ describe('resource api client', () => {
     })
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/music/discover?mode=genre&range=week&chartType=albums&genre=jazz&releaseType=album&page=1&pageSize=30',
+      '/api/music-recommendations?mode=genre&range=week&chartType=albums&genre=jazz&releaseType=album&page=1&pageSize=30',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
@@ -89,12 +93,12 @@ describe('resource api client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/music/search?q=radiohead+ok+computer&page=2',
+      '/api/music?q=radiohead+ok+computer&page=2',
       expect.objectContaining({ credentials: 'include' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
       2,
-      '/api/music/details?mediaKey=musicbrainz%3Arelease-group%3Ab1392450-e666-3926-a536-22c65f834433',
+      '/api/music/musicbrainz%3Arelease-group%3Ab1392450-e666-3926-a536-22c65f834433',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
@@ -162,8 +166,51 @@ describe('resource api client', () => {
     })
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/indexers/search?q=Dune+2021&searchType=search&categories=2000%7C2040',
+      '/api/release-candidates?q=Dune+2021&searchType=search&categories=2000%7C2040',
       expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('uses resource-shaped connector continuation, sync-job, and health endpoints', async () => {
+    const fetch = stubJsonFetch({})
+
+    await continueConnectorLogin('attempt-1', 'confirm', { code: '123456' })
+    await syncConnector('connector-1')
+    await checkIndexerHealth('indexer-1')
+    await checkMediaSourceHealth('source-1')
+    await checkDownloaderHealth('downloader-1')
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      '/api/connector-login-attempts/attempt-1/response',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({ challenge: 'confirm', input: { code: '123456' } }),
+      }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/connector-sync-jobs',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ connectorId: 'connector-1' }),
+        headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+      }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      3,
+      '/api/indexers/indexer-1/health',
+      expect.objectContaining({ method: 'PUT' }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      4,
+      '/api/media-sources/source-1/health',
+      expect.objectContaining({ method: 'PUT' }),
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      5,
+      '/api/downloaders/downloader-1/health',
+      expect.objectContaining({ method: 'PUT' }),
     )
   })
 })

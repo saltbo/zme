@@ -4,7 +4,7 @@
 // /api/openapi.json covering its entire API (objects, auth, organizations, ...).
 // ZME only talks to the download-task and SSE-events endpoints, so we filter the
 // document down to those tags and prune unreferenced schemas before handing it to
-// openapi-ts — otherwise the generated client would carry all of better-auth's
+// openapi-ts — otherwise the generated client would carry an unrelated authentication
 // surface. Run via `pnpm openapi:zpan` (puts node_modules/.bin on PATH).
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync } from 'node:fs'

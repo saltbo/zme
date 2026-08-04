@@ -3,6 +3,7 @@ import { chooseBestMatch } from '@server/domain/douban-match'
 import type { Env } from '@server/env'
 import type {
   ConnectorSummary,
+  ConnectorSyncJobSummary,
   ConnectorSyncResult,
   DoubanConnectorInput,
   LibraryImportSyncResult,
@@ -11,17 +12,20 @@ import type {
   MusicPlaylistSyncResult,
 } from '@shared/types'
 import type { Deps } from './deps'
+import { hashSecret } from './identity'
 import { saveLibraryState, setWatchedState } from './library'
 import { getActiveTmdbSource } from './media-sources'
 import { evaluateMusicCollectionSubscription } from './media-subscriptions'
-import type {
-  ActiveMediaSource,
-  ConnectorRecord,
-  ImportedLibraryEntry,
-  ImportedMusicTrack,
-  MusicConnectorModule,
-  MusicConnectorSession,
-  MusicReleaseMetadata,
+import {
+  type ActiveMediaSource,
+  type ConnectorRecord,
+  type ConnectorSyncJobRecord,
+  type ImportedLibraryEntry,
+  type ImportedMusicTrack,
+  type MusicConnectorModule,
+  type MusicConnectorSession,
+  type MusicReleaseMetadata,
+  StaleWriteError,
 } from './ports'
 
 const CONNECTOR_DEFINITIONS = {
@@ -30,6 +34,8 @@ const CONNECTOR_DEFINITIONS = {
 const MUSIC_AVAILABILITY_TTL_MS = 6 * 60 * 60 * 1000
 const MUSIC_AVAILABILITY_CHECK_PAGE_SIZE = 500
 const MUSIC_RELEASE_METADATA_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const CONNECTOR_SYNC_LEASE_MS = 5 * 60_000
+const CONNECTOR_SYNC_HEARTBEAT_MS = 60_000
 
 export type ConnectorSyncTrigger = 'scheduled' | 'manual' | 'login'
 
@@ -60,13 +66,17 @@ export async function updateConnector(
   userId: string,
   id: string,
   input: { enabled?: boolean },
+  expectedUpdatedAt: string,
 ): Promise<ConnectorSummary | null> {
-  const record = await deps.connectorsRepo.updateState(userId, id, input)
+  const record = await deps.connectorsRepo.updateState(userId, id, input, expectedUpdatedAt)
+  if (!record && (await deps.connectorsRepo.get(userId, id))) throw new StaleWriteError()
   return record ? toConnectorSummary(deps, record) : null
 }
 
-export function deleteConnector(deps: Deps, userId: string, id: string): Promise<boolean> {
-  return deps.connectorsRepo.delete(userId, id)
+export async function deleteConnector(deps: Deps, userId: string, id: string, expectedUpdatedAt: string) {
+  const deleted = await deps.connectorsRepo.delete(userId, id, expectedUpdatedAt)
+  if (!deleted && (await deps.connectorsRepo.get(userId, id))) throw new StaleWriteError()
+  return deleted
 }
 
 export async function syncConnector(
@@ -86,12 +96,12 @@ export async function syncConnector(
     await deps.connectorsRepo.markSynced(connector.id, result, null)
     return result
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Connector sync failed.'
-    await deps.connectorsRepo.markSynced(connector.id, null, message)
-    if (connector.kind !== 'douban' && /expired|session|login/i.test(message)) {
+    const providerMessage = error instanceof Error ? error.message : 'Connector sync failed.'
+    await deps.connectorsRepo.markSynced(connector.id, null, 'Connector synchronization failed.')
+    if (connector.kind !== 'douban' && /expired|session|login/i.test(providerMessage)) {
       await deps.connectorsRepo.updateState(userId, connector.id, { status: 'reauth_required' })
     }
-    throw error
+    throw new ConnectorSyncQueueError()
   }
 }
 
@@ -99,12 +109,141 @@ export interface ConnectorSyncMessage {
   type: 'connector_sync'
   userId: string
   connectorId: string
+  jobId: string
 }
 
-export async function enqueueConnectorSync(deps: Deps, userId: string, connectorId: string): Promise<void> {
+export async function enqueueConnectorSync(
+  deps: Deps,
+  userId: string,
+  connectorId: string,
+  idempotencyKey: string,
+): Promise<ConnectorSyncJobSummary> {
   const connector = await deps.connectorsRepo.get(userId, connectorId)
-  if (!connector) throw new Error('Connector was not found.')
-  await deps.connectorSyncQueue.enqueue({ userId, connectorId })
+  if (!connector) throw new ConnectorNotFoundError()
+  const requestHash = await hashSecret(JSON.stringify({ connectorId }))
+  const existing = await deps.connectorSyncJobsRepo.findByIdempotency(userId, idempotencyKey)
+  if (existing) {
+    if (existing.requestHash !== requestHash) throw new ConnectorSyncIdempotencyConflictError()
+    await republishQueuedConnectorSync(deps, existing)
+    return toConnectorSyncJobSummary(existing)
+  }
+  const createdAt = new Date().toISOString()
+  const job: ConnectorSyncJobRecord = {
+    id: crypto.randomUUID(),
+    userId,
+    connectorId,
+    idempotencyKey,
+    requestHash,
+    status: 'queued',
+    result: null,
+    error: null,
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    createdAt,
+    startedAt: null,
+    completedAt: null,
+  }
+  if (!(await deps.connectorSyncJobsRepo.create(job))) {
+    const raced = await deps.connectorSyncJobsRepo.findByIdempotency(userId, idempotencyKey)
+    if (!raced || raced.requestHash !== requestHash) throw new ConnectorSyncIdempotencyConflictError()
+    await republishQueuedConnectorSync(deps, raced)
+    return toConnectorSyncJobSummary(raced)
+  }
+  try {
+    await deps.connectorSyncQueue.enqueue({ userId, connectorId, jobId: job.id })
+  } catch {
+    throw new ConnectorSyncQueueError()
+  }
+  return toConnectorSyncJobSummary(job)
+}
+
+export async function recoverQueuedConnectorSyncJobs(deps: Deps, limit = 100): Promise<number> {
+  const jobs = await deps.connectorSyncJobsRepo.listQueued(limit)
+  await Promise.all(jobs.map((job) => republishQueuedConnectorSync(deps, job)))
+  return jobs.length
+}
+
+async function republishQueuedConnectorSync(deps: Deps, job: ConnectorSyncJobRecord): Promise<void> {
+  if (job.status !== 'queued') return
+  try {
+    await deps.connectorSyncQueue.enqueue({ userId: job.userId, connectorId: job.connectorId, jobId: job.id })
+  } catch {
+    throw new ConnectorSyncQueueError()
+  }
+}
+
+export async function getConnectorSyncJob(
+  deps: Deps,
+  userId: string,
+  id: string,
+): Promise<ConnectorSyncJobSummary | null> {
+  const job = await deps.connectorSyncJobsRepo.get(userId, id)
+  return job ? toConnectorSyncJobSummary(job) : null
+}
+
+export async function processConnectorSyncJob(
+  deps: Deps,
+  env: Env,
+  message: ConnectorSyncMessage,
+): Promise<number | null> {
+  const job = await deps.connectorSyncJobsRepo.get(message.userId, message.jobId)
+  if (!job || job.connectorId !== message.connectorId) return null
+  if (job.status === 'completed' || job.status === 'failed') return null
+  const claimedAt = new Date()
+  const leaseOwner = crypto.randomUUID()
+  const leaseExpiresAt = new Date(claimedAt.getTime() + CONNECTOR_SYNC_LEASE_MS).toISOString()
+  if (!(await deps.connectorSyncJobsRepo.claim(message.jobId, leaseOwner, claimedAt.toISOString(), leaseExpiresAt))) {
+    const persisted = await deps.connectorSyncJobsRepo.get(message.userId, message.jobId)
+    return persisted?.status === 'completed' || persisted?.status === 'failed' ? null : 60
+  }
+  const stopHeartbeat = startConnectorSyncLeaseHeartbeat(deps, message.jobId, leaseOwner)
+  try {
+    const result = await syncConnector(deps, env, message.userId, message.connectorId, 'manual')
+    return (await deps.connectorSyncJobsRepo.complete(message.jobId, leaseOwner, result, new Date().toISOString()))
+      ? null
+      : 60
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: 'connector.sync.failed',
+        jobId: message.jobId,
+        connectorId: message.connectorId,
+        errorClass: error instanceof Error ? error.name : 'UnknownError',
+      }),
+    )
+    return (await deps.connectorSyncJobsRepo.fail(
+      message.jobId,
+      leaseOwner,
+      'Connector synchronization failed.',
+      new Date().toISOString(),
+    ))
+      ? null
+      : 60
+  } finally {
+    await stopHeartbeat()
+  }
+}
+
+function startConnectorSyncLeaseHeartbeat(deps: Deps, jobId: string, leaseOwner: string): () => Promise<void> {
+  let inFlight = Promise.resolve()
+  let renewalError: Error | null = null
+  const timer = setInterval(() => {
+    inFlight = inFlight.then(async () => {
+      const now = new Date()
+      const renewed = await deps.connectorSyncJobsRepo.renew(
+        jobId,
+        leaseOwner,
+        now.toISOString(),
+        new Date(now.getTime() + CONNECTOR_SYNC_LEASE_MS).toISOString(),
+      )
+      if (!renewed) renewalError = new Error('Connector sync lease was lost.')
+    })
+  }, CONNECTOR_SYNC_HEARTBEAT_MS)
+  return async () => {
+    clearInterval(timer)
+    await inFlight
+    if (renewalError) throw renewalError
+  }
 }
 
 export async function syncEnabledConnectors(deps: Deps, env: Env): Promise<void> {
@@ -149,9 +288,27 @@ export async function saveConnectorPlaylistSelection(
 
   const uniqueIds = [...new Set(selectedPlaylistIds)]
   await deps.musicCollectionsRepo.setLibrarySelections(userId, connectorId, uniqueIds, new Date().toISOString())
-  await deps.connectorSyncQueue.enqueue({ userId, connectorId })
+  const selectionKey = await hashSecret(JSON.stringify(uniqueIds))
+  await enqueueConnectorSync(deps, userId, connectorId, `playlist-selection:${selectionKey}`)
   return { selectedPlaylists: uniqueIds.length }
 }
+
+function toConnectorSyncJobSummary(job: ConnectorSyncJobRecord): ConnectorSyncJobSummary {
+  return {
+    id: job.id,
+    connectorId: job.connectorId,
+    status: job.status,
+    result: job.result,
+    error: job.error,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+  }
+}
+
+export class ConnectorNotFoundError extends Error {}
+export class ConnectorSyncIdempotencyConflictError extends Error {}
+export class ConnectorSyncQueueError extends Error {}
 
 async function syncDoubanConnector(deps: Deps, connector: ConnectorRecord): Promise<LibraryImportSyncResult> {
   const tmdb = await getActiveTmdbSource(deps)

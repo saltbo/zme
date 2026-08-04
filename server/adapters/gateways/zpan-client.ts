@@ -4,6 +4,7 @@ import type {
   CreateDownloadTaskData,
   DownloadTask,
   DownloadTaskPage,
+  GetDownloadTaskData,
   ListDownloadTasksData,
   StreamEventsData,
 } from '@server/clients/zpan/types.gen'
@@ -14,6 +15,7 @@ export type ZpanDownloadTaskPage = DownloadTaskPage
 export type ZpanDownloadTask = DownloadTask
 export type ZpanDownloadTaskStatus = ZpanDownloadTask['status']
 export type ZpanCreateDownloadTaskInput = CreateDownloadTaskData['body']
+export type ZpanGetDownloadTaskPath = GetDownloadTaskData['path']
 export type ZpanDownloadTaskEvent = {
   event: string
   data: unknown
@@ -37,6 +39,12 @@ export class ZpanClient {
   async createDownloadTask(input: ZpanCreateDownloadTaskInput): Promise<ZpanDownloadTask> {
     const result = await zpanApi.createDownloadTask({ client: this.client, body: input })
     return expectData(result, 'ZPan create download task failed')
+  }
+
+  async getDownloadTask(path: ZpanGetDownloadTaskPath): Promise<ZpanDownloadTask | null> {
+    const result = await zpanApi.getDownloadTask({ client: this.client, path })
+    if (result.response?.status === 404) return null
+    return expectData(result, 'ZPan get download task failed')
   }
 
   async streamDownloadTaskEvents(

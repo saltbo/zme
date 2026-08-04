@@ -15,8 +15,8 @@ const NOW = '2026-07-20T00:00:00.000Z'
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare(
-      'INSERT INTO user (id, name, email, email_verified, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    ).bind(USER_ID, 'Download Tester', 'downloads@zme.test', 1, 'admin', Date.now(), Date.now()),
+      'INSERT INTO users (id, name, oidc_email, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).bind(USER_ID, 'Download Tester', 'downloads@zme.test', 'admin', Date.now(), Date.now()),
     env.DB.prepare(
       'INSERT INTO downloaders (id, user_id, kind, endpoint, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     ).bind(DOWNLOADER_ID, USER_ID, 'zpan', 'https://zpan.test', NOW, NOW),

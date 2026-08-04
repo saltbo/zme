@@ -1,13 +1,16 @@
 import { downloaderGateways, downloadTaskGateways } from './adapters/gateways/downloaders'
 import { indexerGateways } from './adapters/gateways/indexers'
+import { createOidcClient, createRealmrootTokenValidator } from './adapters/gateways/oidc'
 import { musicBrainzMusicProvider } from './adapters/music-catalogs/musicbrainz'
 import { createMusicConnectorRegistry } from './adapters/music-connectors/registry'
 import { openLibraryBookProvider } from './adapters/providers/books'
 import { doubanLibraryImporter } from './adapters/providers/douban'
 import { tmdbMediaProvider } from './adapters/providers/tmdb'
 import { createConnectorLoginAttemptsRepo } from './adapters/repos/connector-login-attempts'
+import { createConnectorSyncJobsRepo } from './adapters/repos/connector-sync-jobs'
 import { createConnectorsRepo } from './adapters/repos/connectors'
 import { createDownloadersRepo } from './adapters/repos/downloaders'
+import { createIdentityRepo } from './adapters/repos/identity'
 import { createIndexersRepo } from './adapters/repos/indexers'
 import { createLibraryRepo } from './adapters/repos/library'
 import {
@@ -18,7 +21,8 @@ import {
 import { createMediaSourcesRepo } from './adapters/repos/media-sources'
 import { createMusicCollectionsRepo } from './adapters/repos/music-collections'
 import { createMusicDownloadKeysRepo } from './adapters/repos/music-download-keys'
-import { createUsersRepo } from './adapters/repos/users'
+import { createResourceApiRepo } from './adapters/repos/resource-api'
+import { readConfig } from './config'
 import { createDb } from './db/client'
 import type { Env } from './env'
 import type { ConnectorSyncMessage } from './usecases/connectors'
@@ -26,11 +30,16 @@ import type { Deps } from './usecases/deps'
 
 export function createDeps(env: Env): Deps {
   const db = createDb(env)
+  const config = readConfig(env)
   return {
-    usersRepo: createUsersRepo(db),
+    identityRepo: createIdentityRepo(db),
+    oidcClient: createOidcClient(config.oidc),
+    realmrootTokenValidator: createRealmrootTokenValidator(config),
+    resourceApiRepo: createResourceApiRepo(db),
     libraryRepo: createLibraryRepo(db),
     connectorsRepo: createConnectorsRepo(db),
     connectorLoginAttemptsRepo: createConnectorLoginAttemptsRepo(db),
+    connectorSyncJobsRepo: createConnectorSyncJobsRepo(db),
     connectorSyncQueue: {
       async enqueue(input) {
         const message: ConnectorSyncMessage = { type: 'connector_sync', ...input }

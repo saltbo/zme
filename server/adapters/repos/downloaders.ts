@@ -2,7 +2,7 @@ import type { createDb } from '@server/db/client'
 import { type Downloader, downloaders } from '@server/db/schema'
 import type { ConnectorHealthPatch, DownloaderRecord, DownloadersRepo } from '@server/usecases/ports'
 import type { DownloaderInput } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
 
@@ -65,8 +65,8 @@ export function createDownloadersRepo(db: Db): DownloadersRepo {
       return toRecord(row)
     },
 
-    async update(userId, id, input: DownloaderInput) {
-      const updatedAt = new Date().toISOString()
+    async update(userId, id, input: DownloaderInput, expectedUpdatedAt) {
+      const updatedAt = nextUpdatedAt(expectedUpdatedAt)
       const rows = await db
         .update(downloaders)
         .set({
@@ -78,16 +78,20 @@ export function createDownloadersRepo(db: Db): DownloadersRepo {
           enabled: input.enabled,
           updatedAt,
         })
-        .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+        .where(
+          and(eq(downloaders.id, id), eq(downloaders.userId, userId), eq(downloaders.updatedAt, expectedUpdatedAt)),
+        )
         .returning()
 
       return rows[0] ? toRecord(rows[0]) : null
     },
 
-    async delete(userId, id) {
+    async delete(userId, id, expectedUpdatedAt) {
       const rows = await db
         .delete(downloaders)
-        .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+        .where(
+          and(eq(downloaders.id, id), eq(downloaders.userId, userId), eq(downloaders.updatedAt, expectedUpdatedAt)),
+        )
         .returning({ id: downloaders.id })
       return rows.length > 0
     },
@@ -99,13 +103,28 @@ export function createDownloadersRepo(db: Db): DownloadersRepo {
           healthStatus: health.status,
           healthMessage: health.message,
           healthCheckedAt: health.checkedAt,
-          updatedAt: health.checkedAt,
         })
-        .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+        .where(
+          and(
+            eq(downloaders.id, id),
+            eq(downloaders.userId, userId),
+            or(isNull(downloaders.healthCheckedAt), lt(downloaders.healthCheckedAt, health.checkedAt)),
+          ),
+        )
         .returning()
-      return rows[0] ? toRecord(rows[0]) : null
+      if (rows[0]) return toRecord(rows[0])
+      const current = await db
+        .select()
+        .from(downloaders)
+        .where(and(eq(downloaders.id, id), eq(downloaders.userId, userId)))
+        .limit(1)
+      return current[0] ? toRecord(current[0]) : null
     },
   }
+}
+
+function nextUpdatedAt(expectedUpdatedAt: string) {
+  return new Date(Math.max(Date.now(), Date.parse(expectedUpdatedAt) + 1)).toISOString()
 }
 
 function toRecord(row: Downloader): DownloaderRecord {

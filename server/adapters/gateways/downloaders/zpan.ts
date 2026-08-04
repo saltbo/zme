@@ -33,6 +33,10 @@ export const zpanDownloaderGateway: DownloaderGateway = {
 }
 
 export const zpanDownloadTaskGateway: DownloadTaskGateway = {
+  async get(config, owner, id) {
+    const task = await getClient(config).getDownloadTask({ id })
+    return task ? toTaskSummary(owner, task) : null
+  },
   async list(config, owner, input: ListDownloadTasksInput): Promise<DownloadTaskPage> {
     const payload = await getClient(config).listDownloadTasks({
       page: input.page,
@@ -116,6 +120,8 @@ function toTaskSummary(owner: DownloadTaskOwner, task: ZpanDownloadTask): Downlo
     downloadBps: progress.download.bytesPerSecond,
     storageUploadBps: progress.upload.bytesPerSecond,
     errorMessage: task.status.error?.message ?? null,
+    outputObjectId: task.status.output?.objectId ?? null,
+    downstreamRevision: task.status.updatedAt || null,
   }
 }
 

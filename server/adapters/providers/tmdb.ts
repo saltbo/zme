@@ -419,7 +419,17 @@ export async function getWatchClickouts(kind: MediaKind, id: number, region: str
 }
 
 async function fetchTmdb(apiKey: string, url: URL, edgeCacheTtl?: number): Promise<Response> {
-  const response = await fetch(url, {
+  const response = await fetch(url, tmdbRequestOptions(apiKey, edgeCacheTtl))
+
+  if (!response.ok) {
+    throw new Error(`TMDB request failed: ${response.status}`)
+  }
+
+  return response
+}
+
+function tmdbRequestOptions(apiKey: string, edgeCacheTtl?: number) {
+  return {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: 'application/json',
@@ -428,13 +438,8 @@ async function fetchTmdb(apiKey: string, url: URL, edgeCacheTtl?: number): Promi
     // summary and genre lookups absorbs the N-requests-per-library-page fan-out.
     // The cf options are ignored outside the Workers runtime.
     ...(edgeCacheTtl ? { cf: { cacheTtl: edgeCacheTtl, cacheEverything: true } } : {}),
-  })
-
-  if (!response.ok) {
-    throw new Error(`TMDB request failed: ${response.status}`)
+    signal: AbortSignal.timeout(10_000),
   }
-
-  return response
 }
 
 function toMediaSearchItem(item: TmdbSearchResult, genreMap = new Map<number, string>()): MediaSearchItem | null {
@@ -786,12 +791,7 @@ export const tmdbMediaProvider: MediaProvider = {
     const apiKey = credentials.apiKey
     if (!apiKey) throw new Error('TMDB API key is missing.')
 
-    const response = await fetch(`${TMDB_API_BASE}/configuration`, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
-      },
-    })
+    const response = await fetch(`${TMDB_API_BASE}/configuration`, tmdbRequestOptions(apiKey))
     if (!response.ok) throw new Error(`TMDB request failed: ${response.status}`)
   },
 }

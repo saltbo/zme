@@ -1,7 +1,7 @@
 import type { ConnectorSummary } from '@shared/types'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LoaderCircle, Plug, RefreshCw, Settings2, Trash2 } from 'lucide-react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -21,17 +21,13 @@ import { Switch } from '@/components/ui/switch'
 import { useAuth } from '@/contexts/auth'
 import { musicConnectorUiModules } from '@/features/music-connectors/registry'
 import { deleteConnector, listConnectors, saveDoubanConnector, syncConnector, updateConnector } from '@/lib/api'
-import { authClient } from '@/lib/auth-client'
 import { queryKeys } from '@/lib/query-keys'
 import { DownloadersPanel } from '@/routes/downloaders'
 
 export function SettingsPage() {
   return (
     <main className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-col gap-5 p-4 sm:p-6 lg:p-8">
-      <section className="grid gap-5 xl:grid-cols-2">
-        <ProfileSettings />
-        <PasswordSettings />
-      </section>
+      <ProfileSettings />
       <ConnectorSettings />
       <DownloadersPanel framed />
     </main>
@@ -39,69 +35,21 @@ export function SettingsPage() {
 }
 
 function ProfileSettings() {
-  const { refreshSession, user } = useAuth()
+  const { user } = useAuth()
   const { t } = useTranslation()
-  const [name, setName] = useState(user.name)
-  const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const nextName = name.trim()
-    if (!nextName) return
-
-    setSaving(true)
-    try {
-      const result = await authClient.updateUser({ name: nextName })
-      if (result.error) throw new Error(result.error.message || t('profileUpdateFailed'))
-      await refreshSession()
-      setOpen(false)
-      toast.success(t('profileUpdated'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('profileUpdateFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{t('profile')}</CardTitle>
-        <CardDescription>{user.email}</CardDescription>
+        <CardDescription>Identity details are managed by the configured OIDC provider.</CardDescription>
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-4">
         <div>
           <div className="font-medium text-sm">{user.name}</div>
-          <div className="mt-1 text-muted-foreground text-sm">{user.email}</div>
+          <div className="mt-1 text-muted-foreground text-sm">{user.email ?? user.subject}</div>
+          <div className="mt-1 text-muted-foreground text-xs">{user.issuer}</div>
         </div>
-        <Dialog
-          open={open}
-          onOpenChange={(nextOpen) => {
-            setOpen(nextOpen)
-            if (nextOpen) setName(user.name)
-          }}
-        >
-          <DialogTrigger render={<Button variant="outline" />}>{t('editProfile')}</DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t('editProfile')}</DialogTitle>
-              <DialogDescription>{t('editProfileDescription')}</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="grid gap-4">
-              <label htmlFor="settings-name" className="grid gap-2 text-sm">
-                {t('name')}
-                <Input id="settings-name" value={name} onChange={(event) => setName(event.target.value)} required />
-              </label>
-              <DialogFooter>
-                <Button type="submit" disabled={saving}>
-                  {saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
-                  {t('save')}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
       </CardContent>
     </Card>
   )
@@ -119,14 +67,14 @@ function ConnectorSettings() {
   const refreshConnectors = () => queryClient.invalidateQueries({ queryKey: queryKeys.connectors.root })
 
   const setEnabled = useMutation({
-    mutationFn: async (input: { id: string; enabled: boolean }) =>
-      updateConnector(input.id, { enabled: input.enabled }),
+    mutationFn: async (input: { id: string; enabled: boolean; updatedAt: string }) =>
+      updateConnector(input.id, { enabled: input.enabled }, input.updatedAt),
     onSuccess: refreshConnectors,
     onError: (error) => toast.error(error instanceof Error ? error.message : t('connectorUpdateFailed')),
   })
 
   const remove = useMutation({
-    mutationFn: deleteConnector,
+    mutationFn: (input: { id: string; updatedAt: string }) => deleteConnector(input.id, input.updatedAt),
     onSuccess: async () => {
       await refreshConnectors()
       toast.success(t('connectorDeleted'))
@@ -146,10 +94,10 @@ function ConnectorSettings() {
   function connectorActions(item: ConnectorSummary) {
     return {
       syncing: sync.isPending && sync.variables === item.id,
-      removing: remove.isPending && remove.variables === item.id,
+      removing: remove.isPending && remove.variables?.id === item.id,
       onSync: () => sync.mutate(item.id),
-      onRemove: () => remove.mutate(item.id),
-      onEnabledChange: (enabled: boolean) => setEnabled.mutate({ id: item.id, enabled }),
+      onRemove: () => remove.mutate({ id: item.id, updatedAt: item.updatedAt }),
+      onEnabledChange: (enabled: boolean) => setEnabled.mutate({ id: item.id, enabled, updatedAt: item.updatedAt }),
     }
   }
 
@@ -316,102 +264,5 @@ function DoubanConnectorDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function PasswordSettings() {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (newPassword !== confirmPassword) {
-      toast.error(t('passwordMismatch'))
-      return
-    }
-
-    setSaving(true)
-    try {
-      const result = await authClient.changePassword({
-        currentPassword,
-        newPassword,
-        revokeOtherSessions: true,
-      })
-      if (result.error) throw new Error(result.error.message || t('passwordUpdateFailed'))
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-      setOpen(false)
-      toast.success(t('passwordUpdated'))
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('passwordUpdateFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('password')}</CardTitle>
-        <CardDescription>{t('passwordSettingsDescription')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex items-center justify-between gap-4">
-        <div className="text-muted-foreground text-sm">••••••••••••</div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button variant="outline" />}>{t('changePassword')}</DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{t('changePassword')}</DialogTitle>
-              <DialogDescription>{t('passwordSettingsDescription')}</DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="grid gap-4">
-              <label htmlFor="settings-current-password" className="grid gap-2 text-sm">
-                {t('currentPassword')}
-                <Input
-                  id="settings-current-password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  type="password"
-                  required
-                />
-              </label>
-              <label htmlFor="settings-new-password" className="grid gap-2 text-sm">
-                {t('newPassword')}
-                <Input
-                  id="settings-new-password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  type="password"
-                  minLength={8}
-                  required
-                />
-              </label>
-              <label htmlFor="settings-confirm-password" className="grid gap-2 text-sm">
-                {t('confirmPassword')}
-                <Input
-                  id="settings-confirm-password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  type="password"
-                  minLength={8}
-                  required
-                />
-              </label>
-              <DialogFooter>
-                <Button type="submit" disabled={saving}>
-                  {saving ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : null}
-                  {t('save')}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
   )
 }

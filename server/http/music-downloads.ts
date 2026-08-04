@@ -17,6 +17,7 @@ const downloadKeyQuerySchema = z.object({
 })
 
 const submitMusicDownloadSchema = z.object({
+  trackId: z.string().trim().min(1),
   downloaderId: z.string().trim().min(1),
   releaseId: z.string().trim().min(1).optional(),
   quality: z.enum(['standard', 'exhigh', 'lossless', 'hires']).optional(),
@@ -26,7 +27,7 @@ const submitMusicDownloadSchema = z.object({
 export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
   routes.on(
     ['GET', 'HEAD'],
-    '/music/tracks/:id/download',
+    '/music/tracks/:id/content',
     zValidator('param', idParamsSchema),
     zValidator('query', downloadKeyQuerySchema),
     async (c) => {
@@ -53,25 +54,20 @@ export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
 }
 
 export function registerMusicDownloadRoutes(routes: Hono<AppEnv>) {
-  routes.post(
-    '/music/tracks/:id/download',
-    zValidator('param', idParamsSchema),
-    zValidator('json', submitMusicDownloadSchema),
-    async (c) => {
-      try {
-        const item = await submitMusicTrackDownload(
-          c.get('deps'),
-          c.get('user').id,
-          c.req.valid('param').id,
-          c.req.valid('json'),
-        )
-        return c.json({ item }, 202)
-      } catch (error) {
-        const status = error instanceof MusicDownloadError ? error.status : 502
-        return c.json({ error: error instanceof Error ? error.message : 'Music download submission failed.' }, status)
-      }
-    },
-  )
+  routes.post('/music-download-tasks', zValidator('json', submitMusicDownloadSchema), async (c) => {
+    try {
+      const item = await submitMusicTrackDownload(
+        c.get('deps'),
+        c.get('user').id,
+        c.req.valid('json').trackId,
+        c.req.valid('json'),
+      )
+      return c.json({ item }, 202)
+    } catch (error) {
+      const status = error instanceof MusicDownloadError ? error.status : 502
+      return c.json({ error: error instanceof Error ? error.message : 'Music download submission failed.' }, status)
+    }
+  })
 }
 
 export function redirectMusicResource(resource: ResolvedMusicResource, filename: string): Response {
@@ -87,6 +83,19 @@ export function redirectMusicResource(resource: ResolvedMusicResource, filename:
   })
 }
 
+export function inspectMusicResource(resource: ResolvedMusicResource, filename: string): Response {
+  const headers = new Headers({
+    Location: resource.url,
+    'Cache-Control': 'private, no-store',
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    'Content-Type': resource.contentType ?? contentTypeFor(resource.extension),
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+  })
+  if (resource.contentLength !== null) headers.set('Content-Length', String(resource.contentLength))
+  return new Response(null, { status: 200, headers })
+}
+
 export async function deliverMusicResource(
   method: string,
   resource: ResolvedMusicResource,
@@ -94,7 +103,8 @@ export async function deliverMusicResource(
   tags: MusicFileTags,
   autoTaggingEnabled: boolean,
 ): Promise<Response> {
-  if (!autoTaggingEnabled || method === 'HEAD' || !supportsMusicFileTagging(resource.extension)) {
+  if (method === 'HEAD') return inspectMusicResource(resource, filename)
+  if (!autoTaggingEnabled || !supportsMusicFileTagging(resource.extension)) {
     return redirectMusicResource(resource, filename)
   }
 

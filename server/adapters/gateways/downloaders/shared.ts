@@ -25,6 +25,5 @@ export function getTypedDownloadDirectory(
 
 export async function assertOk(response: Response, target: string) {
   if (response.ok) return
-  const text = await response.text()
-  throw new Error(`${target} request failed: ${response.status}${text ? ` ${text}` : ''}`)
+  throw new Error(`${target} request failed with status ${response.status}.`)
 }

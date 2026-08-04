@@ -9,7 +9,7 @@ export async function listDownloadTasks(input: { status?: string; page: number; 
 }
 
 export function downloadTaskEventsUrl() {
-  return '/api/downloads/events'
+  return '/api/downloads/events?apiVersion=2026-08-04'
 }
 
 export async function createDownload(input: CreateDownloadInput) {

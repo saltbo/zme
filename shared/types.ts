@@ -288,6 +288,19 @@ export interface MusicPlaylistSyncResult {
 
 export type ConnectorSyncResult = LibraryImportSyncResult | MusicPlaylistSyncResult
 
+export type ConnectorSyncJobStatus = 'queued' | 'running' | 'completed' | 'failed'
+
+export interface ConnectorSyncJobSummary {
+  id: string
+  connectorId: string
+  status: ConnectorSyncJobStatus
+  result: ConnectorSyncResult | null
+  error: string | null
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+}
+
 export interface ConnectorSummary {
   id: string
   kind: ConnectorKind
@@ -498,18 +511,6 @@ export interface MusicSubscriptionMutationResult {
   canceled: number
 }
 
-export type UserRole = 'admin' | 'user'
-
-export interface AppUser {
-  id: string
-  name: string
-  email: string
-  role: UserRole
-  banned: boolean
-  createdAt: string
-  updatedAt: string
-}
-
 export interface MediaCredit {
   id: number
   name: string
@@ -681,9 +682,9 @@ export interface IndexerDetails extends IndexerSummary {
 }
 
 export interface IndexerHealth {
-  status: 'online' | 'offline'
-  message: string
-  checkedAt: string
+  status: 'unknown' | 'online' | 'offline'
+  message: string | null
+  checkedAt: string | null
 }
 
 export interface IndexerInput {
@@ -715,9 +716,9 @@ export interface MediaSourceDetails extends MediaSourceSummary {
 }
 
 export interface MediaSourceHealth {
-  status: 'online' | 'offline'
-  message: string
-  checkedAt: string
+  status: 'unknown' | 'online' | 'offline'
+  message: string | null
+  checkedAt: string | null
 }
 
 export interface MediaSourceInput {
@@ -755,9 +756,9 @@ export interface DownloaderDetails extends DownloaderSummary {
 }
 
 export interface DownloaderHealth {
-  status: 'online' | 'offline'
-  message: string
-  checkedAt: string
+  status: 'unknown' | 'online' | 'offline'
+  message: string | null
+  checkedAt: string | null
 }
 
 export interface DownloaderInput {
@@ -800,6 +801,8 @@ export interface DownloadTaskSummary {
   downloadBps: number
   storageUploadBps: number
   errorMessage: string | null
+  outputObjectId?: string | null
+  downstreamRevision?: string | null
 }
 
 export interface DownloadTaskPage {

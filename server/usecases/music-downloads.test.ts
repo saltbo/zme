@@ -269,8 +269,9 @@ describe('music downloads', () => {
     })
     const url = new URL(submitted?.uri ?? '')
     expect(url.origin).toBe('https://zme.test')
-    expect(url.pathname).toBe('/api/music/tracks/track-1/download')
+    expect(url.pathname).toBe('/api/music/tracks/track-1/content')
     expect(url.searchParams.get('key')).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    expect(url.searchParams.get('apiVersion')).toBe('2026-08-04')
     expect(updates.at(-1)).toMatchObject({ status: 'accepted', externalTaskId: 'remote-task-1' })
   })
 

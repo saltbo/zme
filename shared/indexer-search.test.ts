@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTitleSearches, filterExactMediaMatches } from './indexer-search'
+import { buildTitleSearches, filterExactMediaMatches, uniqueReleases } from './indexer-search'
 import { analyzeIndexerRelease, compareIndexerReleasesByRecommendation } from './release-analysis'
 import type { IndexerSearchItem } from './types'
 
@@ -29,6 +29,39 @@ describe('media indexer search planning', () => {
       'The Wandering Earth 1 2019',
       'Chinese Sci-Fi Movie 2019',
       'Earth Rescue 2019',
+    ])
+  })
+
+  it('orders named title variants, removes case-insensitive duplicates, and labels their source', () => {
+    const searches = buildTitleSearches({
+      query: 'Original 2024',
+      originalTitle: 'Original',
+      englishTitle: 'English',
+      localizedTitle: 'Localized',
+      aliases: ['english', 'Alternative'],
+      year: '2024',
+    })
+
+    expect(searches.map(({ query, titleKind }) => ({ query, titleKind }))).toEqual([
+      { query: 'Original 2024', titleKind: 'original' },
+      { query: 'English 2024', titleKind: 'english' },
+      { query: 'Localized 2024', titleKind: 'localized' },
+      { query: 'Alternative 2024', titleKind: 'alternative' },
+    ])
+    expect(buildTitleSearches({ query: '' })).toEqual([{ query: '', titleKind: 'original' }])
+  })
+
+  it('deduplicates releases by explicit or magnet info hash and falls back to source identity', () => {
+    const explicit = { ...release('explicit', 'Release A'), infoHash: 'ABC123' }
+    const sameExplicit = { ...release('duplicate-explicit', 'Release A mirror'), infoHash: 'abc123' }
+    const magnet = { ...release('magnet', 'Release B'), magnetUrl: 'magnet:?xt=urn:btih:DEF456' }
+    const sameMagnet = { ...release('duplicate-magnet', 'Release B mirror'), infoHash: 'def456' }
+    const malformed = { ...release('fallback', 'Release C'), magnetUrl: 'magnet:%' }
+
+    expect(uniqueReleases([explicit, sameExplicit, magnet, sameMagnet, malformed, malformed])).toEqual([
+      explicit,
+      magnet,
+      malformed,
     ])
   })
 

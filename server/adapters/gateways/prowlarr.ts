@@ -46,10 +46,10 @@ export const prowlarrIndexerGateway: IndexerGateway = {
         'X-Api-Key': apiKey,
         Accept: 'application/json',
       },
+      signal: AbortSignal.timeout(10_000),
     })
     if (!response.ok) {
-      const text = await response.text()
-      throw new Error(`Prowlarr request failed: ${response.status}${text ? ` ${text}` : ''}`)
+      throw new Error(`Prowlarr request failed with status ${response.status}.`)
     }
   },
 
@@ -88,6 +88,7 @@ export async function searchProwlarr(
       'X-Api-Key': apiKey,
       Accept: 'application/json',
     },
+    signal: AbortSignal.timeout(10_000),
   })
 
   if (!response.ok) {

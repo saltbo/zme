@@ -52,7 +52,7 @@ describe('zpanDownloaderGateway', () => {
 
     await zpanDownloaderGateway.submit(config, {
       downloaderId: 'dl-1',
-      uri: 'https://zme.test/api/music/tracks/track-1/download?key=temporary',
+      uri: 'https://zme.test/api/music/tracks/track-1/content?key=temporary',
       sourceType: 'http',
       title: 'Artist - Track.mp3',
       category: 'zme:music',
@@ -77,6 +77,28 @@ describe('zpanDownloaderGateway', () => {
 })
 
 describe('zpanDownloadTaskGateway', () => {
+  it('gets a task by exact id without scanning list pages', async () => {
+    const calls = stubFetch(() => jsonResponse(zpanTask(25, 5)))
+
+    await expect(zpanDownloadTaskGateway.get?.(config, owner, 'task-1')).resolves.toMatchObject({
+      id: 'task-1',
+      downloadedBytes: 25,
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].url.pathname).toBe('/api/downloads/tasks/task-1')
+  })
+
+  it('maps an exact task 404 to absence and propagates protocol failures', async () => {
+    stubFetch(() => jsonResponse({ error: { message: 'not found' } }, { status: 404 }))
+    await expect(zpanDownloadTaskGateway.get?.(config, owner, 'missing')).resolves.toBeNull()
+
+    vi.unstubAllGlobals()
+    stubFetch(() => jsonResponse({ error: { message: 'upstream broke' } }, { status: 502 }))
+    await expect(zpanDownloadTaskGateway.get?.(config, owner, 'task-1')).rejects.toThrow(
+      'ZPan get download task failed: upstream broke',
+    )
+  })
+
   it('maps zme statuses to zpan statuses in the query and back in the result', async () => {
     const calls = stubFetch(() =>
       jsonResponse({

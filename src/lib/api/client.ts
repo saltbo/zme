@@ -11,8 +11,8 @@ export class ApiError extends Error {
 
 async function apiError(response: Response, fallbackMessage: string): Promise<ApiError> {
   try {
-    const payload = (await response.clone().json()) as { error?: string; code?: string }
-    return new ApiError(payload.error || fallbackMessage, response.status, payload.code)
+    const payload = (await response.clone().json()) as { detail?: string; error?: string; code?: string }
+    return new ApiError(payload.detail || payload.error || fallbackMessage, response.status, payload.code)
   } catch {
     return new ApiError(fallbackMessage, response.status)
   }
@@ -23,6 +23,7 @@ export async function apiRequest<T>(path: string, fallbackMessage: string, init?
     ...init,
     credentials: 'include',
     headers: {
+      'API-Version': '2026-08-04',
       ...(init?.body ? { 'content-type': 'application/json' } : {}),
       ...init?.headers,
     },
@@ -32,6 +33,7 @@ export async function apiRequest<T>(path: string, fallbackMessage: string, init?
     throw await apiError(response, fallbackMessage)
   }
 
+  if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
 

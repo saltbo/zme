@@ -1,7 +1,12 @@
 import { app } from '@server/app'
 import { createDeps } from '@server/composition'
 import type { Env } from '@server/env'
-import { type ConnectorSyncMessage, syncConnector, syncEnabledConnectors } from '@server/usecases/connectors'
+import {
+  type ConnectorSyncMessage,
+  processConnectorSyncJob,
+  recoverQueuedConnectorSyncJobs,
+  syncEnabledConnectors,
+} from '@server/usecases/connectors'
 import {
   type DownloadDispatchMessage,
   processDownloadDispatch,
@@ -11,7 +16,7 @@ import {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
-    if (url.pathname.startsWith('/api/')) {
+    if (url.pathname === '/api' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) {
       return app.fetch(request, env, ctx)
     }
 
@@ -25,15 +30,15 @@ export default {
     for (const message of batch.messages) {
       if (isConnectorSyncMessage(message.body)) {
         try {
-          await syncConnector(deps, env, message.body.userId, message.body.connectorId, 'manual')
-          message.ack()
+          const retryAfterSeconds = await processConnectorSyncJob(deps, env, message.body)
+          if (retryAfterSeconds) message.retry({ delaySeconds: retryAfterSeconds })
+          else message.ack()
         } catch (error) {
           console.error(
             JSON.stringify({
-              event: 'connector.sync.failed',
-              connectorId: message.body.connectorId,
-              trigger: 'queue',
-              message: error instanceof Error ? error.message : 'Connector sync failed.',
+              event: 'connector.sync.job.failed',
+              jobId: message.body.jobId,
+              errorClass: error instanceof Error ? error.name : 'UnknownError',
             }),
           )
           message.retry({ delaySeconds: 60 })
@@ -60,6 +65,7 @@ export default {
 
 async function runScheduled(env: Env): Promise<void> {
   const deps = createDeps(env)
+  await recoverQueuedConnectorSyncJobs(deps)
   await syncEnabledConnectors(deps, env)
   await recoverDownloadDispatches(deps)
 }

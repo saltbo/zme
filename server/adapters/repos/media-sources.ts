@@ -2,7 +2,7 @@ import type { createDb } from '@server/db/client'
 import { type MediaSource, mediaSources } from '@server/db/schema'
 import type { ConnectorHealthPatch, MediaSourceRecord, MediaSourcesRepo } from '@server/usecases/ports'
 import type { MediaSourceInput } from '@shared/types'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
 
@@ -47,8 +47,8 @@ export function createMediaSourcesRepo(db: Db): MediaSourcesRepo {
       return toRecord(row)
     },
 
-    async update(id, input: MediaSourceInput) {
-      const updatedAt = new Date().toISOString()
+    async update(id, input: MediaSourceInput, expectedUpdatedAt) {
+      const updatedAt = nextUpdatedAt(expectedUpdatedAt)
       const rows = await db
         .update(mediaSources)
         .set({
@@ -59,14 +59,17 @@ export function createMediaSourcesRepo(db: Db): MediaSourcesRepo {
           enabled: input.enabled,
           updatedAt,
         })
-        .where(eq(mediaSources.id, id))
+        .where(and(eq(mediaSources.id, id), eq(mediaSources.updatedAt, expectedUpdatedAt)))
         .returning()
 
       return rows[0] ? toRecord(rows[0]) : null
     },
 
-    async delete(id) {
-      const rows = await db.delete(mediaSources).where(eq(mediaSources.id, id)).returning({ id: mediaSources.id })
+    async delete(id, expectedUpdatedAt) {
+      const rows = await db
+        .delete(mediaSources)
+        .where(and(eq(mediaSources.id, id), eq(mediaSources.updatedAt, expectedUpdatedAt)))
+        .returning({ id: mediaSources.id })
       return rows.length > 0
     },
 
@@ -77,13 +80,23 @@ export function createMediaSourcesRepo(db: Db): MediaSourcesRepo {
           healthStatus: health.status,
           healthMessage: health.message,
           healthCheckedAt: health.checkedAt,
-          updatedAt: health.checkedAt,
         })
-        .where(eq(mediaSources.id, id))
+        .where(
+          and(
+            eq(mediaSources.id, id),
+            or(isNull(mediaSources.healthCheckedAt), lt(mediaSources.healthCheckedAt, health.checkedAt)),
+          ),
+        )
         .returning()
-      return rows[0] ? toRecord(rows[0]) : null
+      if (rows[0]) return toRecord(rows[0])
+      const current = await db.select().from(mediaSources).where(eq(mediaSources.id, id)).limit(1)
+      return current[0] ? toRecord(current[0]) : null
     },
   }
+}
+
+function nextUpdatedAt(expectedUpdatedAt: string) {
+  return new Date(Math.max(Date.now(), Date.parse(expectedUpdatedAt) + 1)).toISOString()
 }
 
 function toRecord(row: MediaSource): MediaSourceRecord {

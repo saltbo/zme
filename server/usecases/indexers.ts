@@ -1,6 +1,6 @@
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
 import type { Deps } from './deps'
-import { IndexerNotConfiguredError, type IndexerRecord, type IndexerSearchInput } from './ports'
+import { IndexerNotConfiguredError, type IndexerRecord, type IndexerSearchInput, StaleWriteError } from './ports'
 
 export async function listIndexers(deps: Deps): Promise<IndexerSummary[]> {
   const records = await deps.indexersRepo.list()
@@ -12,17 +12,32 @@ export async function getIndexer(deps: Deps, id: string): Promise<IndexerDetails
   return record ? toDetails(record) : null
 }
 
+export async function getIndexerHealth(deps: Deps, id: string): Promise<IndexerHealth | null> {
+  const record = await deps.indexersRepo.get(id)
+  return record
+    ? { status: record.healthStatus, message: record.healthMessage, checkedAt: record.healthCheckedAt }
+    : null
+}
+
 export async function createIndexer(deps: Deps, input: IndexerInput): Promise<IndexerSummary> {
   return toSummary(await deps.indexersRepo.create(input))
 }
 
-export async function updateIndexer(deps: Deps, id: string, input: IndexerInput): Promise<IndexerSummary | null> {
-  const record = await deps.indexersRepo.update(id, input)
+export async function updateIndexer(
+  deps: Deps,
+  id: string,
+  input: IndexerInput,
+  expectedUpdatedAt: string,
+): Promise<IndexerSummary | null> {
+  const record = await deps.indexersRepo.update(id, input, expectedUpdatedAt)
+  if (!record && (await deps.indexersRepo.get(id))) throw new StaleWriteError()
   return record ? toSummary(record) : null
 }
 
-export async function deleteIndexer(deps: Deps, id: string): Promise<boolean> {
-  return deps.indexersRepo.delete(id)
+export async function deleteIndexer(deps: Deps, id: string, expectedUpdatedAt: string): Promise<boolean> {
+  const deleted = await deps.indexersRepo.delete(id, expectedUpdatedAt)
+  if (!deleted && (await deps.indexersRepo.get(id))) throw new StaleWriteError()
+  return deleted
 }
 
 export async function searchIndexers(deps: Deps, input: IndexerSearchInput): Promise<IndexerSearchItem[]> {

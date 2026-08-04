@@ -17,16 +17,18 @@ export async function getMediaSource(id: string) {
   return apiRequest<{ item: MediaSourceDetails }>(`/api/media-sources/${id}`, 'Failed to load media source.')
 }
 
-export async function updateMediaSource(id: string, input: MediaSourceInput) {
+export async function updateMediaSource(id: string, input: MediaSourceInput, expectedUpdatedAt: string) {
   return apiRequest<{ item: MediaSourceSummary }>(`/api/media-sources/${id}`, 'Failed to update media source.', {
     method: 'PATCH',
     body: JSON.stringify(input),
+    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteMediaSource(id: string) {
-  return apiRequest<{ id: string }>(`/api/media-sources/${id}`, 'Failed to delete media source.', {
+export async function deleteMediaSource(id: string, expectedUpdatedAt: string) {
+  return apiRequest<void>(`/api/media-sources/${id}`, 'Failed to delete media source.', {
     method: 'DELETE',
+    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
@@ -34,6 +36,6 @@ export async function checkMediaSourceHealth(id: string) {
   return apiRequest<{ health: MediaSourceHealth }>(
     `/api/media-sources/${id}/health`,
     'Failed to check media source health.',
-    { method: 'POST' },
+    { method: 'PUT' },
   )
 }

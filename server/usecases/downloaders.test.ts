@@ -1,7 +1,13 @@
 import type { CreateDownloadInput } from '@shared/types'
 import { describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
-import { checkDownloaderHealth, submitDownload } from './downloaders'
+import {
+  checkDownloaderHealth,
+  deleteDownloader,
+  getDownloaderHealth,
+  submitDownload,
+  updateDownloader,
+} from './downloaders'
 import type { ConnectorHealthPatch, DownloaderRecord, IndexerRecord, ResolvedDownloadSource } from './ports'
 
 const downloader: DownloaderRecord = {
@@ -44,9 +50,24 @@ const torrentUrlInput: CreateDownloadInput = {
 
 const httpInput: CreateDownloadInput = {
   downloaderId: 'dl-1',
-  uri: 'https://zme.test/api/music/tracks/track-1/download?key=temporary',
+  uri: 'https://zme.test/api/music/tracks/track-1/content?key=temporary',
   sourceType: 'http',
 }
+
+it('applies downloader mutations with the expected revision', async () => {
+  const update = vi.fn(async () => downloader)
+  const remove = vi.fn(async () => true)
+  const deps = {
+    downloadersRepo: { update, delete: remove },
+    downloaderGateways: { zpan: { supportedSourceTypes: ['magnet'] } },
+  } as never as Deps
+  const input = { kind: 'zpan' as const, endpoint: 'https://zpan.test', credentials: {}, options: {}, enabled: true }
+
+  await expect(updateDownloader(deps, 'user-1', 'dl-1', input, 'revision-1')).resolves.toMatchObject({ id: 'dl-1' })
+  await expect(deleteDownloader(deps, 'user-1', 'dl-1', 'revision-2')).resolves.toBe(true)
+  expect(update).toHaveBeenCalledWith('user-1', 'dl-1', input, 'revision-1')
+  expect(remove).toHaveBeenCalledWith('user-1', 'dl-1', 'revision-2')
+})
 
 function createSubmitDeps(options: {
   matches?: boolean
@@ -209,4 +230,18 @@ describe('checkDownloaderHealth', () => {
     expect(health?.status).toBe('offline')
     expect(patches[0]).toMatchObject({ status: 'offline', message: 'connect ECONNREFUSED' })
   })
+})
+
+it("reads only the current user's cached downloader health", async () => {
+  const deps = {
+    downloadersRepo: {
+      get: async (userId: string) => (userId === 'user-1' ? { ...downloader, healthStatus: 'unknown' } : null),
+    },
+  } as never as Deps
+  await expect(getDownloaderHealth(deps, 'user-1', 'dl-1')).resolves.toEqual({
+    status: 'unknown',
+    message: null,
+    checkedAt: null,
+  })
+  await expect(getDownloaderHealth(deps, 'user-2', 'dl-1')).resolves.toBeNull()
 })

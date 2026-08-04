@@ -7,8 +7,10 @@ import type {
   ConnectorCapability,
   ConnectorKind,
   ConnectorStatus,
+  ConnectorSyncJobStatus,
   ConnectorSyncResult,
   CreateDownloadInput,
+  CreateDownloadResult,
   DownloaderInput,
   DownloaderKind,
   DownloadRecordStatus,
@@ -94,6 +96,7 @@ export type DownloadTaskGatewayEvent =
   | { event: 'error'; data: { message: string } }
 
 export interface DownloadTaskGateway {
+  get?(config: ConnectorConfig, owner: DownloadTaskOwner, id: string): Promise<DownloadTaskSummary | null>
   list(config: ConnectorConfig, owner: DownloadTaskOwner, input: ListDownloadTasksInput): Promise<DownloadTaskPage>
   stream(
     config: ConnectorConfig,
@@ -126,6 +129,103 @@ export interface IndexerGateway {
   matchesDownloadUrl(config: ConnectorConfig, uri: string): boolean
   /** Resolves an indexer proxy download URL to a direct source, null when unresolvable. */
   resolveDownloadSource(config: ConnectorConfig, uri: string): Promise<ResolvedDownloadSource | null>
+}
+
+export type ReleaseSearchJobStatus = 'running' | 'completed' | 'failed'
+export type ManualDownloadTaskStatus = 'submitting' | 'submitted' | 'running' | 'completed' | 'failed' | 'canceled'
+
+export class StaleWriteError extends Error {
+  constructor() {
+    super('The resource changed after it was read.')
+    this.name = 'StaleWriteError'
+  }
+}
+
+export interface ReleaseSearchJobRecord {
+  id: string
+  userId: string
+  idempotencyKey: string
+  requestHash: string
+  mediaKey: string
+  mediaTitle: string
+  query: string
+  searchType: string
+  categories: number[]
+  status: ReleaseSearchJobStatus
+  error: string | null
+  leaseOwner: string | null
+  leaseExpiresAt: string | null
+  createdAt: string
+  completedAt: string | null
+}
+
+export interface ReleaseSearchResultRecord {
+  id: string
+  jobId: string
+  position: number
+  item: IndexerSearchItem
+  createdAt: string
+}
+
+export interface ManualDownloadTaskRecord {
+  id: string
+  userId: string
+  idempotencyKey: string
+  requestHash: string
+  releaseSearchResultId: string
+  downloaderId: string
+  status: ManualDownloadTaskStatus
+  externalTaskId: string | null
+  downstreamStatus: DownloadTaskStatus | null
+  downstreamRevision: string | null
+  downloadedBytes: number
+  storageUploadedBytes: number
+  totalBytes: number | null
+  downloadBps: number
+  storageUploadBps: number
+  resultObjectId: string | null
+  resultName: string | null
+  resultTargetFolder: string | null
+  error: string | null
+  createdAt: string
+  completedAt: string | null
+}
+
+export interface ResourceApiRepo {
+  findReleaseJobByIdempotency(userId: string, key: string): Promise<ReleaseSearchJobRecord | null>
+  createReleaseJob(record: ReleaseSearchJobRecord): Promise<boolean>
+  claimReleaseJob(id: string, leaseOwner: string, now: string, leaseExpiresAt: string): Promise<boolean>
+  completeReleaseJob(id: string, leaseOwner: string, items: IndexerSearchItem[], now: string): Promise<boolean>
+  failReleaseJob(id: string, leaseOwner: string, error: string, now: string): Promise<boolean>
+  getReleaseJob(userId: string, id: string): Promise<ReleaseSearchJobRecord | null>
+  listReleaseJobs(
+    userId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: ReleaseSearchJobRecord[]; total: number }>
+  listReleaseResults(
+    userId: string,
+    jobId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: ReleaseSearchResultRecord[]; total: number }>
+  getReleaseResult(userId: string, id: string): Promise<ReleaseSearchResultRecord | null>
+  findDownloadTaskByIdempotency(userId: string, key: string): Promise<ManualDownloadTaskRecord | null>
+  createDownloadTask(record: ManualDownloadTaskRecord): Promise<boolean>
+  markDownloadTaskSubmitted(id: string, result: CreateDownloadResult): Promise<boolean>
+  syncDownloadTask(
+    id: string,
+    snapshot: DownloadTaskSummary,
+    status: ManualDownloadTaskStatus,
+    completedAt: string | null,
+  ): Promise<boolean>
+  failDownloadTask(id: string, error: string, now: string): Promise<boolean>
+  getDownloadTask(userId: string, id: string): Promise<ManualDownloadTaskRecord | null>
+  listDownloadTasks(
+    userId: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ items: ManualDownloadTaskRecord[]; total: number }>
 }
 
 export class IndexerNotConfiguredError extends Error {
@@ -162,8 +262,13 @@ export interface DownloadersRepo {
   getEnabled(userId: string, id: string): Promise<DownloaderRecord | null>
   listEnabled(userId: string): Promise<DownloaderRecord[]>
   create(userId: string, input: DownloaderInput): Promise<DownloaderRecord>
-  update(userId: string, id: string, input: DownloaderInput): Promise<DownloaderRecord | null>
-  delete(userId: string, id: string): Promise<boolean>
+  update(
+    userId: string,
+    id: string,
+    input: DownloaderInput,
+    expectedUpdatedAt: string,
+  ): Promise<DownloaderRecord | null>
+  delete(userId: string, id: string, expectedUpdatedAt: string): Promise<boolean>
   setHealth(userId: string, id: string, health: ConnectorHealthPatch): Promise<DownloaderRecord | null>
 }
 
@@ -185,8 +290,8 @@ export interface IndexersRepo {
   get(id: string): Promise<IndexerRecord | null>
   listEnabled(): Promise<IndexerRecord[]>
   create(input: IndexerInput): Promise<IndexerRecord>
-  update(id: string, input: IndexerInput): Promise<IndexerRecord | null>
-  delete(id: string): Promise<boolean>
+  update(id: string, input: IndexerInput, expectedUpdatedAt: string): Promise<IndexerRecord | null>
+  delete(id: string, expectedUpdatedAt: string): Promise<boolean>
   setHealth(id: string, health: ConnectorHealthPatch): Promise<IndexerRecord | null>
 }
 
@@ -209,8 +314,8 @@ export interface MediaSourcesRepo {
   get(id: string): Promise<MediaSourceRecord | null>
   findEnabled(kind: MediaSourceKind): Promise<MediaSourceRecord | null>
   create(input: MediaSourceInput): Promise<MediaSourceRecord>
-  update(id: string, input: MediaSourceInput): Promise<MediaSourceRecord | null>
-  delete(id: string): Promise<boolean>
+  update(id: string, input: MediaSourceInput, expectedUpdatedAt: string): Promise<MediaSourceRecord | null>
+  delete(id: string, expectedUpdatedAt: string): Promise<boolean>
   setHealth(id: string, health: ConnectorHealthPatch): Promise<MediaSourceRecord | null>
 }
 
@@ -281,8 +386,9 @@ export interface ConnectorsRepo {
     userId: string,
     id: string,
     input: { enabled?: boolean; status?: ConnectorStatus },
+    expectedUpdatedAt?: string,
   ): Promise<ConnectorRecord | null>
-  delete(userId: string, id: string): Promise<boolean>
+  delete(userId: string, id: string, expectedUpdatedAt: string): Promise<boolean>
   markSynced(id: string, result: ConnectorSyncResult | null, error: string | null): Promise<void>
 }
 
@@ -309,6 +415,33 @@ export interface ConnectorLoginAttemptsRepo {
       Pick<ConnectorLoginAttemptRecord, 'stateEncrypted' | 'challenge' | 'status' | 'expiresAt' | 'updatedAt'>
     >,
   ): Promise<ConnectorLoginAttemptRecord | null>
+}
+
+export interface ConnectorSyncJobRecord {
+  id: string
+  userId: string
+  connectorId: string
+  idempotencyKey: string
+  requestHash: string
+  status: ConnectorSyncJobStatus
+  result: ConnectorSyncResult | null
+  error: string | null
+  leaseOwner: string | null
+  leaseExpiresAt: string | null
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+}
+
+export interface ConnectorSyncJobsRepo {
+  findByIdempotency(userId: string, key: string): Promise<ConnectorSyncJobRecord | null>
+  listQueued(limit: number): Promise<ConnectorSyncJobRecord[]>
+  create(record: ConnectorSyncJobRecord): Promise<boolean>
+  get(userId: string, id: string): Promise<ConnectorSyncJobRecord | null>
+  claim(id: string, leaseOwner: string, now: string, leaseExpiresAt: string): Promise<boolean>
+  renew(id: string, leaseOwner: string, now: string, leaseExpiresAt: string): Promise<boolean>
+  complete(id: string, leaseOwner: string, result: ConnectorSyncResult, completedAt: string): Promise<boolean>
+  fail(id: string, leaseOwner: string, error: string, completedAt: string): Promise<boolean>
 }
 
 export interface MusicCollectionRecord extends MusicCollectionSummary {
@@ -557,19 +690,13 @@ export interface DownloadDispatchQueue {
 }
 
 export interface ConnectorSyncQueue {
-  enqueue(input: { userId: string; connectorId: string }): Promise<void>
+  enqueue(input: { userId: string; connectorId: string; jobId: string }): Promise<void>
 }
 
 export interface MusicDownloadKeysRepo {
   create(record: MusicDownloadKeyRecord): Promise<void>
   getByHash(keyHash: string): Promise<MusicDownloadKeyRecord | null>
   revoke(id: string, revokedAt: string): Promise<void>
-}
-
-export interface UsersRepo {
-  isInitialized(): Promise<boolean>
-  /** Assigns library rows created before the first admin existed to that admin. */
-  adoptOrphanLibraryItems(userId: string): Promise<void>
 }
 
 /** Resolved credentials/locale of the enabled media metadata source. */

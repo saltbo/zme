@@ -9,7 +9,6 @@ import {
   Home,
   Sparkles,
   Tv,
-  UserRound,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, useLocation } from 'react-router'
@@ -67,7 +66,6 @@ export function AppSidebar() {
                     {t('admin')}
                   </div>
                 </SidebarMenuItem>
-                <SidebarLink icon={UserRound} label={t('users')} to="/admin/users" />
                 <SidebarLink icon={Database} label={t('mediaSources')} to="/admin/media-sources" />
                 <SidebarLink icon={Database} label={t('indexers')} to="/admin/indexers" />
               </>

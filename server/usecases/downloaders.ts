@@ -7,7 +7,7 @@ import type {
   DownloaderSummary,
 } from '@shared/types'
 import type { Deps } from './deps'
-import type { DownloaderRecord } from './ports'
+import { type DownloaderRecord, StaleWriteError } from './ports'
 
 export async function listDownloaders(deps: Deps, userId: string): Promise<DownloaderSummary[]> {
   const records = await deps.downloadersRepo.list(userId)
@@ -19,6 +19,13 @@ export async function getDownloader(deps: Deps, userId: string, id: string): Pro
   return record ? toDetails(deps, record) : null
 }
 
+export async function getDownloaderHealth(deps: Deps, userId: string, id: string): Promise<DownloaderHealth | null> {
+  const record = await deps.downloadersRepo.get(userId, id)
+  return record
+    ? { status: record.healthStatus, message: record.healthMessage, checkedAt: record.healthCheckedAt }
+    : null
+}
+
 export async function createDownloader(deps: Deps, userId: string, input: DownloaderInput): Promise<DownloaderSummary> {
   return toSummary(deps, await deps.downloadersRepo.create(userId, input))
 }
@@ -28,13 +35,22 @@ export async function updateDownloader(
   userId: string,
   id: string,
   input: DownloaderInput,
+  expectedUpdatedAt: string,
 ): Promise<DownloaderSummary | null> {
-  const record = await deps.downloadersRepo.update(userId, id, input)
+  const record = await deps.downloadersRepo.update(userId, id, input, expectedUpdatedAt)
+  if (!record && (await deps.downloadersRepo.get(userId, id))) throw new StaleWriteError()
   return record ? toSummary(deps, record) : null
 }
 
-export async function deleteDownloader(deps: Deps, userId: string, id: string): Promise<boolean> {
-  return deps.downloadersRepo.delete(userId, id)
+export async function deleteDownloader(
+  deps: Deps,
+  userId: string,
+  id: string,
+  expectedUpdatedAt: string,
+): Promise<boolean> {
+  const deleted = await deps.downloadersRepo.delete(userId, id, expectedUpdatedAt)
+  if (!deleted && (await deps.downloadersRepo.get(userId, id))) throw new StaleWriteError()
+  return deleted
 }
 
 export async function submitDownload(

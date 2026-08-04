@@ -7,7 +7,6 @@ import type {
 } from '@shared/types'
 
 export const queryKeys = {
-  setupStatus: ['setup-status'] as const,
   library: {
     root: ['library'] as const,
     states: ['library', 'states'] as const,
@@ -23,7 +22,6 @@ export const queryKeys = {
   downloadTasks: (status: string) => ['download-tasks', status] as const,
   indexers: ['indexers'] as const,
   mediaSources: ['media-sources'] as const,
-  users: ['users'] as const,
   books: {
     discover: (input: Omit<BookDiscoveryInput, 'page'>) => ['books', 'discover', input] as const,
     search: (query: string) => ['books', 'search', query] as const,

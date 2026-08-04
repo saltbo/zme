@@ -10,7 +10,6 @@ import {
   Menu,
   Sparkles,
   Tv,
-  UserRound,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -111,12 +110,6 @@ export function MobileHeader() {
                     {t('admin')}
                   </div>
                 </div>
-                <MobileMenuLink
-                  icon={UserRound}
-                  label={t('users')}
-                  to="/admin/users"
-                  onNavigate={() => setOpen(false)}
-                />
                 <MobileMenuLink
                   icon={Database}
                   label={t('mediaSources')}

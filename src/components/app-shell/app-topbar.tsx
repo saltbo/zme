@@ -206,12 +206,6 @@ function getTopbarCopy(pathname: string, state: unknown, t: (key: string) => str
       subtitle: t('settingsSubtitle'),
     }
   }
-  if (pathname === '/admin/users') {
-    return {
-      title: t('users'),
-      subtitle: t('usersSubtitle'),
-    }
-  }
   if (pathname === '/admin/media-sources') {
     return {
       title: t('mediaSources'),

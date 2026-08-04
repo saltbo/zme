@@ -81,19 +81,25 @@ export function createConnectorsRepo(db: Db): ConnectorsRepo {
       return toRecord(row)
     },
 
-    async updateState(userId, id, input) {
+    async updateState(userId, id, input, expectedUpdatedAt) {
       const rows = await db
         .update(connectors)
-        .set({ ...input, updatedAt: new Date().toISOString() })
-        .where(and(eq(connectors.userId, userId), eq(connectors.id, id)))
+        .set({ ...input, updatedAt: expectedUpdatedAt ? nextUpdatedAt(expectedUpdatedAt) : new Date().toISOString() })
+        .where(
+          and(
+            eq(connectors.userId, userId),
+            eq(connectors.id, id),
+            ...(expectedUpdatedAt ? [eq(connectors.updatedAt, expectedUpdatedAt)] : []),
+          ),
+        )
         .returning()
       return rows[0] ? toRecord(rows[0]) : null
     },
 
-    async delete(userId, id) {
+    async delete(userId, id, expectedUpdatedAt) {
       const rows = await db
         .delete(connectors)
-        .where(and(eq(connectors.userId, userId), eq(connectors.id, id)))
+        .where(and(eq(connectors.userId, userId), eq(connectors.id, id), eq(connectors.updatedAt, expectedUpdatedAt)))
         .returning({ id: connectors.id })
       return rows.length > 0
     },
@@ -112,6 +118,10 @@ export function createConnectorsRepo(db: Db): ConnectorsRepo {
         .where(eq(connectors.id, id))
     },
   }
+}
+
+function nextUpdatedAt(expectedUpdatedAt: string) {
+  return new Date(Math.max(Date.now(), Date.parse(expectedUpdatedAt) + 1)).toISOString()
 }
 
 function toRecord(row: typeof connectors.$inferSelect): ConnectorRecord {

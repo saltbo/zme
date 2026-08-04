@@ -1,33 +1,127 @@
-import { type AuthUser, createAuth } from '@server/auth'
+import { principalKey, readConfig } from '@server/config'
+import { getLocalSession, IdentityDisabledError, RealmrootCredentialError } from '@server/usecases/identity'
 import type { MiddlewareHandler } from 'hono'
-import type { AppEnv } from './context'
+import { getCookie } from 'hono/cookie'
+import type { AppEnv, Principal } from './context'
+import { SESSION_COOKIE } from './identity'
+import { problem } from './protocol'
 
 export const requireAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const session = await createAuth(c.env, c.req.raw).api.getSession({ headers: c.req.raw.headers })
-  if (!session) {
-    return c.json({ error: 'Authentication required.' }, 401)
-  }
+  const authorization = c.req.header('Authorization')
+  if (authorization) return authenticateAgent(c, next)
 
+  const token = getCookie(c, SESSION_COOKIE)
+  const session = token ? await getLocalSession(c.get('deps').identityRepo, token) : null
+  if (!session) return problem(c, 401, 'authentication-required', 'Authentication required')
+  c.set('principal', {
+    kind: 'human',
+    userId: session.user.id,
+    issuer: session.user.issuer,
+    subject: session.user.subject,
+    role: session.user.role,
+    scopes: ['*'],
+  })
   c.set('user', session.user)
-  c.set('session', session.session)
   await next()
 }
 
 export const requireAdminMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
-  if (!isAdmin(c.get('user'))) {
-    return c.json({ error: 'Administrator access required.' }, 403)
+  const principal = c.get('principal')
+  if (principal.kind !== 'human' || principal.role !== 'admin') {
+    return problem(c, 403, 'administrator-required', 'Administrator access required')
   }
   await next()
 }
 
-export const requireAdminExceptIndexerSearchMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
-  if (c.req.path.endsWith('/indexers/search')) {
-    await next()
-    return
+async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], next: () => Promise<unknown>) {
+  const authorization = c.req.header('Authorization')
+  if (!authorization?.startsWith('DPoP ')) {
+    c.header('WWW-Authenticate', 'DPoP error="invalid_token"')
+    return problem(c, 401, 'dpop-token-required', 'A DPoP-bound access token is required')
   }
-  return requireAdminMiddleware(c, next)
+  if (!c.req.header('DPoP')) {
+    c.header('WWW-Authenticate', 'DPoP error="invalid_dpop_proof"')
+    return problem(c, 401, 'dpop-proof-required', 'A DPoP proof is required')
+  }
+  const config = readConfig(c.env)
+  try {
+    const token = await c.get('deps').realmrootTokenValidator.validate(c.req.raw)
+    const key = principalKey(token.issuer, token.subject)
+    const now = new Date().toISOString()
+    const accepted = await c
+      .get('deps')
+      .identityRepo.recordDpopProof(token.issuer, token.proofJti, token.keyThumbprint, token.replayExpiresAt, now)
+    if (!accepted) throw new Error('The DPoP proof was already used.')
+    const user = await c
+      .get('deps')
+      .identityRepo.resolveUser(
+        { issuer: token.issuer, subject: token.subject, name: token.subject, email: null, image: null },
+        config.oidc.legacyBindings.get(key),
+        config.oidc.adminSubjects.has(key),
+        false,
+        now,
+      )
+    const principal: Principal = {
+      kind: 'agent',
+      userId: user.id,
+      issuer: token.issuer,
+      subject: token.subject,
+      role: user.role,
+      scopes: token.scopes,
+      actor: token.actor,
+    }
+    c.set('principal', principal)
+    c.set('user', user)
+    const requiredScope = agentScope(c.req.method, apiPath(c.req.path))
+    if (!requiredScope) return problem(c, 403, 'agent-operation-forbidden', 'This operation is not available to Agents')
+    if (!principal.scopes.includes(requiredScope)) {
+      c.header('WWW-Authenticate', `DPoP error="insufficient_scope", scope="${requiredScope}"`)
+      return problem(c, 403, 'insufficient-scope', 'The access token lacks the required scope')
+    }
+    await next()
+  } catch (error) {
+    if (error instanceof IdentityDisabledError) {
+      return problem(c, 403, 'identity-disabled', 'The local identity projection is disabled')
+    }
+    if (error instanceof RealmrootCredentialError) {
+      c.header('WWW-Authenticate', `DPoP error="${error.kind}"`)
+      return problem(c, 401, error.kind.replaceAll('_', '-'), 'The DPoP credential is invalid')
+    }
+    console.warn(
+      JSON.stringify({
+        event: 'identity.dpop.failed',
+        errorClass: error instanceof Error ? error.name : 'UnknownError',
+      }),
+    )
+    c.header('WWW-Authenticate', 'DPoP error="invalid_dpop_proof"')
+    return problem(c, 401, 'invalid-dpop-proof', 'The DPoP credential is invalid')
+  }
 }
 
-function isAdmin(user: AuthUser): boolean {
-  return (user.role || '').split(',').includes('admin')
+function apiPath(path: string): string {
+  return path.startsWith('/api/') ? path.slice(4) : path
+}
+
+function agentScope(method: string, path: string): string | null {
+  if (method === 'GET' && path === '/media') return 'media:read'
+  if (method === 'POST' && path === '/release-search-jobs') return 'release-search-jobs:write'
+  if (method === 'GET' && /^\/release-search-jobs(?:\/[^/]+(?:\/results)?)?$/.test(path)) {
+    return 'release-search-jobs:read'
+  }
+  if (method === 'GET' && /^\/release-search-results\/[^/]+$/.test(path)) return 'release-search-jobs:read'
+  if (method === 'POST' && path === '/download-tasks') return 'download-tasks:write'
+  if (method === 'GET' && /^\/download-tasks(?:\/[^/]+)?$/.test(path)) return 'download-tasks:read'
+  if (method === 'GET' && path === '/download-destinations') return 'download-destinations:read'
+  return null
+}
+
+export function requireScope(scope: string): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    const principal = c.get('principal')
+    if (principal.kind === 'agent' && !principal.scopes.includes(scope)) {
+      c.header('WWW-Authenticate', `DPoP error="insufficient_scope", scope="${scope}"`)
+      return problem(c, 403, 'insufficient-scope', 'The access token lacks the required scope')
+    }
+    await next()
+  }
 }

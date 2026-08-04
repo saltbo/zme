@@ -69,6 +69,7 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedRevision, setSelectedRevision] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<DownloaderFormState>(initialForm)
   const [editForm, setEditForm] = useState<DownloaderFormState>(initialForm)
@@ -97,10 +98,11 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
 
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedId) return
+    if (!selectedId || !selectedRevision) return
     setSaving(true)
     try {
-      const payload = await updateDownloader(selectedId, toDownloaderInput(editForm))
+      const payload = await updateDownloader(selectedId, toDownloaderInput(editForm), selectedRevision)
+      setSelectedRevision(payload.item.updatedAt)
       queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
         current.map((item) => (item.id === payload.item.id ? payload.item : item)),
       )
@@ -114,9 +116,9 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
   }
 
   async function handleDeleteSelected() {
-    if (!selectedId) return
+    if (!selectedId || !selectedRevision) return
     try {
-      await deleteDownloader(selectedId)
+      await deleteDownloader(selectedId, selectedRevision)
       queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
         current.filter((item) => item.id !== selectedId),
       )
@@ -154,11 +156,13 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
 
   async function openEdit(item: DownloaderSummary) {
     setSelectedId(item.id)
+    setSelectedRevision(item.updatedAt)
     setEditOpen(true)
     setEditing(true)
     setEditForm(fromSummary(item))
     try {
       const payload = await getDownloader(item.id)
+      setSelectedRevision(payload.item.updatedAt)
       setEditForm(fromDetails(payload.item))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('downloadersLoadFailed'))
