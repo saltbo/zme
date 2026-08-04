@@ -1,6 +1,6 @@
 # Project Notes
 
-## Local Verification Account
+## Local OIDC Verification
 
-- For local browser verification, use the existing admin account stored in `.dev.vars`.
-- The app does not expose self-service registration locally; log in with the local test credentials from environment variables instead of trying to register a new user.
+- For automated browser verification, use the protocol-faithful fake OIDC provider started by `pnpm e2e`.
+- For interactive local verification, configure an external OIDC client and exact administrator `issuer|subject` in `.dev.vars`. ZME has no local account credentials or self-service registration.
