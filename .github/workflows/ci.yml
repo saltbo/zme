@@ -84,9 +84,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # The E2E worker needs a signing secret; the example value is a valid test secret.
-      - run: cp .dev.vars.example .dev.vars
-
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: E2E (real stack)

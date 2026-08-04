@@ -47,6 +47,18 @@ if (!/compatibility_flags\s*=\s*\[[^\]]*"global_fetch_strictly_public"/s.test(wo
   fail('Worker compatibility must permit standards-based public OIDC fetches on the same Cloudflare zone.')
 }
 
+const e2eRunner = readFileSync(join(root, 'scripts/run-e2e.mjs'), 'utf8')
+for (const variable of ['OIDC_ISSUER', 'OIDC_REDIRECT_URI', 'OIDC_ADMIN_SUBJECTS', 'CONNECTOR_CREDENTIALS_SECRET']) {
+  if (!new RegExp(`\\b${variable}:`).test(e2eRunner)) fail(`The hermetic E2E runner must override ${variable}.`)
+}
+if (!/CLOUDFLARE_ENV:\s*cloudflareEnv/.test(e2eRunner) || !/\.dev\.vars\.\$\{cloudflareEnv\}/.test(e2eRunner)) {
+  fail('The hermetic E2E runner must isolate Cloudflare dev vars from deployment configuration.')
+}
+const ciWorkflow = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8')
+if (/cp\s+\.dev\.vars\.example\s+\.dev\.vars/.test(ciWorkflow)) {
+  fail('CI E2E must not copy deployment example identity values over the fake OIDC configuration.')
+}
+
 const vitestReport = argument('--vitest-report')
 if (vitestReport) verifyVitestReport(vitestReport)
 const playwrightReport = argument('--playwright-report')

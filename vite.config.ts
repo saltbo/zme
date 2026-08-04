@@ -48,6 +48,7 @@ export default defineConfig(() => {
                     OIDC_ADMIN_SUBJECTS: `${e2eOidcIssuer}|e2e-admin`,
                     OIDC_LEGACY_BINDINGS_JSON: '[]',
                     REALMROOT_RESOURCE_URL: `${e2eAppOrigin}/api`,
+                    CONNECTOR_CREDENTIALS_SECRET: 'e2e-independent-connector-secret-32-chars',
                     MUSIC_AUTO_TAGGING_ENABLED: 'true',
                   },
                 },
