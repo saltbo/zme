@@ -21,17 +21,6 @@ const upstreamPageSize = 100
 const maxUpstreamPages = 100
 const upstreamScanTimeoutMs = 10_000
 const snapshotRefreshIntervalMs = 1_500
-const liveTaskStates: ZpanDownloadTaskState[] = [
-  'queued',
-  'assigned',
-  'downloading',
-  'suspended',
-  'pausing',
-  'paused',
-  'interrupted',
-  'uploading',
-  'canceling',
-]
 
 export const zpanDownloaderGateway: DownloaderGateway = {
   supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
@@ -79,7 +68,7 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
 
   async stream(config, owner, signal, emit) {
     const client = getClient(config)
-    const tasks = new Map((await listLiveDownloadTasks(client, signal)).map((task) => [task.id, task]))
+    const tasks = new Map((await listRecentDownloadTasks(client, signal)).map((task) => [task.id, task]))
     await emitSnapshot(emit, owner, [...tasks.values()])
     const streamAborter = new AbortController()
     const streamSignal = AbortSignal.any([signal, streamAborter.signal])
@@ -104,7 +93,7 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
           .then(async () => {
             if (refreshAll) {
               tasks.clear()
-              for (const task of await listLiveDownloadTasks(client, streamSignal)) tasks.set(task.id, task)
+              for (const task of await listRecentDownloadTasks(client, streamSignal)) tasks.set(task.id, task)
             } else {
               const changedTasks = await Promise.all(taskIds.map((id) => client.getDownloadTask({ id })))
               for (const [index, task] of changedTasks.entries()) {
@@ -152,9 +141,8 @@ function getZpanEventErrorMessage(data: unknown) {
   throw new Error('ZPan error event returned an invalid payload')
 }
 
-async function listLiveDownloadTasks(client: ZpanClient, signal: AbortSignal) {
-  const pages = await Promise.all(liveTaskStates.map((status) => listAllDownloadTasks(client, { status }, signal)))
-  return pages.flat()
+async function listRecentDownloadTasks(client: ZpanClient, signal: AbortSignal) {
+  return (await client.listDownloadTasks({ pageSize: upstreamPageSize }, signal)).items
 }
 
 async function listAllDownloadTasks(
