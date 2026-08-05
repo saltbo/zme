@@ -52,7 +52,7 @@ describe('qbittorrentDownloaderGateway', () => {
     )
   })
 
-  it('surfaces submission rejections with status and body', async () => {
+  it('surfaces submission rejections without exposing the remote response body', async () => {
     stubFetch((_request, index) =>
       index === 0
         ? new Response('Ok.', { status: 200, headers: { 'set-cookie': 'SID=session-1' } })
@@ -60,7 +60,7 @@ describe('qbittorrentDownloaderGateway', () => {
     )
 
     await expect(qbittorrentDownloaderGateway.submit(config, input)).rejects.toThrow(
-      'qBittorrent request failed: 415 Fails.',
+      'qBittorrent request failed with status 415.',
     )
   })
 

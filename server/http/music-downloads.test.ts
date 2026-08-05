@@ -48,6 +48,18 @@ describe('music download redirect', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
+  it('returns resolved metadata without a body for HEAD', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    const response = await deliverMusicResource('HEAD', resource(), 'Artist - Track.mp3', tags, true)
+
+    expect(response.status).toBe(200)
+    expect(response.body).toBeNull()
+    expect(response.headers.get('location')).toBe('https://m701.music.126.net/audio.mp3')
+    expect(response.headers.get('content-type')).toBe('audio/mpeg')
+    expect(response.headers.get('content-length')).toBe('4096')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('streams a tagged file when the provider MP3 has no tags', async () => {
     const audio = new Uint8Array([0xff, 0xfb, 0x90, 0x64, 1, 2, 3, 4, 5, 6, 7, 8])
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(

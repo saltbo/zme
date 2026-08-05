@@ -46,6 +46,7 @@ export function IndexersPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedRevision, setSelectedRevision] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<IndexerFormState>(initialForm)
   const [editForm, setEditForm] = useState<IndexerFormState>(initialForm)
@@ -74,10 +75,11 @@ export function IndexersPage() {
 
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedId) return
+    if (!selectedId || !selectedRevision) return
     setSaving(true)
     try {
-      const payload = await updateIndexer(selectedId, toIndexerInput(editForm))
+      const payload = await updateIndexer(selectedId, toIndexerInput(editForm), selectedRevision)
+      setSelectedRevision(payload.item.updatedAt)
       queryClient.setQueryData<IndexerSummary[]>(queryKeys.indexers, (current = []) =>
         current.map((item) => (item.id === payload.item.id ? payload.item : item)),
       )
@@ -91,9 +93,9 @@ export function IndexersPage() {
   }
 
   async function handleDeleteSelected() {
-    if (!selectedId) return
+    if (!selectedId || !selectedRevision) return
     try {
-      await deleteIndexer(selectedId)
+      await deleteIndexer(selectedId, selectedRevision)
       queryClient.setQueryData<IndexerSummary[]>(queryKeys.indexers, (current = []) =>
         current.filter((item) => item.id !== selectedId),
       )
@@ -114,9 +116,9 @@ export function IndexersPage() {
           item.id === id
             ? {
                 ...item,
-                healthStatus: payload.health.status,
-                healthMessage: payload.health.message,
-                healthCheckedAt: payload.health.checkedAt,
+                healthStatus: payload.item.status,
+                healthMessage: payload.item.message,
+                healthCheckedAt: payload.item.checkedAt,
               }
             : item,
         ),
@@ -131,11 +133,13 @@ export function IndexersPage() {
 
   async function openEdit(item: IndexerSummary) {
     setSelectedId(item.id)
+    setSelectedRevision(item.updatedAt)
     setEditOpen(true)
     setEditing(true)
     setEditForm(fromSummary(item))
     try {
       const payload = await getIndexer(item.id)
+      setSelectedRevision(payload.item.updatedAt)
       setEditForm(fromDetails(payload.item))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('indexersLoadFailed'))

@@ -1,7 +1,9 @@
 import type { DownloaderKind, IndexerKind } from '@shared/types'
+import type { DpopTokenValidator, IdentityRepo, OidcClient } from './identity'
 import type {
   BookProvider,
   ConnectorLoginAttemptsRepo,
+  ConnectorSyncJobsRepo,
   ConnectorSyncQueue,
   ConnectorsRepo,
   DispatchLanesRepo,
@@ -21,14 +23,18 @@ import type {
   MusicConnectorModule,
   MusicDownloadKeysRepo,
   MusicProvider,
-  UsersRepo,
+  ResourceApiRepo,
 } from './ports'
 
 export interface Deps {
-  usersRepo: UsersRepo
+  identityRepo: IdentityRepo
+  oidcClient: OidcClient
+  dpopTokenValidator: DpopTokenValidator
+  resourceApiRepo: ResourceApiRepo
   libraryRepo: LibraryRepo
   connectorsRepo: ConnectorsRepo
   connectorLoginAttemptsRepo: ConnectorLoginAttemptsRepo
+  connectorSyncJobsRepo: ConnectorSyncJobsRepo
   connectorSyncQueue: ConnectorSyncQueue
   musicCollectionsRepo: MusicCollectionsRepo
   musicDownloadKeysRepo: MusicDownloadKeysRepo

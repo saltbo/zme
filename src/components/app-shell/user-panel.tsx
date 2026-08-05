@@ -18,12 +18,12 @@ import {
 import { SidebarMenuButton } from '@/components/ui/sidebar'
 import { isAdminUser, useAuth } from '@/contexts/auth'
 import { getTmdbLanguage, supportedLanguages } from '@/i18n'
-import { authClient } from '@/lib/auth-client'
+import { signOut } from '@/lib/identity'
 
 export function UserPanel({ placement = 'sidebar' }: { placement?: 'sidebar' | 'mobile-menu' }) {
   const navigate = useNavigate()
   const { i18n, t } = useTranslation()
-  const { refreshSession, user } = useAuth()
+  const { user } = useAuth()
   const currentLanguage = getTmdbLanguage(i18n.language)
   const currentLanguageLabel =
     supportedLanguages.find((language) => language.value === currentLanguage)?.label ?? currentLanguage
@@ -34,8 +34,7 @@ export function UserPanel({ placement = 'sidebar' }: { placement?: 'sidebar' | '
   }
 
   async function handleSignOut() {
-    await authClient.signOut()
-    await refreshSession()
+    window.location.assign(await signOut())
   }
 
   const initials =
@@ -46,7 +45,7 @@ export function UserPanel({ placement = 'sidebar' }: { placement?: 'sidebar' | '
       .map((part) => part[0]?.toUpperCase())
       .join('')
       .slice(0, 2) ||
-    user.email[0]?.toUpperCase() ||
+    user.email?.[0]?.toUpperCase() ||
     'U'
 
   const isMobileMenu = placement === 'mobile-menu'
@@ -82,7 +81,7 @@ export function UserPanel({ placement = 'sidebar' }: { placement?: 'sidebar' | '
         className="dark w-56 max-w-[calc(100vw-2rem)] border border-sidebar-border bg-sidebar text-sidebar-foreground"
       >
         <DropdownMenuGroup>
-          <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
+          <DropdownMenuLabel>{user.email ?? `${user.issuer} · ${user.subject}`}</DropdownMenuLabel>
           <DropdownMenuItem>
             <ShieldCheck />
             <span>{isAdminUser(user) ? t('administrator') : t('standardUser')}</span>

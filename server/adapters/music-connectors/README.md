@@ -10,6 +10,6 @@ To add a provider:
 2. Register the module in `registry.ts`.
 3. Add its isolated UI module under `src/features/music-connectors/` and register it in the frontend registry.
 
-Do not add provider routes under `server/http/` or provider functions under `src/lib/api/`. Every provider uses `/api/connectors/login-attempts` and its generic continuation endpoint.
+Do not add provider routes under `server/http/` or provider functions under `src/lib/api/`. Every provider uses `/api/connector-login-attempts` and its generic continuation endpoint.
 
 Provider directories must not import each other or either registry. Architecture lint enforces that boundary.

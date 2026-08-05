@@ -19,11 +19,11 @@ cd zme
 pnpm install          # also runs `cf-typegen` to generate env types
 ```
 
-Create a `.dev.vars` (copy `.dev.vars.example`) with at least:
-
-```dotenv
-BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
-```
+Create a `.dev.vars` by copying `.dev.vars.example`. Supply a standard external
+OIDC issuer/client, exact redirect and logout URLs, an explicit administrator
+`issuer|subject`, the exact resource URL, and the independent connector secret.
+Security-critical identity configuration is validated fail-fast. See
+[OIDC deployment](docs/oidc-deployment.md).
 
 Start the app:
 
@@ -47,7 +47,8 @@ full spec, but in short:
   - `repos/` — the **only** place Drizzle and the schema are touched.
   - `providers/` + `gateways/` — the **only** place `fetch` is called (TMDB, Open
     Library, ListenBrainz, Prowlarr, downloaders, …).
-- `server/http/` — Hono routes (split by resource), Zod validation, error mapping.
+- `server/http/` — Hono routes (split by resource), Zod validation, versioning,
+  Problem Details, OIDC/DPoP authorization, and OpenAPI publication.
 - `server/composition.ts` — `createDeps(env)`, the only place adapters are constructed.
 - `server/worker.ts` — the Workers entry (`fetch` + `scheduled`).
 - `shared/` — the API contract (DTOs + pure helpers), imported by both halves.
@@ -71,7 +72,11 @@ All of these must pass; CI runs them. Run them locally before opening a PR:
 | `pnpm lint` | Biome (lint + format). |
 | `pnpm lint:arch` | dependency-cruiser architecture boundaries. |
 | `pnpm typecheck` | `tsc` for both server and web. |
-| `pnpm test` | Vitest `unit` (node) + `api` (workerd + real D1) projects. |
+| `pnpm openapi:lint && pnpm openapi:diff` | strict OpenAPI validation and reviewed semantic-signature drift. |
+| `pnpm quality:inventory` | Gherkin/native-test traceability, evidence paths, and static skip/focus audit. |
+| `pnpm test:ci` | Vitest `unit`, `web`, and `api` projects plus reconciliation of the native JSON report and every discovered test file. |
+| `pnpm test:coverage && pnpm test:coverage:task` | repository baseline regression and 90% changed-executable-line threshold across every task-owned Unit module. |
+| `pnpm e2e:ci` | real Chromium OIDC login/session/logout and critical UI behavior plus reconciliation of the Playwright JSON report. |
 | `pnpm build` | Vite / Workers production build. |
 
 Quick fixes: `pnpm lint:fix` (Biome autofix) and `pnpm format`.
@@ -85,17 +90,20 @@ Tests run on three tiers:
 - **API** — run in `workerd` against a real local D1 (`vitest --project api`), so
   routes and repos are exercised end-to-end against SQLite.
 - **E2E** — Playwright (`pnpm e2e`) drives the real stack (SPA + Worker + isolated
-  D1). The E2E store is reset and migrated by `pnpm e2e:server` on each boot and runs
-  serially because it drives the onboarding flow.
+  D1) with the protocol-faithful local OIDC/JWKS provider in
+  `scripts/fake-oidc-provider.mjs`. The store is reset and migrated on each boot;
+  tests cover Authorization Code + PKCE, callback, cookie, reload, and logout.
+
+The `:ci` variants retain the native runner output and then mechanically reconcile totals, failures, pending/skipped/flaky results, and discovered test-file inventory. Generated reports are ignored under `reports/`.
 
 `pnpm test:watch` runs Vitest in watch mode.
 
 ### Local browser verification
 
-For manual browser checks, use the admin account from `.dev.vars`
-(`LOCAL_TEST_EMAIL` / `LOCAL_TEST_PASSWORD`). The app does **not** expose
-self-service registration locally — log in with those credentials rather than trying
-to register a new user.
+For manual browser checks, use the configured local OIDC subject. The app exposes
+no self-service registration or local credentials. The hermetic browser suite uses
+subject `e2e-admin`; a real provider deployment must use the subject configured in
+`OIDC_ADMIN_SUBJECTS`.
 
 ## Database & migrations
 
@@ -104,6 +112,10 @@ Migrations are **generated, never hand-written**:
 1. Edit `server/db/schema.ts`.
 2. Run `pnpm db:generate` (drizzle-kit) to emit the diff into `migrations/`.
 3. Apply locally with `pnpm db:migrate:local` (or `:remote` for deployed Workers).
+
+Identity upgrades require the additional backup, ownership inventory, explicit
+`iss`/`sub` binding, audit, and rollback steps in [OIDC migration](docs/oidc-migration.md).
+Never link identities by email.
 
 `pnpm db:check` validates the schema. CI fails if `schema.ts` changed without
 generating a migration. The legacy `0001`–`0010` SQL files predate drizzle-kit and

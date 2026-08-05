@@ -1,5 +1,5 @@
 import type { DownloaderDetails, DownloaderHealth, DownloaderInput, DownloaderSummary } from '@shared/types'
-import { apiRequest, jsonBody } from './client'
+import { apiRequest, jsonBody, mergePatch } from './client'
 
 export async function listDownloaders() {
   return apiRequest<{ items: DownloaderSummary[] }>('/api/downloaders', 'Failed to load downloaders.')
@@ -13,20 +13,23 @@ export async function getDownloader(id: string) {
   return apiRequest<{ item: DownloaderDetails }>(`/api/downloaders/${id}`, 'Failed to load downloader.')
 }
 
-export async function updateDownloader(id: string, input: DownloaderInput) {
+export async function updateDownloader(id: string, input: DownloaderInput, expectedUpdatedAt: string) {
   return apiRequest<{ item: DownloaderSummary }>(`/api/downloaders/${id}`, 'Failed to update downloader.', {
-    method: 'PATCH',
-    body: JSON.stringify(input),
+    ...mergePatch(input),
+    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteDownloader(id: string) {
-  return apiRequest<{ id: string }>(`/api/downloaders/${id}`, 'Failed to delete downloader.', { method: 'DELETE' })
+export async function deleteDownloader(id: string, expectedUpdatedAt: string) {
+  return apiRequest<void>(`/api/downloaders/${id}`, 'Failed to delete downloader.', {
+    method: 'DELETE',
+    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
+  })
 }
 
 export async function checkDownloaderHealth(id: string) {
-  return apiRequest<{ health: DownloaderHealth }>(
-    `/api/downloaders/${id}/health`,
+  return apiRequest<{ item: DownloaderHealth }>(
+    `/api/downloaders/${id}/health-observations`,
     'Failed to check downloader health.',
     { method: 'POST' },
   )

@@ -1,7 +1,7 @@
 import { prowlarrIndexerGateway } from '@server/adapters/gateways/prowlarr'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
-import { searchIndexers } from './indexers'
+import { deleteIndexer, getIndexerHealth, searchIndexers, updateIndexer } from './indexers'
 import type { IndexerRecord } from './ports'
 
 const indexer: IndexerRecord = {
@@ -57,6 +57,47 @@ describe('searchIndexers', () => {
     expect(url.searchParams.get('type')).toBe('search')
     expect(url.searchParams.getAll('categories')).toEqual(['2000', '2040'])
   })
+})
+
+it('applies indexer mutations with the expected revision', async () => {
+  const update = vi.fn(async () => indexer)
+  const remove = vi.fn(async () => true)
+  const deps = { indexersRepo: { get: async () => indexer, update, delete: remove } } as never as Deps
+  const input = {
+    kind: 'prowlarr' as const,
+    endpoint: 'https://prowlarr.test',
+    credentials: { apiKey: 'key' },
+    options: {},
+    enabled: true,
+  }
+
+  await expect(updateIndexer(deps, 'indexer-1', input, 'revision-1')).resolves.toMatchObject({ id: 'indexer-1' })
+  await expect(deleteIndexer(deps, 'indexer-1', 'revision-2')).resolves.toBe(true)
+  expect(update).toHaveBeenCalledWith(
+    'indexer-1',
+    { ...input, description: indexer.description ?? undefined },
+    'revision-1',
+  )
+  expect(remove).toHaveBeenCalledWith('indexer-1', 'revision-2')
+})
+
+it('reports a failed Prowlarr health response', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(null, { status: 503 })),
+  )
+  await expect(prowlarrIndexerGateway.probe(indexer.config)).rejects.toThrow('Prowlarr request failed with status 503.')
+  vi.unstubAllGlobals()
+})
+
+it('reads the latest cached indexer health without probing', async () => {
+  await expect(
+    getIndexerHealth(
+      { indexersRepo: { get: async () => ({ ...indexer, healthStatus: 'unknown' }) } } as never,
+      'indexer-1',
+    ),
+  ).resolves.toEqual({ status: 'unknown', message: null, checkedAt: null })
+  await expect(getIndexerHealth({ indexersRepo: { get: async () => null } } as never, 'missing')).resolves.toBeNull()
 })
 
 function createDepsWithIndexers(indexers: IndexerRecord[]): Deps {

@@ -178,8 +178,9 @@ export async function dispatchMusicDownloadRecord(
     updatedAt: now.toISOString(),
   })
 
-  const downloadUrl = new URL(`/api/music/tracks/${encodeURIComponent(track.id)}/download`, env.PUBLIC_APP_ORIGIN)
+  const downloadUrl = new URL(`/api/music/tracks/${encodeURIComponent(track.id)}/content`, env.PUBLIC_APP_ORIGIN)
   downloadUrl.searchParams.set('key', key)
+  downloadUrl.searchParams.set('apiVersion', '2026-08-04')
   try {
     const result = await submitDownload(deps, record.userId, {
       downloaderId: record.downloaderId,

@@ -118,6 +118,7 @@ describe('connector authentication state machine', () => {
         },
       },
       connectorsRepo: {
+        get: async () => ({ id: 'connector-1' }),
         save: async (userId: string, kind: string, input: SaveInput): Promise<ConnectorRecord> => {
           saved.input = input
           return {
@@ -133,6 +134,7 @@ describe('connector authentication state machine', () => {
           }
         },
       },
+      connectorSyncJobsRepo: { findByIdempotency: async () => null, create: async () => true },
       connectorSyncQueue: { enqueue },
     } as never as Deps
 
@@ -154,6 +156,10 @@ describe('connector authentication state machine', () => {
     await expect(decryptConnectorPayload(secret, saved.input.credentialsEncrypted)).resolves.toEqual({
       accessToken: 'opaque-provider-token',
     })
-    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1' })
+    expect(enqueue).toHaveBeenCalledWith({
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      jobId: expect.any(String),
+    })
   })
 })

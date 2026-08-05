@@ -2,7 +2,7 @@
 
 import type { Client, Options as Options2, RequestResult, ServerSentEventsResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateDownloadTaskData, CreateDownloadTaskErrors, CreateDownloadTaskResponses, DeleteDownloadTaskData, DeleteDownloadTaskErrors, DeleteDownloadTaskResponses, GetDownloadTaskData, GetDownloadTaskErrors, GetDownloadTaskResponses, ListDownloadTasksData, ListDownloadTasksErrors, ListDownloadTasksResponses, RetryDownloadTaskData, RetryDownloadTaskErrors, RetryDownloadTaskResponses, SetDownloadTaskStatusData, SetDownloadTaskStatusErrors, SetDownloadTaskStatusResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponse, StreamEventsResponses, UpdateDownloadTaskData, UpdateDownloadTaskErrors, UpdateDownloadTaskResponses } from './types.gen';
+import type { CreateDownloadTaskData, CreateDownloadTaskErrors, CreateDownloadTaskResponses, DeleteDownloadTaskData, DeleteDownloadTaskErrors, DeleteDownloadTaskResponses, GetDownloadTaskData, GetDownloadTaskErrors, GetDownloadTaskResponses, ListDownloadTaskEventsData, ListDownloadTaskEventsErrors, ListDownloadTaskEventsResponses, ListDownloadTasksData, ListDownloadTasksErrors, ListDownloadTasksResponses, RetryDownloadTaskData, RetryDownloadTaskErrors, RetryDownloadTaskResponses, SetDownloadTaskStatusData, SetDownloadTaskStatusErrors, SetDownloadTaskStatusResponses, StreamEventsData, StreamEventsErrors, StreamEventsResponse, StreamEventsResponses, UpdateDownloadTaskData, UpdateDownloadTaskErrors, UpdateDownloadTaskResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -21,12 +21,49 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * List download tasks
  */
-export const listDownloadTasks = <ThrowOnError extends boolean = false>(options?: Options<ListDownloadTasksData, ThrowOnError>): RequestResult<ListDownloadTasksResponses, ListDownloadTasksErrors, ThrowOnError> => (options?.client ?? client).get<ListDownloadTasksResponses, ListDownloadTasksErrors, ThrowOnError>({ url: '/api/downloads/tasks', ...options });
+export const listDownloadTasks = <ThrowOnError extends boolean = false>(options?: Options<ListDownloadTasksData, ThrowOnError>): RequestResult<ListDownloadTasksResponses, ListDownloadTasksErrors, ThrowOnError> => (options?.client ?? client).get<ListDownloadTasksResponses, ListDownloadTasksErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/api/downloads/tasks',
+    ...options
+});
 
 /**
  * Create download task
  */
 export const createDownloadTask = <ThrowOnError extends boolean = false>(options: Options<CreateDownloadTaskData, ThrowOnError>): RequestResult<CreateDownloadTaskResponses, CreateDownloadTaskErrors, ThrowOnError> => (options.client ?? client).post<CreateDownloadTaskResponses, CreateDownloadTaskErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
     url: '/api/downloads/tasks',
     ...options,
     headers: {
@@ -38,17 +75,74 @@ export const createDownloadTask = <ThrowOnError extends boolean = false>(options
 /**
  * Delete download task
  */
-export const deleteDownloadTask = <ThrowOnError extends boolean = false>(options: Options<DeleteDownloadTaskData, ThrowOnError>): RequestResult<DeleteDownloadTaskResponses, DeleteDownloadTaskErrors, ThrowOnError> => (options.client ?? client).delete<DeleteDownloadTaskResponses, DeleteDownloadTaskErrors, ThrowOnError>({ url: '/api/downloads/tasks/{id}', ...options });
+export const deleteDownloadTask = <ThrowOnError extends boolean = false>(options: Options<DeleteDownloadTaskData, ThrowOnError>): RequestResult<DeleteDownloadTaskResponses, DeleteDownloadTaskErrors, ThrowOnError> => (options.client ?? client).delete<DeleteDownloadTaskResponses, DeleteDownloadTaskErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/api/downloads/tasks/{id}',
+    ...options
+});
 
 /**
  * Get download task
  */
-export const getDownloadTask = <ThrowOnError extends boolean = false>(options: Options<GetDownloadTaskData, ThrowOnError>): RequestResult<GetDownloadTaskResponses, GetDownloadTaskErrors, ThrowOnError> => (options.client ?? client).get<GetDownloadTaskResponses, GetDownloadTaskErrors, ThrowOnError>({ url: '/api/downloads/tasks/{id}', ...options });
+export const getDownloadTask = <ThrowOnError extends boolean = false>(options: Options<GetDownloadTaskData, ThrowOnError>): RequestResult<GetDownloadTaskResponses, GetDownloadTaskErrors, ThrowOnError> => (options.client ?? client).get<GetDownloadTaskResponses, GetDownloadTaskErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/api/downloads/tasks/{id}',
+    ...options
+});
 
 /**
  * Update download task
  */
 export const updateDownloadTask = <ThrowOnError extends boolean = false>(options: Options<UpdateDownloadTaskData, ThrowOnError>): RequestResult<UpdateDownloadTaskResponses, UpdateDownloadTaskErrors, ThrowOnError> => (options.client ?? client).patch<UpdateDownloadTaskResponses, UpdateDownloadTaskErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
     url: '/api/downloads/tasks/{id}',
     ...options,
     headers: {
@@ -58,9 +152,51 @@ export const updateDownloadTask = <ThrowOnError extends boolean = false>(options
 });
 
 /**
+ * List download task timeline events
+ */
+export const listDownloadTaskEvents = <ThrowOnError extends boolean = false>(options: Options<ListDownloadTaskEventsData, ThrowOnError>): RequestResult<ListDownloadTaskEventsResponses, ListDownloadTaskEventsErrors, ThrowOnError> => (options.client ?? client).get<ListDownloadTaskEventsResponses, ListDownloadTaskEventsErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/api/downloads/tasks/{id}/events',
+    ...options
+});
+
+/**
  * Pause, resume, or cancel a task
  */
 export const setDownloadTaskStatus = <ThrowOnError extends boolean = false>(options: Options<SetDownloadTaskStatusData, ThrowOnError>): RequestResult<SetDownloadTaskStatusResponses, SetDownloadTaskStatusErrors, ThrowOnError> => (options.client ?? client).put<SetDownloadTaskStatusResponses, SetDownloadTaskStatusErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
     url: '/api/downloads/tasks/{id}/status',
     ...options,
     headers: {
@@ -73,6 +209,23 @@ export const setDownloadTaskStatus = <ThrowOnError extends boolean = false>(opti
  * Retry or restart a task
  */
 export const retryDownloadTask = <ThrowOnError extends boolean = false>(options: Options<RetryDownloadTaskData, ThrowOnError>): RequestResult<RetryDownloadTaskResponses, RetryDownloadTaskErrors, ThrowOnError> => (options.client ?? client).post<RetryDownloadTaskResponses, RetryDownloadTaskErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
     url: '/api/downloads/tasks/{id}/attempts',
     ...options,
     headers: {
@@ -86,10 +239,31 @@ export const retryDownloadTask = <ThrowOnError extends boolean = false>(options:
  *
  * A single SSE connection multiplexing several domains via named events:
  *
- * - `jobs` → `{ activeCount }` — background-job set changed (always on)
- * - `notifications` → `{ unreadCount }` — unread count changed (always on)
- * - `download-tasks` → `{ items, total, page, pageSize }` — download tasks changed (opt-in via `?downloadTasks=1`)
+ * - `resource-change` → `{ sequence, resourceType, resourceId, changeType, action, metadata, occurredAt }`
+ * - `resync` → `{ sequence }` — the resume cursor is older than retained changes; invalidate active queries
  * - `heartbeat` → `{ at }` — keep-alive emitted when nothing changed for a while
  * - `error` → `{ message }` — a domain query failed this tick
+ *
+ * Workspace-scoped API keys require `download-tasks:read`. Their stream is limited to download-task changes from the key workspace plus heartbeat and error control events.
  */
-export const streamEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamEventsData, ThrowOnError, StreamEventsResponse>): Promise<ServerSentEventsResult<StreamEventsResponses, StreamEventsErrors | void, ThrowOnError>> => (options?.client ?? client).sse.get<StreamEventsResponses, StreamEventsErrors, ThrowOnError>({ url: '/api/events', ...options });
+export const streamEvents = <ThrowOnError extends boolean = false>(options?: Options<StreamEventsData, ThrowOnError, StreamEventsResponse>): Promise<ServerSentEventsResult<StreamEventsResponses, StreamEventsErrors | void, ThrowOnError>> => (options?.client ?? client).sse.get<StreamEventsResponses, StreamEventsErrors, ThrowOnError>({
+    security: [
+        {
+            key: 'oauth2',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            key: 'bearerAuth',
+            scheme: 'bearer',
+            type: 'http'
+        },
+        {
+            in: 'cookie',
+            name: 'zp.session_token',
+            type: 'apiKey'
+        }
+    ],
+    url: '/api/events',
+    ...options
+});

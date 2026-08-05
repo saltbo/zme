@@ -12,10 +12,11 @@ import type {
 import { apiRequest, query } from './client'
 
 export async function searchMedia(queryValue: string, language: string) {
-  return apiRequest<{ results: MediaSearchItem[] }>(
-    `/api/tmdb/search${query({ q: queryValue, language })}`,
+  const response = await apiRequest<{ items: MediaSearchItem[] }>(
+    `/api/media${query({ query: queryValue, language })}`,
     'Failed to search media.',
   )
+  return { results: response.items }
 }
 
 export async function getMediaDetails(kind: MediaKind, id: number, language: string, watchRegion = 'US') {
@@ -50,21 +51,21 @@ export async function getPersonCredits(id: number, language: string) {
 
 export async function getTrendingMedia(language: string) {
   return apiRequest<{ results: MediaSearchItem[] }>(
-    `/api/tmdb/trending${query({ language })}`,
+    `/api/media-trends${query({ language })}`,
     'Failed to load trending media.',
   )
 }
 
 export async function getPopularMedia(kind: MediaKind, language: string) {
   return apiRequest<{ results: MediaSearchItem[] }>(
-    `/api/tmdb/popular${query({ kind, language })}`,
+    `/api/popular-media${query({ kind, language })}`,
     'Failed to load popular media.',
   )
 }
 
 export async function discoverMedia(input: MediaDiscoverInput) {
   return apiRequest<MediaDiscoverPage>(
-    `/api/tmdb/discover${query({
+    `/api/media-recommendations${query({
       kind: input.kind,
       language: input.language,
       page: input.page,
@@ -80,7 +81,7 @@ export async function discoverMedia(input: MediaDiscoverInput) {
 
 export async function listMediaGenres(kind: MediaKind, language: string) {
   return apiRequest<{ genres: MediaGenre[] }>(
-    `/api/tmdb/genres${query({ kind, language })}`,
+    `/api/media-genres${query({ kind, language })}`,
     'Failed to load media genres.',
   )
 }

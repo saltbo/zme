@@ -1,3 +1,4 @@
+import { DownloadSubmissionRejectedError, DownloadSubmissionUnknownError } from '@server/usecases/ports'
 import { getZmeDownloadResourceDirectory, isValidDownloadSubdirectory } from '@shared/download-metadata'
 
 export function normalizeBaseUrl(baseUrl: string): string {
@@ -23,8 +24,13 @@ export function getTypedDownloadDirectory(
   return [typedDirectory.replace(/[\\/]+$/, ''), targetSubdirectory].filter(Boolean).join('/')
 }
 
-export async function assertOk(response: Response, target: string) {
+export async function assertOk(response: Response, target: string, submission = false) {
   if (response.ok) return
-  const text = await response.text()
-  throw new Error(`${target} request failed: ${response.status}${text ? ` ${text}` : ''}`)
+  const ErrorType =
+    submission && response.status >= 400 && response.status < 500
+      ? DownloadSubmissionRejectedError
+      : submission
+        ? DownloadSubmissionUnknownError
+        : Error
+  throw new ErrorType(`${target} request failed with status ${response.status}.`)
 }

@@ -37,7 +37,7 @@ module.exports = {
       comment: 'usecases/ must not import delivery or persistence frameworks.',
       severity: 'error',
       from: { path: '^server/usecases' },
-      to: { path: 'node_modules/(hono|drizzle-orm|zod|better-auth)' },
+      to: { path: 'node_modules/(hono|drizzle-orm|zod)' },
     },
     {
       name: 'adapters-not-into-delivery',
@@ -62,10 +62,9 @@ module.exports = {
     },
     {
       name: 'drizzle-only-in-repos',
-      comment:
-        'Persistence is confined to adapters/repos/ and db/. server/auth is the better-auth integration: it owns its own tables and is consumed directly by the delivery layer.',
+      comment: 'Persistence is confined to adapters/repos/ and db/.',
       severity: 'error',
-      from: { path: '^server', pathNot: '^server/(adapters/repos|db)|^server/auth' },
+      from: { path: '^server', pathNot: '^server/(adapters/repos|db)' },
       to: { path: 'node_modules/drizzle-orm|^server/db/schema' },
     },
     {

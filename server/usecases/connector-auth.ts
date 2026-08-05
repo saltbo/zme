@@ -10,7 +10,7 @@ import type {
   ConnectorProviderSummary,
   ConnectorSummary,
 } from '@shared/types'
-import { toConnectorSummary } from './connectors'
+import { enqueueConnectorSync, toConnectorSummary } from './connectors'
 import type { Deps } from './deps'
 import type {
   ConnectedMusicAccount,
@@ -44,7 +44,7 @@ export async function startConnectorLogin(
   const transition = await module.auth.start({ method: input.method, input: input.input })
   const now = new Date().toISOString()
   const attempt = await createAttempt(deps, env, userId, input.kind, input.method, transition, now)
-  const connector = await completeConnectorLogin(deps, env, userId, module, transition)
+  const connector = await completeConnectorLogin(deps, env, userId, module, transition, attempt.id)
   return { attempt: toLoginAttempt(attempt), connector }
 }
 
@@ -79,7 +79,7 @@ export async function continueConnectorLogin(
   const state = await decryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, attempt.stateEncrypted)
   const transition = await module.auth.continue(state, input)
   const updated = await updateAttempt(deps, env, attempt, transition)
-  const connector = await completeConnectorLogin(deps, env, userId, module, transition)
+  const connector = await completeConnectorLogin(deps, env, userId, module, transition, updated.id)
   return { attempt: toLoginAttempt(updated), connector }
 }
 
@@ -170,10 +170,11 @@ async function completeConnectorLogin(
   userId: string,
   module: MusicConnectorModule,
   transition: ConnectorAuthTransition,
+  attemptId: string,
 ): Promise<ConnectorSummary | null> {
   if (transition.status !== 'connected') return null
   const credentialsEncrypted = await encryptConnectorPayload(env.CONNECTOR_CREDENTIALS_SECRET, transition.credentials)
-  return saveConnectedConnector(deps, userId, module, transition.account, credentialsEncrypted)
+  return saveConnectedConnector(deps, userId, module, transition.account, credentialsEncrypted, attemptId)
 }
 
 async function saveConnectedConnector(
@@ -182,6 +183,7 @@ async function saveConnectedConnector(
   module: MusicConnectorModule,
   account: ConnectedMusicAccount,
   credentialsEncrypted: string,
+  attemptId: string,
 ): Promise<ConnectorSummary> {
   const record = await deps.connectorsRepo.save(userId, module.definition.kind, {
     externalAccountId: account.externalAccountId,
@@ -192,7 +194,7 @@ async function saveConnectedConnector(
     status: 'connected',
     enabled: true,
   })
-  await deps.connectorSyncQueue.enqueue({ userId, connectorId: record.id })
+  await enqueueConnectorSync(deps, userId, record.id, `connector-login:${attemptId}`)
   return toConnectorSummary(deps, record)
 }
 

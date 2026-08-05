@@ -119,6 +119,7 @@ export function registerMusicLibraryRoutes(routes: Hono<AppEnv>) {
 
   routes.post('/library/music/albums', zValidator('json', albumSchema), async (c) => {
     const item = await saveMusicAlbum(c.get('deps'), c.get('user').id, c.req.valid('json').mediaKey)
+    c.header('Location', `/api/library/music/collections/${item.id}`)
     return c.json({ item }, 201)
   })
 

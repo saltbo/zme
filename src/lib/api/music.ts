@@ -17,7 +17,7 @@ export async function searchMusicAlbums(input: {
   pageSize?: number
 }) {
   return apiRequest<ResourcePage<MusicAlbumSearchItem>>(
-    `/api/music/search${query({
+    `/api/music${query({
       q: input.query,
       artist: input.artist,
       title: input.title,
@@ -30,7 +30,7 @@ export async function searchMusicAlbums(input: {
 
 export async function discoverMusicAlbums(input: MusicDiscoveryInput) {
   return apiRequest<ResourcePage<MusicSearchItem>>(
-    `/api/music/discover${query({
+    `/api/music-recommendations${query({
       mode: input.mode,
       range: input.range,
       chartType: input.chartType,
@@ -46,15 +46,15 @@ export async function discoverMusicAlbums(input: MusicDiscoveryInput) {
 
 export async function getMusicAlbumDetails(mediaKey: string) {
   return apiRequest<{ item: MusicAlbumDetails }>(
-    `/api/music/details${query({ mediaKey })}`,
+    `/api/music/${encodeURIComponent(mediaKey)}`,
     'Failed to load music album details.',
   )
 }
 
 export async function submitMusicTrackDownload(trackId: string, input: MusicTrackDownloadInput) {
   return apiRequest<{ item: CreateDownloadResult }>(
-    `/api/music/tracks/${encodeURIComponent(trackId)}/download`,
+    '/api/music-download-tasks',
     'Failed to submit music download.',
-    jsonBody(input),
+    jsonBody({ trackId, ...input }),
   )
 }

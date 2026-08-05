@@ -1,5 +1,5 @@
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
-import { apiRequest, jsonBody, query } from './client'
+import { apiRequest, jsonBody, mergePatch, query } from './client'
 
 export async function searchIndexerOnce(input: {
   query: string
@@ -7,7 +7,7 @@ export async function searchIndexerOnce(input: {
   categories?: number[]
 }) {
   return apiRequest<{ results: IndexerSearchItem[] }>(
-    `/api/indexers/search${query({
+    `/api/release-candidates${query({
       q: input.query,
       searchType: input.searchType,
       categories: input.categories?.join('|'),
@@ -28,19 +28,24 @@ export async function getIndexer(id: string) {
   return apiRequest<{ item: IndexerDetails }>(`/api/indexers/${id}`, 'Failed to load indexer.')
 }
 
-export async function updateIndexer(id: string, input: IndexerInput) {
+export async function updateIndexer(id: string, input: IndexerInput, expectedUpdatedAt: string) {
   return apiRequest<{ item: IndexerSummary }>(`/api/indexers/${id}`, 'Failed to update indexer.', {
-    method: 'PATCH',
-    body: JSON.stringify(input),
+    ...mergePatch(input),
+    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteIndexer(id: string) {
-  return apiRequest<{ id: string }>(`/api/indexers/${id}`, 'Failed to delete indexer.', { method: 'DELETE' })
+export async function deleteIndexer(id: string, expectedUpdatedAt: string) {
+  return apiRequest<void>(`/api/indexers/${id}`, 'Failed to delete indexer.', {
+    method: 'DELETE',
+    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
+  })
 }
 
 export async function checkIndexerHealth(id: string) {
-  return apiRequest<{ health: IndexerHealth }>(`/api/indexers/${id}/health`, 'Failed to check indexer health.', {
-    method: 'POST',
-  })
+  return apiRequest<{ item: IndexerHealth }>(
+    `/api/indexers/${id}/health-observations`,
+    'Failed to check indexer health.',
+    { method: 'POST' },
+  )
 }

@@ -1,12 +1,5 @@
 import { expect, type Locator, type Page, test } from '@playwright/test'
 
-const BASE_URL = 'http://localhost:7171'
-const ADMIN = {
-  name: process.env.LOCAL_TEST_NAME ?? 'E2E Admin',
-  email: process.env.LOCAL_TEST_EMAIL ?? 'e2e-admin@zme.test',
-  password: process.env.LOCAL_TEST_PASSWORD ?? 'e2e-password-123',
-}
-
 const DESKTOP_VIEWPORT = { width: 1280, height: 900 }
 const MOBILE_VIEWPORTS = [
   { width: 390, height: 844 },
@@ -144,25 +137,19 @@ test.describe('mobile search regressions', () => {
 
 async function signIn(page: Page) {
   await page.addInitScript(() => window.localStorage.setItem('zme.language', 'en-US'))
-
-  const setup = await page.request.post('/api/setup/admin', { data: ADMIN })
-  expect([201, 409]).toContain(setup.status())
-
-  const signInResponse = await page.request.post('/api/auth/sign-in/email', {
-    data: { email: ADMIN.email, password: ADMIN.password },
-    headers: { Origin: BASE_URL },
-  })
-  await expect(signInResponse).toBeOK()
+  await page.goto('/login')
+  await page.getByRole('link', { name: 'Continue with identity provider' }).click()
+  await expect(page).not.toHaveURL(/\/login/)
 }
 
 async function stubResourceSearchApis(page: Page) {
   await page.route(/\/api\/library\/states(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { items: [] } })
   })
-  await page.route(/\/api\/music\/(?:discover|search)(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/(?:music|music-recommendations)(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: emptyResourcePage() })
   })
-  await page.route(/\/api\/books\/(?:discover|search)(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/(?:books|book-recommendations)(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: emptyResourcePage() })
   })
 }
@@ -177,7 +164,7 @@ async function stubReleaseSearchApis(page: Page, getSearchGate: () => Promise<vo
   await page.route(`**/api/books/${encodeURIComponent(BOOK_RELEASE_KEY)}*`, async (route) => {
     await route.fulfill({ json: { item: bookDetails() } })
   })
-  await page.route(/\/api\/indexers\/search(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/release-candidates(?:\?.*)?$/, async (route) => {
     await getSearchGate()
     await route.fulfill({ json: { results: [indexerRelease()] } })
   })
@@ -186,7 +173,7 @@ async function stubReleaseSearchApis(page: Page, getSearchGate: () => Promise<vo
 async function submitSearchFromMusic(page: Page, viewport: { width: number; height: number }, query: string) {
   await page.setViewportSize(viewport)
   await page.goto('/music')
-  await expect(page.getByRole('heading', { name: 'Music' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Music', exact: true })).toBeVisible()
   if (viewport.width < 768) await expectNoHorizontalOverflow(page)
 
   await submitGlobalSearch(page, query)

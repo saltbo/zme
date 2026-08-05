@@ -27,12 +27,16 @@ describe('aria2DownloaderGateway', () => {
   it('submits addUri with the token, uri, and typed directory', async () => {
     const calls = stubFetch(() => jsonResponse({ result: 'gid-1' }))
 
-    await aria2DownloaderGateway.submit(config, input)
+    await aria2DownloaderGateway.submit(config, input, 'stable-task-id')
 
     expect(calls).toHaveLength(1)
     const payload = JSON.parse(calls[0].body ?? '')
     expect(payload.method).toBe('aria2.addUri')
-    expect(payload.params).toEqual(['token:s3cret', ['magnet:?xt=urn:btih:abc'], { dir: '/dl/Music/Artist/Album' }])
+    expect(payload.params).toEqual([
+      'token:s3cret',
+      ['magnet:?xt=urn:btih:abc'],
+      { dir: '/dl/Music/Artist/Album', gid: expect.stringMatching(/^[0-9a-f]{16}$/) },
+    ])
   })
 
   it('omits the token when no secret is configured', async () => {

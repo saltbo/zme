@@ -21,7 +21,7 @@ export const qbittorrentDownloaderGateway: DownloaderGateway = {
       body: form,
     })
 
-    await assertOk(response, 'qBittorrent')
+    await assertOk(response, 'qBittorrent', true)
     return { externalTaskId: null }
   },
 

@@ -42,7 +42,7 @@ type DownloaderFormState = {
 const initialForm: DownloaderFormState = {
   description: '',
   kind: 'zpan',
-  endpoint: 'https://zpan.space',
+  endpoint: 'https://drive.zpan.space',
   username: '',
   password: '',
   apiKey: '',
@@ -69,6 +69,7 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedRevision, setSelectedRevision] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<DownloaderFormState>(initialForm)
   const [editForm, setEditForm] = useState<DownloaderFormState>(initialForm)
@@ -97,10 +98,11 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
 
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedId) return
+    if (!selectedId || !selectedRevision) return
     setSaving(true)
     try {
-      const payload = await updateDownloader(selectedId, toDownloaderInput(editForm))
+      const payload = await updateDownloader(selectedId, toDownloaderInput(editForm), selectedRevision)
+      setSelectedRevision(payload.item.updatedAt)
       queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
         current.map((item) => (item.id === payload.item.id ? payload.item : item)),
       )
@@ -114,9 +116,9 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
   }
 
   async function handleDeleteSelected() {
-    if (!selectedId) return
+    if (!selectedId || !selectedRevision) return
     try {
-      await deleteDownloader(selectedId)
+      await deleteDownloader(selectedId, selectedRevision)
       queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
         current.filter((item) => item.id !== selectedId),
       )
@@ -137,9 +139,9 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
           item.id === id
             ? {
                 ...item,
-                healthStatus: payload.health.status,
-                healthMessage: payload.health.message,
-                healthCheckedAt: payload.health.checkedAt,
+                healthStatus: payload.item.status,
+                healthMessage: payload.item.message,
+                healthCheckedAt: payload.item.checkedAt,
               }
             : item,
         ),
@@ -154,11 +156,13 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
 
   async function openEdit(item: DownloaderSummary) {
     setSelectedId(item.id)
+    setSelectedRevision(item.updatedAt)
     setEditOpen(true)
     setEditing(true)
     setEditForm(fromSummary(item))
     try {
       const payload = await getDownloader(item.id)
+      setSelectedRevision(payload.item.updatedAt)
       setEditForm(fromDetails(payload.item))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('downloadersLoadFailed'))
@@ -609,7 +613,7 @@ function getEndpointPlaceholder(kind: DownloaderKind) {
 }
 
 function getDefaultEndpoint(kind: DownloaderKind) {
-  if (kind === 'zpan') return 'https://zpan.space'
+  if (kind === 'zpan') return 'https://drive.zpan.space'
   if (kind === 'qbittorrent') return 'http://127.0.0.1:8080'
   if (kind === 'transmission') return 'http://127.0.0.1:9091'
   return 'http://127.0.0.1:6800/jsonrpc'

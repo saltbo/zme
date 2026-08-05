@@ -41,8 +41,10 @@ app, search for a release in another (Prowlarr), and queue it in a third
 - **A personal library and a download monitor** to track what you saved and how
   downloads are progressing.
 
-Everything is admin-managed and private: there's no public sign-up, and your API
-keys and indexer / downloader endpoints stay inside your own deployment.
+Everything is admin-managed and private: identity comes from your external OIDC
+provider, ZME offers no local sign-up or passwords, and your API keys and indexer /
+downloader endpoints stay inside your own deployment. Standards-compliant DPoP
+tokens can drive a least-privilege Agent workflow.
 
 ## Screenshots
 
@@ -67,10 +69,15 @@ cd zme
 pnpm install
 ```
 
-Create a `.dev.vars` file with independent auth and connector-encryption secrets (each ≥ 32 characters):
+Register a standard OIDC client, then copy `.dev.vars.example` to `.dev.vars` and
+set the public origin, issuer, client ID, administrator subjects, and an independent
+connector-encryption secret:
 
 ```dotenv
-BETTER_AUTH_SECRET=replace-with-at-least-32-random-characters
+PUBLIC_APP_ORIGIN=http://localhost:7171
+OIDC_ISSUER=https://identity.example/tenant
+OIDC_CLIENT_ID=zme-local
+OIDC_ADMIN_SUBJECTS=your-subject
 CONNECTOR_CREDENTIALS_SECRET=replace-with-a-different-32-character-secret
 ```
 
@@ -80,16 +87,20 @@ Then start the dev server:
 pnpm dev          # → http://localhost:7171
 ```
 
-On first launch ZME opens an **onboarding flow** to create the first administrator.
-After signing in, connect your **media sources**, **indexers**, and **downloaders**
-from the Admin area — ZME doesn't run indexers or downloaders itself, it talks to
-the services you point it at.
+Sign in through the external provider. The first administrator is the explicitly
+configured subject—login order never grants privileges. Then connect your **media
+sources**, **indexers**, and **downloaders** from the Admin area. ZME doesn't run
+those services itself; it talks to the instances you configure.
+
+OIDC client setup, exact environment rules, and an upgrade runbook are documented
+in [external OIDC deployment](docs/oidc-deployment.md) and
+[OIDC migration](docs/oidc-migration.md).
 
 ### Deploy to Cloudflare
 
 ```bash
-wrangler secret put BETTER_AUTH_SECRET   # set the auth secret on the Worker
-wrangler secret put CONNECTOR_CREDENTIALS_SECRET # encrypt music-platform login sessions
+wrangler secret put OIDC_CLIENT_SECRET          # only for a confidential OIDC client
+wrangler secret put CONNECTOR_CREDENTIALS_SECRET
 pnpm db:migrate:remote                   # apply D1 migrations
 pnpm deploy
 ```
@@ -99,14 +110,17 @@ pnpm deploy
 | Layer | Stack |
 | --- | --- |
 | Frontend | React 19, React Router 7, TanStack Query, Tailwind CSS 4, i18n (中文 / English) |
-| Backend | Hono RPC API on Cloudflare Workers, serving the SPA as static assets |
-| Data | Cloudflare D1 (SQLite) via Drizzle ORM; Better Auth for sessions |
+| Backend | Versioned, resource-oriented Hono API on Cloudflare Workers, serving the SPA as static assets |
+| Identity | External standard OIDC; Authorization Code + PKCE; secure opaque local sessions; standards-based DPoP access |
+| Data | Cloudflare D1 (SQLite) via Drizzle ORM |
 | Integrations | TMDB, Open Library, ListenBrainz (discovery) · Douban and Netease Cloud Music (connectors) · Prowlarr (indexers) · qBittorrent / Transmission / Aria2 / ZPan (downloaders) |
 | Tooling | TypeScript, Biome, Vitest, Playwright, Wrangler, pnpm |
 
 The server follows a clean, layered architecture (domain → use cases → adapters →
 HTTP) with the two halves meeting only through a shared API contract. The full
 layout, boundaries, and conventions live in the contributor guide — see below.
+The DPoP-protected contract is published at `/api/openapi.json`; see the
+[Resource Server guide](docs/resource-server.md).
 
 ## Contributing
 

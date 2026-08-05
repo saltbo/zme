@@ -22,11 +22,54 @@ export type ErrorInfo = {
     };
 };
 
-export type DownloadTaskPage = {
-    items: Array<DownloadTask>;
-    total: number;
-    page: number;
-    pageSize: number;
+export type DownloadTaskListPage = {
+    items: Array<DownloadTaskListItem>;
+    nextPageToken: string;
+};
+
+export type DownloadTaskListItem = {
+    id: string;
+    spec: {
+        source: {
+            type: 'http' | 'magnet' | 'torrent_url';
+            uri: string;
+        };
+        destination: {
+            folder: string;
+            name: string;
+        };
+        labels: {
+            category: string;
+            tags: Array<string>;
+        };
+    };
+    status: {
+        state: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
+        progress: {
+            download: {
+                bytes: number;
+                totalBytes?: number;
+                bytesPerSecond: number;
+            };
+            upload: {
+                bytes: number;
+                totalBytes?: number;
+                bytesPerSecond: number;
+            };
+        };
+        runtime: {
+            phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
+            etaSeconds?: number;
+            torrent?: {
+                infoHash?: string;
+                name?: string;
+                seeders?: number;
+                leechers?: number;
+                peers?: number;
+            };
+        };
+    };
+    createdAt: string;
 };
 
 export type DownloadTask = {
@@ -77,7 +120,7 @@ export type DownloadTask = {
             objectId: string;
         };
         runtime: {
-            engine?: 'builtin' | 'aria2' | 'qbittorrent';
+            engine?: 'http' | 'aria2' | 'qbittorrent';
             state?: string;
             phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
             message?: string;
@@ -140,30 +183,60 @@ export type DownloadTask = {
             code?: string;
             message: string;
         };
+        resolveStartedAt: string;
+        resolveCompletedAt: string;
+        downloadCompletedAt: string;
+        ingestStartedAt: string;
+        ingestCompletedAt: string;
+        seedingStartedAt: string;
+        seedingStoppedAt: string;
         startedAt: string;
         finishedAt: string;
         updatedAt: string;
     };
+    control?: {
+        action: 'delete';
+        requestedAt: string;
+    };
     createdAt: string;
+};
+
+export type DownloadTaskTimeline = {
+    items: Array<DownloadTaskTimelineItem>;
+};
+
+export type DownloadTaskTimelineItem = {
+    id: string;
+    taskId: string;
+    time: string;
+    source: 'task' | 'activity';
+    action: string;
+    title: string;
+    detail: string;
+    severity: 'info' | 'success' | 'warning' | 'error';
+    metadata: {
+        [key: string]: unknown;
+    };
 };
 
 export type ListDownloadTasksData = {
     body?: never;
     path?: never;
     query?: {
-        status?: 'queued' | 'assigned' | 'downloading' | 'suspended' | 'pausing' | 'paused' | 'interrupted' | 'uploading' | 'canceling' | 'completed' | 'failed' | 'canceled';
-        assignedTo?: 'me';
+        status?: string;
         category?: string;
         tag?: string;
-        sortBy?: 'createdAt' | 'source' | 'category' | 'tags' | 'status' | 'progress' | 'eta';
-        sortDir?: 'asc' | 'desc';
-        page?: number;
         pageSize?: number;
+        pageToken?: string;
     };
     url: '/api/downloads/tasks';
 };
 
 export type ListDownloadTasksErrors = {
+    /**
+     * Invalid query
+     */
+    400: Error;
     /**
      * Unauthorized
      */
@@ -174,9 +247,9 @@ export type ListDownloadTasksError = ListDownloadTasksErrors[keyof ListDownloadT
 
 export type ListDownloadTasksResponses = {
     /**
-     * Download tasks
+     * Download task list
      */
-    200: DownloadTaskPage;
+    200: DownloadTaskListPage;
 };
 
 export type ListDownloadTasksResponse = ListDownloadTasksResponses[keyof ListDownloadTasksResponses];
@@ -323,7 +396,7 @@ export type UpdateDownloadTaskData = {
         errorMessage?: string;
         resultObjectId?: string;
         runtime?: {
-            engine?: 'builtin' | 'aria2' | 'qbittorrent';
+            engine?: 'http' | 'aria2' | 'qbittorrent';
             state?: string;
             phase?: 'metadata' | 'downloading' | 'uploading' | 'seeding' | 'completed' | 'error';
             message?: string;
@@ -382,6 +455,7 @@ export type UpdateDownloadTaskData = {
                 selected?: boolean;
             }>;
         };
+        cleanupCompleted?: true;
     };
     path: {
         id: string;
@@ -419,6 +493,45 @@ export type UpdateDownloadTaskResponses = {
 };
 
 export type UpdateDownloadTaskResponse = UpdateDownloadTaskResponses[keyof UpdateDownloadTaskResponses];
+
+export type ListDownloadTaskEventsData = {
+    body?: never;
+    path: {
+        id: string;
+    };
+    query?: never;
+    url: '/api/downloads/tasks/{id}/events';
+};
+
+export type ListDownloadTaskEventsErrors = {
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * Not found
+     */
+    404: Error;
+    /**
+     * Invalid task state
+     */
+    409: Error;
+};
+
+export type ListDownloadTaskEventsError = ListDownloadTaskEventsErrors[keyof ListDownloadTaskEventsErrors];
+
+export type ListDownloadTaskEventsResponses = {
+    /**
+     * Download task timeline
+     */
+    200: DownloadTaskTimeline;
+};
+
+export type ListDownloadTaskEventsResponse = ListDownloadTaskEventsResponses[keyof ListDownloadTaskEventsResponses];
 
 export type SetDownloadTaskStatusData = {
     body: {
@@ -505,23 +618,7 @@ export type RetryDownloadTaskResponse = RetryDownloadTaskResponses[keyof RetryDo
 export type StreamEventsData = {
     body?: never;
     path?: never;
-    query?: {
-        /**
-         * Set to "1" to subscribe to download-task events.
-         */
-        downloadTasks?: string;
-        dtStatus?: string;
-        dtCategory?: string;
-        dtTag?: string;
-        /**
-         * One of: createdAt | source | category | tags | status | progress | eta
-         */
-        dtSortBy?: string;
-        /**
-         * asc | desc
-         */
-        dtSortDir?: string;
-    };
+    query?: never;
     url: '/api/events';
 };
 
@@ -530,6 +627,10 @@ export type StreamEventsErrors = {
      * Unauthorized
      */
     401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
 };
 
 export type StreamEventsError = StreamEventsErrors[keyof StreamEventsErrors];

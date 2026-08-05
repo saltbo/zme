@@ -1,10 +1,8 @@
 import { createContext, useContext } from 'react'
-import type { authClient } from '@/lib/auth-client'
-
-type SessionData = typeof authClient.$Infer.Session
+import type { SessionUser } from '@/lib/identity'
 
 interface AuthContextValue {
-  user: SessionData['user']
+  user: SessionUser
   isAdmin: boolean
   refreshSession: () => Promise<void>
 }
@@ -17,6 +15,6 @@ export function useAuth() {
   return context
 }
 
-export function isAdminUser(user: { role?: string | null }) {
-  return (user.role || '').split(',').includes('admin')
+export function isAdminUser(user: { role: string }) {
+  return user.role === 'admin'
 }

@@ -1,8 +1,18 @@
 import { encryptConnectorCredentials } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
+import { hashSecret } from '@server/usecases/identity'
 import type { MediaSearchItem, MusicCollectionSummary } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { enqueueConnectorSync, saveConnectorPlaylistSelection, syncConnector } from './connectors'
+import {
+  deleteConnector,
+  enqueueConnectorSync,
+  getConnectorSyncJob,
+  processConnectorSyncJob,
+  recoverQueuedConnectorSyncJobs,
+  saveConnectorPlaylistSelection,
+  syncConnector,
+  updateConnector,
+} from './connectors'
 import type { Deps } from './deps'
 import type { ConnectorRecord, ImportedLibraryEntry, LibraryRecord, MusicTrackRecord } from './ports'
 
@@ -25,6 +35,24 @@ const connectorRecord: ConnectorRecord = {
 }
 
 afterEach(() => vi.restoreAllMocks())
+
+it('applies connector mutations with the expected revision', async () => {
+  const updateState = vi.fn(async () => ({ ...connectorRecord, enabled: false }))
+  const remove = vi.fn(async () => true)
+  const deps = {
+    connectorsRepo: { updateState, delete: remove },
+    musicConnectors: new Map(),
+  } as never as Deps
+
+  await expect(updateConnector(deps, 'user-1', 'connector-1', { enabled: false }, 'revision-1')).resolves.toMatchObject(
+    {
+      enabled: false,
+    },
+  )
+  await expect(deleteConnector(deps, 'user-1', 'connector-1', 'revision-2')).resolves.toBe(true)
+  expect(updateState).toHaveBeenCalledWith('user-1', 'connector-1', { enabled: false }, 'revision-1')
+  expect(remove).toHaveBeenCalledWith('user-1', 'connector-1', 'revision-2')
+})
 
 function neteaseModule(input: { auth?: Record<string, unknown>; session?: Record<string, unknown> } = {}) {
   return {
@@ -181,8 +209,8 @@ describe('syncConnector', () => {
       throw new Error('Douban profile is unreachable.')
     })
 
-    await expect(syncConnector(deps, env, 'user-1', 'connector-1')).rejects.toThrow('Douban profile is unreachable.')
-    expect(synced).toEqual([{ id: 'connector-1', result: null, error: 'Douban profile is unreachable.' }])
+    await expect(syncConnector(deps, env, 'user-1', 'connector-1')).rejects.toThrow()
+    expect(synced).toEqual([{ id: 'connector-1', result: null, error: 'Connector synchronization failed.' }])
   })
 
   it('fails when the connector is not configured', async () => {
@@ -409,6 +437,7 @@ describe('saveConnectorPlaylistSelection', () => {
         },
       },
       musicConnectors: new Map([['netease', neteaseModule()]]),
+      connectorSyncJobsRepo: { findByIdempotency: async () => null, create: async () => true },
       connectorSyncQueue: { enqueue },
     } as never as Deps
 
@@ -417,7 +446,11 @@ describe('saveConnectorPlaylistSelection', () => {
     ).resolves.toEqual({ selectedPlaylists: 1 })
     expect(savedSelections).toEqual([['playlist-1']])
     expect(enqueue).toHaveBeenCalledOnce()
-    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1' })
+    expect(enqueue).toHaveBeenCalledWith({
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      jobId: expect.any(String),
+    })
   })
 
   it('rejects playlists outside the connector without saving or queuing', async () => {
@@ -427,6 +460,7 @@ describe('saveConnectorPlaylistSelection', () => {
       connectorsRepo: { get: async () => ({ ...connectorRecord, kind: 'netease' as const }) },
       musicCollectionsRepo: { listForConnector: async () => [], setLibrarySelections },
       musicConnectors: new Map([['netease', neteaseModule()]]),
+      connectorSyncJobsRepo: { findByIdempotency: async () => null, create: async () => true },
       connectorSyncQueue: { enqueue },
     } as never as Deps
 
@@ -443,11 +477,243 @@ describe('enqueueConnectorSync', () => {
     const enqueue = vi.fn(async () => undefined)
     const deps = {
       connectorsRepo: { get: async () => connectorRecord },
+      connectorSyncJobsRepo: { findByIdempotency: async () => null, create: async () => true },
       connectorSyncQueue: { enqueue },
     } as never as Deps
 
-    await enqueueConnectorSync(deps, 'user-1', 'connector-1')
+    const job = await enqueueConnectorSync(deps, 'user-1', 'connector-1', 'request-1')
 
-    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1' })
+    expect(job).toMatchObject({ connectorId: 'connector-1', status: 'queued', result: null, error: null })
+    expect(enqueue).toHaveBeenCalledWith({
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      jobId: job.id,
+    })
+  })
+
+  it('leaves a durable job queued when publication outcome is uncertain', async () => {
+    const claim = vi.fn()
+    const fail = vi.fn()
+    const deps = {
+      connectorsRepo: { get: async () => connectorRecord },
+      connectorSyncJobsRepo: {
+        findByIdempotency: async () => null,
+        create: async () => true,
+        claim,
+        fail,
+      },
+      connectorSyncQueue: { enqueue: async () => Promise.reject(new Error('Queue unavailable.')) },
+    } as never as Deps
+
+    await expect(enqueueConnectorSync(deps, 'user-1', 'connector-1', 'request-1')).rejects.toThrow()
+    expect(claim).not.toHaveBeenCalled()
+    expect(fail).not.toHaveBeenCalled()
+  })
+
+  it('reuses an idempotent request and rejects the key for different content', async () => {
+    const existing = {
+      id: 'job-1',
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      idempotencyKey: 'request-1',
+      requestHash: await hashSecret(JSON.stringify({ connectorId: 'connector-1' })),
+      status: 'queued' as const,
+      result: null,
+      error: null,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      createdAt: '2026-08-04T00:00:00.000Z',
+      startedAt: null,
+      completedAt: null,
+    }
+    const enqueue = vi.fn()
+    const deps = {
+      connectorsRepo: { get: async (_userId: string, id: string) => ({ ...connectorRecord, id }) },
+      connectorSyncJobsRepo: { findByIdempotency: async () => existing },
+      connectorSyncQueue: { enqueue },
+    } as never as Deps
+
+    await expect(enqueueConnectorSync(deps, 'user-1', 'connector-1', 'request-1')).resolves.toMatchObject({
+      id: 'job-1',
+    })
+    await expect(enqueueConnectorSync(deps, 'user-1', 'connector-2', 'request-1')).rejects.toThrow()
+    expect(enqueue).toHaveBeenCalledOnce()
+    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1', jobId: 'job-1' })
+  })
+
+  it('returns the winner when concurrent creation loses the idempotency race', async () => {
+    const requestHash = await hashSecret(JSON.stringify({ connectorId: 'connector-1' }))
+    const winner = {
+      id: 'winner-job',
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      idempotencyKey: 'request-1',
+      requestHash,
+      status: 'queued' as const,
+      result: null,
+      error: null,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      createdAt: '2026-08-04T00:00:00.000Z',
+      startedAt: null,
+      completedAt: null,
+    }
+    let reads = 0
+    const deps = {
+      connectorsRepo: { get: async () => connectorRecord },
+      connectorSyncJobsRepo: {
+        findByIdempotency: async () => (++reads === 1 ? null : winner),
+        create: async () => false,
+      },
+      connectorSyncQueue: { enqueue: vi.fn() },
+    } as never as Deps
+
+    await expect(enqueueConnectorSync(deps, 'user-1', 'connector-1', 'request-1')).resolves.toMatchObject({
+      id: 'winner-job',
+    })
+    expect(deps.connectorSyncQueue.enqueue).toHaveBeenCalledWith({
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      jobId: 'winner-job',
+    })
+  })
+
+  it('recovers the crash window after D1 commit and before queue publication', async () => {
+    const queued = {
+      id: 'orphaned-job',
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      idempotencyKey: 'request-1',
+      requestHash: 'hash',
+      status: 'queued' as const,
+      result: null,
+      error: null,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      createdAt: '2026-08-04T00:00:00.000Z',
+      startedAt: null,
+      completedAt: null,
+    }
+    const enqueue = vi.fn(async () => undefined)
+    const deps = {
+      connectorSyncJobsRepo: { listQueued: async () => [queued] },
+      connectorSyncQueue: { enqueue },
+    } as never as Deps
+
+    await expect(recoverQueuedConnectorSyncJobs(deps)).resolves.toBe(1)
+    expect(enqueue).toHaveBeenCalledWith({ userId: 'user-1', connectorId: 'connector-1', jobId: 'orphaned-job' })
+  })
+})
+
+describe('connector sync job lifecycle', () => {
+  it('persists completion and makes the owned job readable', async () => {
+    const result = {
+      capability: 'library.import' as const,
+      scanned: 0,
+      imported: 0,
+      saved: 0,
+      watched: 0,
+      unmatched: 0,
+    }
+    let job = {
+      id: 'job-1',
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      idempotencyKey: 'request-1',
+      requestHash: 'hash',
+      status: 'queued' as 'queued' | 'completed',
+      result: null as typeof result | null,
+      error: null,
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      createdAt: '2026-08-04T00:00:00.000Z',
+      startedAt: null as string | null,
+      completedAt: null as string | null,
+    }
+    const complete = vi.fn(
+      async (_id: string, _leaseOwner: string, completedResult: typeof result, completedAt: string) => {
+        job = { ...job, status: 'completed', result: completedResult, completedAt }
+        return true
+      },
+    )
+    const deps = {
+      connectorSyncJobsRepo: {
+        claim: async () => true,
+        complete,
+        fail: vi.fn(),
+        get: async (userId: string) => (userId === 'user-1' ? job : null),
+      },
+      connectorsRepo: {
+        get: async () => connectorRecord,
+        markSynced: vi.fn(),
+      },
+      libraryImporters: { douban: { fetchEntries: async () => [] } },
+      mediaSourcesRepo: {
+        findEnabled: async () => ({ credentials: { apiKey: 'key' }, options: {} }),
+      },
+      mediaProvider: { search: vi.fn() },
+    } as never as Deps
+
+    await processConnectorSyncJob(deps, env, {
+      type: 'connector_sync',
+      userId: 'user-1',
+      connectorId: 'connector-1',
+      jobId: 'job-1',
+    })
+
+    expect(complete).toHaveBeenCalledWith('job-1', expect.any(String), result, expect.any(String))
+    await expect(getConnectorSyncJob(deps, 'user-1', 'job-1')).resolves.toMatchObject({ id: 'job-1', result })
+    await expect(getConnectorSyncJob(deps, 'user-2', 'job-1')).resolves.toBeNull()
+  })
+
+  it('records failures and ignores duplicate queue deliveries', async () => {
+    const fail = vi.fn()
+    const sync = vi.fn()
+    const deps = {
+      connectorSyncJobsRepo: {
+        get: async () => ({ id: 'job-1', userId: 'user-1', connectorId: 'connector-1', status: 'queued' }),
+        claim: async () => false,
+        fail,
+      },
+      connectorsRepo: { get: sync },
+    } as never as Deps
+
+    await expect(
+      processConnectorSyncJob(deps, env, {
+        type: 'connector_sync',
+        userId: 'user-1',
+        connectorId: 'connector-1',
+        jobId: 'job-1',
+      }),
+    ).resolves.toBe(60)
+
+    expect(sync).not.toHaveBeenCalled()
+    expect(fail).not.toHaveBeenCalled()
+  })
+
+  it('records a terminal failure after a claimed job cannot synchronize', async () => {
+    const fail = vi.fn()
+    const deps = {
+      connectorSyncJobsRepo: {
+        get: async () => ({ id: 'job-1', userId: 'user-1', connectorId: 'missing', status: 'queued' }),
+        claim: async () => true,
+        fail,
+      },
+      connectorsRepo: { get: async () => null },
+    } as never as Deps
+
+    await processConnectorSyncJob(deps, env, {
+      type: 'connector_sync',
+      userId: 'user-1',
+      connectorId: 'missing',
+      jobId: 'job-1',
+    })
+
+    expect(fail).toHaveBeenCalledWith(
+      'job-1',
+      expect.any(String),
+      'Connector synchronization failed.',
+      expect.any(String),
+    )
   })
 })

@@ -8,16 +8,10 @@ import {
   getTrendingMedia,
   getWatchClickouts,
   listMediaGenres,
-  searchMedia,
 } from '@server/usecases/media'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-
-const searchQuerySchema = z.object({
-  q: z.string().trim().min(1),
-  language: z.string().trim().min(2).optional(),
-})
 
 const languageQuerySchema = z.object({
   language: z.string().trim().min(2).optional(),
@@ -72,30 +66,24 @@ const personParamsSchema = z.object({
 })
 
 export function registerMediaRoutes(routes: Hono<AppEnv>) {
-  routes.get('/tmdb/search', zValidator('query', searchQuerySchema), async (c) => {
-    const { q, language } = c.req.valid('query')
-    const results = await searchMedia(c.get('deps'), q, language)
-    return c.json({ results })
-  })
-
-  routes.get('/tmdb/trending', zValidator('query', languageQuerySchema), async (c) => {
+  routes.get('/media-trends', zValidator('query', languageQuerySchema), async (c) => {
     const { language } = c.req.valid('query')
     const results = await getTrendingMedia(c.get('deps'), language)
     return c.json({ results })
   })
 
-  routes.get('/tmdb/popular', zValidator('query', popularQuerySchema), async (c) => {
+  routes.get('/popular-media', zValidator('query', popularQuerySchema), async (c) => {
     const { kind, language } = c.req.valid('query')
     const results = await getPopularMedia(c.get('deps'), kind, language)
     return c.json({ results })
   })
 
-  routes.get('/tmdb/discover', zValidator('query', discoverQuerySchema), async (c) => {
+  routes.get('/media-recommendations', zValidator('query', discoverQuerySchema), async (c) => {
     const page = await discoverMedia(c.get('deps'), c.req.valid('query'))
     return c.json(page)
   })
 
-  routes.get('/tmdb/genres', zValidator('query', popularQuerySchema), async (c) => {
+  routes.get('/media-genres', zValidator('query', popularQuerySchema), async (c) => {
     const { kind, language } = c.req.valid('query')
     const genres = await listMediaGenres(c.get('deps'), kind, language)
     return c.json({ genres })

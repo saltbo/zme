@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
-import { checkMediaSourceHealth, getActiveTmdbSource } from './media-sources'
+import {
+  checkMediaSourceHealth,
+  deleteMediaSource,
+  getActiveTmdbSource,
+  getMediaSourceHealth,
+  updateMediaSource,
+} from './media-sources'
 import type { MediaSourceRecord } from './ports'
 
 function sourceRecord(overrides: Partial<MediaSourceRecord> = {}): MediaSourceRecord {
@@ -44,6 +50,34 @@ describe('getActiveTmdbSource', () => {
   })
 })
 
+it('applies media-source mutations with the expected revision', async () => {
+  const input = { kind: 'tmdb' as const, credentials: { apiKey: 'key' }, options: {}, enabled: true }
+  const updates: unknown[][] = []
+  const deletes: unknown[][] = []
+  const deps = {
+    mediaSourcesRepo: {
+      get: async () => sourceRecord(),
+      update: async (...args: unknown[]) => {
+        updates.push(args)
+        return sourceRecord()
+      },
+      delete: async (...args: unknown[]) => {
+        deletes.push(args)
+        return true
+      },
+    },
+  } as never as Deps
+
+  await expect(updateMediaSource(deps, 'media-source-1', input, 'revision-1')).resolves.toMatchObject({
+    id: 'media-source-1',
+  })
+  await expect(deleteMediaSource(deps, 'media-source-1', 'revision-2')).resolves.toBe(true)
+  expect(updates).toEqual([
+    ['media-source-1', { ...input, description: sourceRecord().description ?? undefined }, 'revision-1'],
+  ])
+  expect(deletes).toEqual([['media-source-1', 'revision-2']])
+})
+
 describe('checkMediaSourceHealth', () => {
   function createDeps(probe: () => Promise<void>) {
     const record = sourceRecord()
@@ -81,4 +115,16 @@ describe('checkMediaSourceHealth', () => {
     )
     expect(health).toMatchObject({ status: 'offline', message: 'TMDB request failed: 401' })
   })
+})
+
+it('reads the cached media-source health without a provider call', async () => {
+  await expect(
+    getMediaSourceHealth(
+      { mediaSourcesRepo: { get: async () => sourceRecord({ healthStatus: 'unknown' }) } } as never,
+      'media-source-1',
+    ),
+  ).resolves.toEqual({ status: 'unknown', message: null, checkedAt: null })
+  await expect(
+    getMediaSourceHealth({ mediaSourcesRepo: { get: async () => null } } as never, 'missing'),
+  ).resolves.toBeNull()
 })

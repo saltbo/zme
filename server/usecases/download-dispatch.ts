@@ -10,6 +10,8 @@ const MAX_ATTEMPTS = 3
 
 export interface DownloadDispatchMessage {
   laneKey: string
+  traceparent?: string
+  tracestate?: string
 }
 
 export interface DownloadDispatchResult {
@@ -21,8 +23,9 @@ export async function processDownloadDispatch(
   env: Env,
   message: DownloadDispatchMessage,
 ): Promise<DownloadDispatchResult> {
-  const connectorId = parseMusicLaneKey(message.laneKey)
-  if (!connectorId) throw new Error(`Unsupported download dispatch lane: ${message.laneKey}`)
+  const { laneKey } = message
+  const connectorId = parseMusicLaneKey(laneKey)
+  if (!connectorId) throw new Error(`Unsupported download dispatch lane: ${laneKey}`)
 
   const now = new Date()
   const owner = crypto.randomUUID()

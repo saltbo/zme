@@ -1,31 +1,13 @@
-import { Clapperboard, LoaderCircle, ShieldCheck } from 'lucide-react'
-import type { FormEvent } from 'react'
-import { useState } from 'react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { Clapperboard, ShieldCheck } from 'lucide-react'
+import { useLocation } from 'react-router'
+import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { authClient } from '@/lib/auth-client'
+import { loginUrl } from '@/lib/identity'
 
-export function LoginPage({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitting(true)
-    try {
-      const result = await authClient.signIn.email({ email, password })
-      if (result.error) throw new Error(result.error.message || 'Sign in failed.')
-      await onSignedIn()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Sign in failed.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
+export function LoginPage() {
+  const location = useLocation()
+  const returnTo = typeof location.state?.from === 'string' ? location.state.from : '/'
+  const error = new URLSearchParams(location.search).get('error')
   return (
     <main className="flex min-h-dvh items-center justify-center bg-muted/40 p-4">
       <Card className="w-full max-w-sm p-6">
@@ -35,40 +17,18 @@ export function LoginPage({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
           </span>
           <div>
             <h1 className="font-semibold text-xl">ZME</h1>
-            <p className="text-muted-foreground text-sm">Sign in with email and password.</p>
+            <p className="text-muted-foreground text-sm">Sign in through the configured identity provider.</p>
           </div>
         </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label htmlFor="login-email" className="grid gap-2 text-sm">
-            Email
-            <Input
-              id="login-email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              required
-            />
-          </label>
-          <label htmlFor="login-password" className="grid gap-2 text-sm">
-            Password
-            <Input
-              id="login-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              minLength={8}
-              required
-            />
-          </label>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? (
-              <LoaderCircle data-icon="inline-start" className="animate-spin" />
-            ) : (
-              <ShieldCheck data-icon="inline-start" />
-            )}
-            Sign in
-          </Button>
-        </form>
+        {error ? (
+          <p role="alert" className="mb-4 text-sm">
+            Sign-in could not be completed. Please try again.
+          </p>
+        ) : null}
+        <a href={loginUrl(returnTo)} className={buttonVariants({ className: 'w-full' })}>
+          <ShieldCheck data-icon="inline-start" />
+          Continue with identity provider
+        </a>
       </Card>
     </main>
   )

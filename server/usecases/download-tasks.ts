@@ -24,11 +24,12 @@ export async function listDownloadTasks(
   deps: Deps,
   userId: string,
   input: ListDownloadTasksInput,
+  signal?: AbortSignal,
 ): Promise<DownloadTaskPage> {
   const rows = await listTaskCapableDownloaders(deps, userId)
 
   const results = await Promise.all(
-    rows.map(({ downloader, gateway }) => gateway.list(downloader.config, toOwner(downloader), input)),
+    rows.map(({ downloader, gateway }) => gateway.list(downloader.config, toOwner(downloader), input, signal)),
   )
   return {
     items: results.flatMap((result) => result.items),

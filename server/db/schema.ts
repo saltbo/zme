@@ -1,59 +1,143 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { foreignKey, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-export const user = sqliteTable('user', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
-  emailVerified: integer('email_verified', { mode: 'boolean' }).notNull().default(false),
-  image: text('image'),
-  role: text('role').default('user'),
-  banned: integer('banned', { mode: 'boolean' }).default(false),
-  banReason: text('ban_reason'),
-  banExpires: integer('ban_expires', { mode: 'timestamp' }),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-})
+export const user = sqliteTable(
+  'users',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    email: text('oidc_email'),
+    image: text('image'),
+    role: text('role').default('user'),
+    disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
+    issuer: text('issuer'),
+    subject: text('subject'),
+    identityBoundAt: text('identity_bound_at'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (table) => [uniqueIndex('users_issuer_subject_idx').on(table.issuer, table.subject)],
+)
 
-export const session = sqliteTable('session', {
+export const applicationSessions = sqliteTable('application_sessions', {
   id: text('id').primaryKey(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  token: text('token').notNull().unique(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
+  tokenHash: text('token_hash').notNull().unique(),
   userId: text('user_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
-  impersonatedBy: text('impersonated_by'),
+  expiresAt: text('expires_at').notNull(),
+  createdAt: text('created_at').notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
 })
 
-export const account = sqliteTable('account', {
+export const oidcLoginTransactions = sqliteTable('oidc_login_transactions', {
   id: text('id').primaryKey(),
-  accountId: text('account_id').notNull(),
-  providerId: text('provider_id').notNull(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  idToken: text('id_token'),
-  accessTokenExpiresAt: integer('access_token_expires_at', { mode: 'timestamp' }),
-  refreshTokenExpiresAt: integer('refresh_token_expires_at', { mode: 'timestamp' }),
-  scope: text('scope'),
-  password: text('password'),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  stateHash: text('state_hash').notNull().unique(),
+  nonce: text('nonce').notNull(),
+  codeVerifier: text('code_verifier').notNull(),
+  returnTo: text('return_to').notNull(),
+  expiresAt: text('expires_at').notNull(),
+  createdAt: text('created_at').notNull(),
 })
 
-export const verification = sqliteTable('verification', {
-  id: text('id').primaryKey(),
-  identifier: text('identifier').notNull(),
-  value: text('value').notNull(),
-  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }),
-})
+export const dpopReplays = sqliteTable(
+  'dpop_replays',
+  {
+    issuer: text('issuer').notNull(),
+    proofJti: text('proof_jti').notNull(),
+    keyThumbprint: text('key_thumbprint').notNull(),
+    expiresAt: text('expires_at').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('dpop_replays_issuer_jti_key_idx').on(table.issuer, table.proofJti, table.keyThumbprint)],
+)
+
+export const releaseSearchJobs = sqliteTable(
+  'release_search_jobs',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    mediaKey: text('media_key').notNull(),
+    mediaTitle: text('media_title').notNull(),
+    query: text('query').notNull(),
+    searchType: text('search_type').notNull(),
+    categoriesJson: text('categories_json').notNull().default('[]'),
+    status: text('status', { enum: ['running', 'completed', 'failed'] }).notNull(),
+    error: text('error'),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: text('lease_expires_at'),
+    createdAt: text('created_at').notNull(),
+    completedAt: text('completed_at'),
+  },
+  (table) => [uniqueIndex('release_search_jobs_user_idempotency_idx').on(table.userId, table.idempotencyKey)],
+)
+
+export const releaseSearchResults = sqliteTable(
+  'release_search_results',
+  {
+    id: text('id').primaryKey(),
+    jobId: text('job_id')
+      .notNull()
+      .references(() => releaseSearchJobs.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    payloadJson: text('payload_json').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('release_search_results_job_position_idx').on(table.jobId, table.position)],
+)
+
+export const manualDownloadTasks = sqliteTable(
+  'manual_download_tasks',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    releaseSearchResultId: text('release_search_result_id')
+      .notNull()
+      .references(() => releaseSearchResults.id, { onDelete: 'restrict' }),
+    downloaderId: text('downloader_id')
+      .notNull()
+      .references(() => downloaders.id, { onDelete: 'restrict' }),
+    status: text('status', {
+      enum: ['submitting', 'submitted', 'running', 'completed', 'failed', 'canceled'],
+    }).notNull(),
+    externalTaskId: text('external_task_id'),
+    downstreamStatus: text('downstream_status', {
+      enum: [
+        'queued',
+        'assigned',
+        'running',
+        'billing_paused',
+        'pausing',
+        'paused',
+        'uploading',
+        'canceling',
+        'completed',
+        'failed',
+        'canceled',
+      ],
+    }),
+    downstreamRevision: text('downstream_revision'),
+    downloadedBytes: integer('downloaded_bytes').notNull().default(0),
+    storageUploadedBytes: integer('storage_uploaded_bytes').notNull().default(0),
+    totalBytes: integer('total_bytes'),
+    downloadBps: integer('download_bps').notNull().default(0),
+    storageUploadBps: integer('storage_upload_bps').notNull().default(0),
+    resultObjectId: text('result_object_id'),
+    resultName: text('result_name'),
+    resultTargetFolder: text('result_target_folder'),
+    error: text('error'),
+    createdAt: text('created_at').notNull(),
+    completedAt: text('completed_at'),
+  },
+  (table) => [uniqueIndex('manual_download_tasks_user_idempotency_idx').on(table.userId, table.idempotencyKey)],
+)
 
 export const downloaders = sqliteTable('downloaders', {
   id: text('id').primaryKey(),
@@ -145,7 +229,10 @@ export const connectors = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [uniqueIndex('connectors_user_kind_idx').on(table.userId, table.kind)],
+  (table) => [
+    uniqueIndex('connectors_user_kind_idx').on(table.userId, table.kind),
+    uniqueIndex('connectors_id_user_idx').on(table.id, table.userId),
+  ],
 )
 
 export const connectorLoginAttempts = sqliteTable('connector_login_attempts', {
@@ -164,6 +251,36 @@ export const connectorLoginAttempts = sqliteTable('connector_login_attempts', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 })
+
+export const connectorSyncJobs = sqliteTable(
+  'connector_sync_jobs',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    connectorId: text('connector_id').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    requestHash: text('request_hash').notNull(),
+    status: text('status', { enum: ['queued', 'running', 'completed', 'failed'] }).notNull(),
+    resultJson: text('result_json'),
+    error: text('error'),
+    leaseOwner: text('lease_owner'),
+    leaseExpiresAt: text('lease_expires_at'),
+    createdAt: text('created_at').notNull(),
+    startedAt: text('started_at'),
+    completedAt: text('completed_at'),
+  },
+  (table) => [
+    index('connector_sync_jobs_user_created_idx').on(table.userId, table.createdAt),
+    uniqueIndex('connector_sync_jobs_user_idempotency_idx').on(table.userId, table.idempotencyKey),
+    foreignKey({
+      columns: [table.connectorId, table.userId],
+      foreignColumns: [connectors.id, connectors.userId],
+      name: 'connector_sync_jobs_connector_owner_fk',
+    }).onDelete('cascade'),
+  ],
+)
 
 export const musicCollections = sqliteTable(
   'music_collections',
@@ -425,6 +542,7 @@ export type LibraryItem = typeof library.$inferSelect
 export type NewLibraryItem = typeof library.$inferInsert
 export type Connector = typeof connectors.$inferSelect
 export type ConnectorLoginAttempt = typeof connectorLoginAttempts.$inferSelect
+export type ConnectorSyncJob = typeof connectorSyncJobs.$inferSelect
 export type MusicCollection = typeof musicCollections.$inferSelect
 export type MusicTrackRow = typeof musicTracks.$inferSelect
 export type MusicReleaseRow = typeof musicReleases.$inferSelect
