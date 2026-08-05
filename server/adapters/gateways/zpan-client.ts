@@ -209,12 +209,10 @@ function isProgress(value: unknown) {
 }
 
 function isTransferProgress(value: unknown) {
-  return (
-    isRecord(value) &&
-    typeof value.bytes === 'number' &&
-    typeof value.bytesPerSecond === 'number' &&
-    (value.totalBytes === undefined || value.totalBytes === null || typeof value.totalBytes === 'number')
-  )
+  if (!isRecord(value)) return false
+  const hasValidTotalBytes =
+    value.totalBytes === undefined || value.totalBytes === null || typeof value.totalBytes === 'number'
+  return typeof value.bytes === 'number' && typeof value.bytesPerSecond === 'number' && hasValidTotalBytes
 }
 
 function isRuntime(value: Record<string, unknown>) {
