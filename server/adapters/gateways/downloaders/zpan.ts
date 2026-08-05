@@ -68,20 +68,41 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
 
   async stream(config, owner, signal, emit) {
     const client = getClient(config)
-    await emitSnapshot(emit, owner, await listAllDownloadTasks(client, {}, signal))
+    const tasks = new Map((await listAllDownloadTasks(client, {}, signal)).map((task) => [task.id, task]))
+    await emitSnapshot(emit, owner, [...tasks.values()])
     const streamAborter = new AbortController()
     const streamSignal = AbortSignal.any([signal, streamAborter.signal])
     let refreshTimer: ReturnType<typeof setTimeout> | undefined
     let refresh = Promise.resolve()
     let refreshFailure: unknown
+    let fullRefreshPending = false
+    const changedTaskIds = new Set<string>()
 
-    const scheduleRefresh = () => {
+    const scheduleRefresh = (taskId?: string) => {
+      if (taskId) changedTaskIds.add(taskId)
+      else fullRefreshPending = true
       if (refreshTimer || streamSignal.aborted) return
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined
         if (streamSignal.aborted) return
+        const refreshAll = fullRefreshPending
+        const taskIds = [...changedTaskIds]
+        fullRefreshPending = false
+        changedTaskIds.clear()
         refresh = refresh
-          .then(async () => emitSnapshot(emit, owner, await listAllDownloadTasks(client, {}, streamSignal)))
+          .then(async () => {
+            if (refreshAll) {
+              tasks.clear()
+              for (const task of await listAllDownloadTasks(client, {}, streamSignal)) tasks.set(task.id, task)
+            } else {
+              const changedTasks = await Promise.all(taskIds.map((id) => client.getDownloadTask({ id })))
+              for (const [index, task] of changedTasks.entries()) {
+                if (task) tasks.set(task.id, task)
+                else tasks.delete(taskIds[index])
+              }
+            }
+            await emitSnapshot(emit, owner, [...tasks.values()])
+          })
           .catch((error: unknown) => {
             refreshFailure = error
             streamAborter.abort(error)
@@ -91,7 +112,11 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
 
     try {
       await client.streamDownloadTaskEvents(streamSignal, async (event) => {
-        if (event.event === 'resource-change' || event.event === 'resync') {
+        if (event.event === 'resource-change') {
+          if (event.data.resourceType === 'download-task') scheduleRefresh(event.data.resourceId)
+          return
+        }
+        if (event.event === 'resync') {
           scheduleRefresh()
           return
         }

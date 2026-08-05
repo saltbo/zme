@@ -22,7 +22,7 @@ export type ZpanDownloadTaskStatus = ZpanDownloadTask['status']
 export type ZpanCreateDownloadTaskInput = CreateDownloadTaskData['body']
 export type ZpanGetDownloadTaskPath = GetDownloadTaskData['path']
 export type ZpanDownloadTaskEvent =
-  | { event: 'resource-change'; data: { resourceType: string } }
+  | { event: 'resource-change'; data: { resourceType: string; resourceId: string } }
   | { event: 'resync'; data: { sequence: number } }
   | { event: 'heartbeat'; data: { at: string } }
   | { event: 'error'; data: { message: string } }
@@ -148,8 +148,10 @@ function hasExactTaskStatus(status: Record<string, unknown>) {
 
 function expectDownloadTaskEvent(event: string, data: unknown): ZpanDownloadTaskEvent {
   if (event === 'resource-change') {
-    if (!isRecord(data) || typeof data.resourceType !== 'string') throw invalidEvent(event)
-    return { event, data: { resourceType: data.resourceType } }
+    if (!isRecord(data) || typeof data.resourceType !== 'string' || typeof data.resourceId !== 'string') {
+      throw invalidEvent(event)
+    }
+    return { event, data: { resourceType: data.resourceType, resourceId: data.resourceId } }
   }
   if (event === 'resync') {
     if (!isRecord(data) || typeof data.sequence !== 'number') throw invalidEvent(event)

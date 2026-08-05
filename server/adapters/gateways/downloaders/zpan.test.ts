@@ -237,11 +237,11 @@ describe('zpanDownloadTaskGateway', () => {
 
   it('coalesces successive ZPan changes into one bounded snapshot refresh [spec: downloads/live-task-monitoring]', async () => {
     vi.useFakeTimers()
-    const upstreamSnapshots = [zpanTask(50, 5), zpanTask(100, 10), zpanTask(400, 40)]
-    const list = vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockImplementation(async () => ({
-      items: [upstreamSnapshots.shift() ?? zpanTask(400, 40)],
+    const list = vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockResolvedValue({
+      items: [zpanTask(50, 5)],
       nextPageToken: null,
-    }))
+    })
+    const get = vi.spyOn(ZpanClient.prototype, 'getDownloadTask').mockResolvedValue(zpanTask(100, 10))
     let upstreamEmit: Parameters<ZpanClient['streamDownloadTaskEvents']>[1] | undefined
     vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (signal, emit) => {
       upstreamEmit = emit
@@ -259,13 +259,14 @@ describe('zpanDownloadTaskGateway', () => {
     })
     await vi.advanceTimersByTimeAsync(0)
 
-    await upstreamEmit?.({ event: 'resource-change', data: { resourceType: 'download-task' } })
-    await upstreamEmit?.({ event: 'resource-change', data: { resourceType: 'download-task' } })
+    await upstreamEmit?.({ event: 'resource-change', data: { resourceType: 'download-task', resourceId: 'task-1' } })
+    await upstreamEmit?.({ event: 'resource-change', data: { resourceType: 'download-task', resourceId: 'task-1' } })
     await upstreamEmit?.({ event: 'heartbeat', data: { at: '2026-08-05T00:00:00.000Z' } })
     expect(list).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(1_500)
-    expect(list).toHaveBeenCalledTimes(2)
+    expect(list).toHaveBeenCalledTimes(1)
+    expect(get).toHaveBeenCalledTimes(1)
 
     aborter.abort()
     await stream
@@ -437,7 +438,7 @@ describe('zpanDownloadTaskGateway', () => {
       () =>
         new Response(
           [
-            'event: resource-change\ndata: {"resourceType":"download-task"}',
+            'event: resource-change\ndata: {"resourceType":"download-task","resourceId":"task-1"}',
             'event: resync\ndata: {"sequence":12}',
             'event: heartbeat\ndata: {"at":"2026-08-05T00:00:00.000Z"}',
             'event: error\ndata: {"message":"temporary"}',

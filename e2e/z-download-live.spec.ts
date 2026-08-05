@@ -88,6 +88,14 @@ async function startZpanFixture(): Promise<{ url: string; streamCount: () => num
       return
     }
 
+    const taskMatch = url.pathname.match(/^\/api\/downloads\/tasks\/([^/]+)$/)
+    if (taskMatch) {
+      const task = current.find((item) => item.id === taskMatch[1])
+      response.writeHead(task ? 200 : 404, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(task ?? { error: { message: 'Not found' } }))
+      return
+    }
+
     if (url.pathname === '/api/events') {
       streamCount += 1
       response.writeHead(200, {
@@ -115,10 +123,13 @@ async function startZpanFixture(): Promise<{ url: string; streamCount: () => num
       const timers = snapshots.map((snapshot, index) =>
         setTimeout(
           () => {
+            const changedTaskIds = new Set([...current, ...snapshot].map((task) => task.id))
             current = snapshot
-            response.write(
-              `event: resource-change\ndata: ${JSON.stringify({ resourceType: 'download-task', changeType: 'updated' })}\n\n`,
-            )
+            for (const resourceId of changedTaskIds) {
+              response.write(
+                `event: resource-change\ndata: ${JSON.stringify({ resourceType: 'download-task', resourceId, changeType: 'updated' })}\n\n`,
+              )
+            }
           },
           1_500 + index * 2_000,
         ),
@@ -183,6 +194,7 @@ function liveTask(
       output: { objectId: '' },
       runtime: {},
       error: { message: '' },
+      updatedAt: new Date().toISOString(),
     },
   }
 }
