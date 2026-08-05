@@ -1,7 +1,7 @@
 import type { AppConfig } from '@server/config'
 import { API_VERSION } from '@server/config'
 
-const secured = (scope: string) => [{ oidcSession: [] }, { realmrootOidc: [scope] }]
+const secured = (scope: string) => [{ oidcSession: [] }, { oidcDpop: [scope] }]
 const parameters = [{ $ref: '#/components/parameters/ApiVersion' }]
 const errors = {
   '400': { $ref: '#/components/responses/BadRequest' },
@@ -142,10 +142,11 @@ export function openapiDocument(config: AppConfig) {
           name: '__Host-zme_session',
           description: 'Secure local session established by external OIDC.',
         },
-        realmrootOidc: {
+        oidcDpop: {
           type: 'openIdConnect',
           openIdConnectUrl: `${config.oidc.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
-          description: 'Realmroot DPoP-bound resource token. Bearer tokens are rejected.',
+          description: 'OIDC-issued DPoP-bound resource token. Bearer tokens are rejected.',
+          'x-dpop-required': true,
         },
         musicDownloadKey: {
           type: 'apiKey',

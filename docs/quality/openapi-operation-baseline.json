@@ -6318,7 +6318,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "media:read"
             ]
           }
@@ -6422,7 +6422,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "release-search-jobs:read"
             ]
           }
@@ -6503,7 +6503,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "release-search-jobs:write"
             ]
           }
@@ -6596,7 +6596,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "release-search-jobs:read"
             ]
           }
@@ -6682,7 +6682,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "release-search-jobs:read"
             ]
           }
@@ -6774,7 +6774,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "release-search-jobs:read"
             ]
           }
@@ -6860,7 +6860,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "download-tasks:read"
             ]
           }
@@ -6941,7 +6941,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "download-tasks:write"
             ]
           }
@@ -7034,7 +7034,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "download-tasks:read"
             ]
           }
@@ -7120,7 +7120,7 @@
             "oidcSession": []
           },
           {
-            "realmrootOidc": [
+            "oidcDpop": [
               "download-destinations:read"
             ]
           }
@@ -7194,10 +7194,11 @@
         "name": "__Host-zme_session",
         "description": "Secure local session established by external OIDC."
       },
-      "realmrootOidc": {
+      "oidcDpop": {
         "type": "openIdConnect",
-        "openIdConnectUrl": "https://id.realmroot.example.test/.well-known/openid-configuration",
-        "description": "Realmroot DPoP-bound resource token. Bearer tokens are rejected."
+        "openIdConnectUrl": "https://identity.example.test/.well-known/openid-configuration",
+        "description": "OIDC-issued DPoP-bound resource token. Bearer tokens are rejected.",
+        "x-dpop-required": true
       },
       "musicDownloadKey": {
         "type": "apiKey",

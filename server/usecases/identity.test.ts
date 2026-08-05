@@ -129,7 +129,6 @@ function config(oidcOverride: Partial<AppConfig['oidc']> = {}): AppConfig {
   return {
     appOrigin: 'https://zme.example',
     resourceUrl: 'https://zme.example/api',
-    realmrootEnabled: false,
     oidc: {
       issuer: profile.issuer,
       clientId: 'zme',

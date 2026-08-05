@@ -29,7 +29,9 @@ Register these exact URLs at the provider:
 
 The provider must publish standard discovery metadata, a JWKS URI, Authorization Code Flow, and PKCE S256. Configure the token endpoint authentication method exactly as registered. Prefer a public client with `none` plus PKCE where provider policy allows it; otherwise store the client secret as a Worker secret.
 
-Set at least one `OIDC_ADMIN_SUBJECTS` entry as exact `issuer|subject`. This is the only administrator bootstrap mechanism. Database emptiness and login order never grant administrator access.
+Set at least one `OIDC_ADMIN_SUBJECTS` entry to an exact `sub` from the configured issuer. This is the only administrator bootstrap mechanism. Database emptiness and login order never grant administrator access.
+
+If upgrading an earlier preview of this breaking release, remove the `issuer|` prefix from every administrator entry before deployment. Production releases before this migration did not support this variable.
 
 ## 3. Apply the staged migration
 

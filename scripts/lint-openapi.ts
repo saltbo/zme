@@ -8,9 +8,8 @@ import { openapiDocument } from '../server/http/openapi'
 const config: AppConfig = {
   appOrigin: 'https://zme.example.test',
   resourceUrl: 'https://zme.example.test/api',
-  realmrootEnabled: true,
   oidc: {
-    issuer: 'https://id.realmroot.example.test',
+    issuer: 'https://identity.example.test',
     clientId: 'zme-openapi-lint',
     tokenEndpointAuthMethod: 'none',
     redirectUri: 'https://zme.example.test/auth/callback',

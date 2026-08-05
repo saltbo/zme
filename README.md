@@ -43,8 +43,8 @@ app, search for a release in another (Prowlarr), and queue it in a third
 
 Everything is admin-managed and private: identity comes from your external OIDC
 provider, ZME offers no local sign-up or passwords, and your API keys and indexer /
-downloader endpoints stay inside your own deployment. Realmroot deployments can
-also expose a least-privilege, DPoP-bound Agent workflow.
+downloader endpoints stay inside your own deployment. Standards-compliant DPoP
+tokens can drive a least-privilege Agent workflow.
 
 ## Screenshots
 
@@ -70,19 +70,14 @@ pnpm install
 ```
 
 Register a standard OIDC client, then copy `.dev.vars.example` to `.dev.vars` and
-set the exact issuer, client, redirect/logout URLs, administrator `issuer|subject`,
-resource URL, and an independent connector-encryption secret:
+set the public origin, issuer, client ID, administrator subjects, and an independent
+connector-encryption secret:
 
 ```dotenv
 PUBLIC_APP_ORIGIN=http://localhost:7171
 OIDC_ISSUER=https://identity.example/tenant
 OIDC_CLIENT_ID=zme-local
-OIDC_TOKEN_ENDPOINT_AUTH_METHOD=none
-OIDC_REDIRECT_URI=http://localhost:7171/auth/callback
-OIDC_POST_LOGOUT_REDIRECT_URI=http://localhost:7171/login
-OIDC_ALLOWED_ALGS=ES256
-OIDC_ADMIN_SUBJECTS=https://identity.example/tenant|your-subject
-REALMROOT_RESOURCE_URL=http://localhost:7171/api
+OIDC_ADMIN_SUBJECTS=your-subject
 CONNECTOR_CREDENTIALS_SECRET=replace-with-a-different-32-character-secret
 ```
 
@@ -116,7 +111,7 @@ pnpm deploy
 | --- | --- |
 | Frontend | React 19, React Router 7, TanStack Query, Tailwind CSS 4, i18n (中文 / English) |
 | Backend | Versioned, resource-oriented Hono API on Cloudflare Workers, serving the SPA as static assets |
-| Identity | External standard OIDC; Authorization Code + PKCE; secure opaque local sessions; optional Realmroot Native DPoP access |
+| Identity | External standard OIDC; Authorization Code + PKCE; secure opaque local sessions; standards-based DPoP access |
 | Data | Cloudflare D1 (SQLite) via Drizzle ORM |
 | Integrations | TMDB, Open Library, ListenBrainz (discovery) · Douban and Netease Cloud Music (connectors) · Prowlarr (indexers) · qBittorrent / Transmission / Aria2 / ZPan (downloaders) |
 | Tooling | TypeScript, Biome, Vitest, Playwright, Wrangler, pnpm |
@@ -124,8 +119,8 @@ pnpm deploy
 The server follows a clean, layered architecture (domain → use cases → adapters →
 HTTP) with the two halves meeting only through a shared API contract. The full
 layout, boundaries, and conventions live in the contributor guide — see below.
-The Realmroot-safe contract is published at `/api/openapi.json`; see the
-[Resource Server guide](docs/realmroot-resource-server.md).
+The DPoP-protected contract is published at `/api/openapi.json`; see the
+[Resource Server guide](docs/resource-server.md).
 
 ## Contributing
 

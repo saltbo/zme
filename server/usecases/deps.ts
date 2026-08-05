@@ -1,5 +1,5 @@
 import type { DownloaderKind, IndexerKind } from '@shared/types'
-import type { IdentityRepo, OidcClient, RealmrootTokenValidator } from './identity'
+import type { DpopTokenValidator, IdentityRepo, OidcClient } from './identity'
 import type {
   BookProvider,
   ConnectorLoginAttemptsRepo,
@@ -29,7 +29,7 @@ import type {
 export interface Deps {
   identityRepo: IdentityRepo
   oidcClient: OidcClient
-  realmrootTokenValidator: RealmrootTokenValidator
+  dpopTokenValidator: DpopTokenValidator
   resourceApiRepo: ResourceApiRepo
   libraryRepo: LibraryRepo
   connectorsRepo: ConnectorsRepo

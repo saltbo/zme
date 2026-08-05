@@ -4,7 +4,7 @@ import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jos
 import { expect, it, vi } from 'vitest'
 
 it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', async () => {
-  const fixture = await realmrootFixture()
+  const fixture = await dpopFixture()
   vi.stubGlobal('fetch', fixture.fetch)
   const bearer = await app.fetch(
     new Request('https://zme.test/api/media?query=test', {
@@ -75,7 +75,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
 })
 
 it('completes the least-privilege Agent media, release-search, and download-task flow', async () => {
-  const fixture = await realmrootFixture()
+  const fixture = await dpopFixture()
   const mediaSourceId = crypto.randomUUID()
   const indexerId = crypto.randomUUID()
   const downloaderId = crypto.randomUUID()
@@ -272,7 +272,7 @@ it('completes the least-privilege Agent media, release-search, and download-task
 })
 
 it('intersects Agent scope with a disabled local identity projection', async () => {
-  const fixture = await realmrootFixture()
+  const fixture = await dpopFixture()
   vi.stubGlobal('fetch', fixture.fetch)
   const now = Date.now()
   await env.DB.prepare(
@@ -291,22 +291,21 @@ it('intersects Agent scope with a disabled local identity projection', async () 
   expect(await response.json()).toMatchObject({ type: expect.stringContaining('/problems/identity-disabled') })
 })
 
-async function realmrootFixture() {
-  const issuer = `https://realmroot-${crypto.randomUUID()}.test`
+async function dpopFixture() {
+  const issuer = `https://dpop-${crypto.randomUUID()}.test`
   const { privateKey: issuerPrivateKey, publicKey: issuerPublicKey } = await generateKeyPair('ES256', {
     extractable: true,
   })
   const issuerJwk = {
     ...(await exportJWK(issuerPublicKey)),
-    kid: 'realmroot-signing-key',
+    kid: 'dpop-signing-key',
     alg: 'ES256',
     use: 'sig',
   }
   const requestEnv = {
     ...env,
     OIDC_ISSUER: issuer,
-    OIDC_ADMIN_SUBJECTS: `${issuer}|configured-admin`,
-    REALMROOT_ISSUER: issuer,
+    OIDC_ADMIN_SUBJECTS: 'configured-admin',
   }
   let upstreamFetch: ((request: Request) => Promise<Response>) | undefined
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -346,9 +345,9 @@ async function realmrootFixture() {
         scope: scopes.join(' '),
         cnf: { jkt: thumbprint },
         act: { sub: 'agent-e2e' },
-        client_id: 'realmroot-agent',
+        client_id: 'dpop-agent',
       })
-        .setProtectedHeader({ alg: 'ES256', kid: 'realmroot-signing-key', typ: 'at+jwt' })
+        .setProtectedHeader({ alg: 'ES256', kid: 'dpop-signing-key', typ: 'at+jwt' })
         .setIssuer(issuer)
         .setAudience('https://zme.test/api')
         .setSubject(subject)

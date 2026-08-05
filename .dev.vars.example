@@ -1,37 +1,25 @@
 # Copy to .dev.vars for local development. Also the source of binding/var names
 # for `wrangler types` (pnpm cf-typegen), so keep the keys here in sync.
 
-# Required external OIDC relying-party configuration. The redirect and logout
-# URLs are exact allowlisted values; the provider must advertise PKCE S256.
+# Required external OIDC relying-party configuration. ZME derives the callback,
+# logout, and resource-server URLs from PUBLIC_APP_ORIGIN.
+PUBLIC_APP_ORIGIN=http://localhost:7171
 OIDC_ISSUER=https://identity.example/tenant
 OIDC_CLIENT_ID=zme-local
-OIDC_CLIENT_SECRET=
-OIDC_TOKEN_ENDPOINT_AUTH_METHOD=none
-OIDC_REDIRECT_URI=http://localhost:7171/auth/callback
-OIDC_POST_LOGOUT_REDIRECT_URI=http://localhost:7171/login
-OIDC_ALLOWED_ALGS=ES256
-OIDC_ADMIN_SUBJECTS=https://identity.example/tenant|local-admin-subject
-
-# Optional explicit, audited mapping from an old local user id to a new OIDC
-# issuer+subject. Email is never used to link identities.
-OIDC_LEGACY_BINDINGS_JSON=[]
-
-# Set REALMROOT_ISSUER to the same value as OIDC_ISSUER only when the provider is
-# Realmroot. Empty disables Agent DPoP access. Resource URL is always exact.
-REALMROOT_ISSUER=
-REALMROOT_RESOURCE_URL=http://localhost:7171/api
+OIDC_ADMIN_SUBJECTS=local-admin-subject
 
 # Required for encrypting third-party connector sessions at rest.
 CONNECTOR_CREDENTIALS_SECRET=replace-with-an-independent-32-character-secret
-
-# Public origin used by background download dispatch jobs.
-PUBLIC_APP_ORIGIN=http://localhost:7171
 
 # Streams MP3/FLAC files through ZME only when standard music tags need to be added or corrected.
 MUSIC_AUTO_TAGGING_ENABLED=false
 
 # Optional local browser fixture subject:
 # LOCAL_TEST_SUBJECT=local-admin-subject
+#
+# Optional deployment-only values are documented in docs/oidc-deployment.md:
+# OIDC_CLIENT_SECRET, OIDC_TOKEN_ENDPOINT_AUTH_METHOD, and
+# OIDC_LEGACY_BINDINGS_JSON. Do not add them to a normal public-client setup.
 #
 # TMDB and Prowlarr are configured inside the app (Admin -> Media sources / Indexers),
 # not via environment variables.

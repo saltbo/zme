@@ -1,15 +1,15 @@
-import { validateRealmrootRequest } from '@server/adapters/gateways/oidc'
+import { validateDpopRequest } from '@server/adapters/gateways/oidc'
 import type { AppConfig } from '@server/config'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('Realmroot DPoP resource token validation', () => {
+describe('Standard OIDC DPoP resource token validation', () => {
   it('accepts an at+jwt bound to the proof key and preserves scope and actor', async () => {
     const fixture = await dpopFixture()
     vi.stubGlobal('fetch', fixture.fetch)
-    const principal = await validateRealmrootRequest(fixture.config, fixture.request)
+    const principal = await validateDpopRequest(fixture.config, fixture.request)
     expect(principal).toMatchObject({
       issuer: fixture.issuer,
       subject: 'human-123',
@@ -24,7 +24,7 @@ describe('Realmroot DPoP resource token validation', () => {
     const fixture = await dpopFixture()
     const headers = new Headers(fixture.request.headers)
     headers.set('authorization', `Bearer ${fixture.accessToken}`)
-    await expect(validateRealmrootRequest(fixture.config, new Request(fixture.request, { headers }))).rejects.toThrow(
+    await expect(validateDpopRequest(fixture.config, new Request(fixture.request, { headers }))).rejects.toThrow(
       'DPoP access token is required',
     )
   })
@@ -37,13 +37,13 @@ describe('Realmroot DPoP resource token validation', () => {
   ] as const)('rejects a proof with an invalid %s', async (_name, override) => {
     const fixture = await dpopFixture(override)
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateRealmrootRequest(fixture.config, fixture.request)).rejects.toThrow()
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toThrow()
   })
 
   it('rejects a token for a different resource audience', async () => {
     const fixture = await dpopFixture({ audience: 'https://other-resource.test/api' })
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateRealmrootRequest(fixture.config, fixture.request)).rejects.toThrow()
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toThrow()
   })
 
   it.each([
@@ -59,7 +59,7 @@ describe('Realmroot DPoP resource token validation', () => {
   ] as const)('rejects an %s', async (_name, override) => {
     const fixture = await dpopFixture(override)
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateRealmrootRequest(fixture.config, fixture.request)).rejects.toThrow()
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toThrow()
   })
 
   it.each([
@@ -68,7 +68,7 @@ describe('Realmroot DPoP resource token validation', () => {
   ] as const)('rejects a proof without a replay %s claim', async (_name, override) => {
     const fixture = await dpopFixture(override)
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateRealmrootRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
       kind: 'invalid_dpop_proof',
     })
   })
@@ -76,7 +76,7 @@ describe('Realmroot DPoP resource token validation', () => {
   it('rejects a resource token without the acting Agent identity', async () => {
     const fixture = await dpopFixture({ omitActor: true })
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateRealmrootRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
       kind: 'invalid_token',
     })
   })
@@ -97,7 +97,7 @@ async function dpopFixture(
     omitProofIat?: boolean
   } = {},
 ) {
-  const issuer = `https://realmroot-${crypto.randomUUID()}.test`
+  const issuer = `https://dpop-${crypto.randomUUID()}.test`
   const resourceUrl = 'https://zme.test/api'
   const requestUrl = `${resourceUrl}/media?q=dune`
   const issuerKey = await signingKey()
@@ -110,7 +110,7 @@ async function dpopFixture(
     scope: 'media:read release-search-jobs:write media:read',
     cnf: { jkt: boundThumbprint },
     ...(override.omitActor ? {} : { act: { sub: 'agent-456' } }),
-    client_id: 'realmroot-agent',
+    client_id: 'dpop-agent',
   })
     .setProtectedHeader({ alg: 'ES256', kid: issuerKey.kid, typ: override.accessType ?? 'at+jwt' })
     .setIssuer(issuer)
@@ -157,7 +157,7 @@ async function dpopFixture(
     proofThumbprint,
     request,
     fetch,
-    config: { appOrigin: 'https://zme.test', resourceUrl, realmrootEnabled: true, oidc } satisfies AppConfig,
+    config: { appOrigin: 'https://zme.test', resourceUrl, oidc } satisfies AppConfig,
   }
 }
 

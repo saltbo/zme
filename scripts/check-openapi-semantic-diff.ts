@@ -7,9 +7,8 @@ const baselinePath = join(process.cwd(), 'docs/quality/openapi-operation-baselin
 const config: AppConfig = {
   appOrigin: 'https://zme.example.test',
   resourceUrl: 'https://zme.example.test/api',
-  realmrootEnabled: true,
   oidc: {
-    issuer: 'https://id.realmroot.example.test',
+    issuer: 'https://identity.example.test',
     clientId: 'zme-contract',
     tokenEndpointAuthMethod: 'none',
     redirectUri: 'https://zme.example.test/auth/callback',

@@ -1,11 +1,6 @@
 import type { AppConfig } from '@server/config'
-import type {
-  OidcClient,
-  OidcProfile,
-  RealmrootTokenPrincipal,
-  RealmrootTokenValidator,
-} from '@server/usecases/identity'
-import { RealmrootCredentialError } from '@server/usecases/identity'
+import type { DpopTokenPrincipal, DpopTokenValidator, OidcClient, OidcProfile } from '@server/usecases/identity'
+import { DpopCredentialError } from '@server/usecases/identity'
 import {
   calculateJwkThumbprint,
   createRemoteJWKSet,
@@ -99,16 +94,15 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
   }
 }
 
-export function createRealmrootTokenValidator(config: AppConfig): RealmrootTokenValidator {
+export function createDpopTokenValidator(config: AppConfig): DpopTokenValidator {
   return {
     validate(request) {
-      return validateRealmrootRequest(config, request)
+      return validateDpopRequest(config, request)
     },
   }
 }
 
-export async function validateRealmrootRequest(config: AppConfig, request: Request): Promise<RealmrootTokenPrincipal> {
-  if (!config.realmrootEnabled) throw new Error('Realmroot Native access is not enabled.')
+export async function validateDpopRequest(config: AppConfig, request: Request): Promise<DpopTokenPrincipal> {
   const authorization = request.headers.get('authorization')
   if (!authorization?.startsWith('DPoP ') || authorization.slice(5).trim().includes(' ')) {
     throw new Error('A DPoP access token is required.')
@@ -139,7 +133,7 @@ export async function validateRealmrootRequest(config: AppConfig, request: Reque
       throw new Error('Missing acting Agent subject.')
     }
   } catch (cause) {
-    throw new RealmrootCredentialError('invalid_token', 'The Realmroot access token is invalid.', { cause })
+    throw new DpopCredentialError('invalid_token', 'The access token is invalid.', { cause })
   }
   const jwksCache = jwksCaches.get(config.oidc.issuer) ?? {}
   jwksCaches.set(config.oidc.issuer, jwksCache)
@@ -153,7 +147,7 @@ export async function validateRealmrootRequest(config: AppConfig, request: Reque
       [oauth.allowInsecureRequests]: isLocalIssuer(config.oidc.issuer),
     })
   } catch (cause) {
-    throw new RealmrootCredentialError('invalid_dpop_proof', 'The DPoP proof is invalid.', { cause })
+    throw new DpopCredentialError('invalid_dpop_proof', 'The DPoP proof is invalid.', { cause })
   }
   const now = Math.floor(Date.now() / 1000)
   if (!Number.isInteger(claims.iat) || (claims.iat as number) > now + 60) {
@@ -164,7 +158,7 @@ export async function validateRealmrootRequest(config: AppConfig, request: Reque
     typeof claims.act !== 'object' ||
     typeof (claims.act as Record<string, unknown>).sub !== 'string'
   ) {
-    throw new Error('The Realmroot resource token omitted the acting Agent subject.')
+    throw new Error('The resource token omitted the acting Agent subject.')
   }
   const proofHeader = decodeProtectedHeader(proof)
   const proofClaims = decodeJwt(proof)
@@ -230,5 +224,8 @@ function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respo
 
 function isLocalIssuer(issuer: string): boolean {
   const url = new URL(issuer)
-  return url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+  return (
+    url.protocol === 'http:' &&
+    (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname.endsWith('.localtest.me'))
+  )
 }

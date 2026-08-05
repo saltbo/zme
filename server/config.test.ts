@@ -6,14 +6,9 @@ const validEnv = {
   PUBLIC_APP_ORIGIN: 'https://zme.example',
   OIDC_ISSUER: 'https://identity.example/tenant',
   OIDC_CLIENT_ID: 'zme-client',
-  OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'none',
-  OIDC_REDIRECT_URI: 'https://zme.example/auth/callback',
-  OIDC_POST_LOGOUT_REDIRECT_URI: 'https://zme.example/login',
-  OIDC_ALLOWED_ALGS: 'ES256,RS256',
-  OIDC_ADMIN_SUBJECTS: 'https://identity.example/tenant|admin-1',
+  OIDC_ADMIN_SUBJECTS: 'admin-1',
   OIDC_LEGACY_BINDINGS_JSON:
     '[{"issuer":"https://identity.example/tenant","subject":"migrated-1","legacyUserId":"old-user-1"}]',
-  REALMROOT_RESOURCE_URL: 'https://zme.example/api',
 } as unknown as Env
 
 describe('readConfig', () => {
@@ -22,24 +17,20 @@ describe('readConfig', () => {
 
     expect(config.oidc.adminSubjects).toEqual(new Set([principalKey('https://identity.example/tenant', 'admin-1')]))
     expect(config.oidc.legacyBindings.get(principalKey(config.oidc.issuer, 'migrated-1'))).toBe('old-user-1')
-    expect(config.realmrootEnabled).toBe(false)
+    expect(config.resourceUrl).toBe('https://zme.example/api')
+    expect(config.oidc.redirectUri).toBe('https://zme.example/auth/callback')
+    expect(config.oidc.postLogoutRedirectUri).toBe('https://zme.example/login')
+    expect(config.oidc.tokenEndpointAuthMethod).toBe('none')
+    expect(config.oidc.allowedAlgorithms).not.toContain('HS256')
   })
 
   it.each([
     ['missing administrator allowlist', { OIDC_ADMIN_SUBJECTS: '' }],
     ['insecure non-local issuer', { OIDC_ISSUER: 'http://identity.example' }],
-    ['origin-mismatched redirect', { OIDC_REDIRECT_URI: 'https://attacker.example/callback' }],
-    ['symmetric ID token algorithm', { OIDC_ALLOWED_ALGS: 'HS256' }],
-    ['unknown ID token algorithm', { OIDC_ALLOWED_ALGS: 'not-a-jose-algorithm' }],
     ['secret on a public client', { OIDC_CLIENT_SECRET: 'secret', OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'none' }],
     ['missing confidential-client secret', { OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'client_secret_basic' }],
     ['unsupported client authentication', { OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'private_key_jwt' }],
     ['issuer query', { OIDC_ISSUER: 'https://identity.example/tenant?unexpected=true' }],
-    ['redirect query', { OIDC_REDIRECT_URI: 'https://zme.example/auth/callback?unexpected=true' }],
-    ['wrong callback path', { OIDC_REDIRECT_URI: 'https://zme.example/oidc/callback' }],
-    ['wrong logout path', { OIDC_POST_LOGOUT_REDIRECT_URI: 'https://zme.example/signed-out' }],
-    ['resource URL with the wrong path', { REALMROOT_RESOURCE_URL: 'https://zme.example/resources' }],
-    ['Realmroot issuer mismatch', { REALMROOT_ISSUER: 'https://other.example' }],
     ['invalid legacy binding JSON', { OIDC_LEGACY_BINDINGS_JSON: '{' }],
     ['non-array legacy bindings', { OIDC_LEGACY_BINDINGS_JSON: '{}' }],
     ['malformed legacy binding', { OIDC_LEGACY_BINDINGS_JSON: '[{"subject":"subject-1"}]' }],
@@ -59,17 +50,23 @@ describe('readConfig', () => {
     ).toThrow(/unique/)
   })
 
-  it('enables Realmroot only for the exact configured issuer and accepts confidential client authentication', () => {
+  it('defaults confidential clients to client_secret_basic and accepts an explicit post method', () => {
     const config = readConfig({
       ...validEnv,
-      OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'client_secret_basic',
       OIDC_CLIENT_SECRET: 'client-secret',
-      REALMROOT_ISSUER: validEnv.OIDC_ISSUER,
       OIDC_LEGACY_BINDINGS_JSON: '',
     } as Env)
-    expect(config.realmrootEnabled).toBe(true)
+    expect(config.oidc.tokenEndpointAuthMethod).toBe('client_secret_basic')
     expect(config.oidc.clientSecret).toBe('client-secret')
     expect(config.oidc.legacyBindings.size).toBe(0)
+
+    expect(
+      readConfig({
+        ...validEnv,
+        OIDC_CLIENT_SECRET: 'client-secret',
+        OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'client_secret_post',
+      } as Env).oidc.tokenEndpointAuthMethod,
+    ).toBe('client_secret_post')
   })
 
   it('preserves an issuer with a significant trailing slash', () => {
@@ -77,7 +74,7 @@ describe('readConfig', () => {
     const config = readConfig({
       ...validEnv,
       OIDC_ISSUER: issuer,
-      OIDC_ADMIN_SUBJECTS: `${issuer}|admin-1`,
+      OIDC_ADMIN_SUBJECTS: 'admin-1',
       OIDC_LEGACY_BINDINGS_JSON: '[]',
     } as Env)
     expect(config.oidc.issuer).toBe(issuer)

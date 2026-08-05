@@ -143,9 +143,9 @@ describe('OIDC protocol client', () => {
   })
 
   it.each([
-    'client_secret_basic',
-    'client_secret_post',
-  ] as const)('supports %s token endpoint authentication', async (method) => {
+    ['client_secret_basic', true],
+    ['client_secret_post', false],
+  ] as const)('sends %s token endpoint authentication with exact wire semantics', async (method, usesHeader) => {
     const provider = await fakeProvider()
     vi.stubGlobal('fetch', provider.fetch)
     const client = createOidcClient({ ...provider.config, tokenEndpointAuthMethod: method, clientSecret: 'secret' })
@@ -157,6 +157,34 @@ describe('OIDC protocol client', () => {
         'verifier',
       ),
     ).resolves.toMatchObject({ subject: 'human-123' })
+    const tokenRequest = provider.lastTokenRequest()
+    expect(Boolean(tokenRequest?.authorization?.startsWith('Basic '))).toBe(usesHeader)
+    expect(tokenRequest?.body.get('client_secret')).toBe(usesHeader ? null : 'secret')
+    expect(tokenRequest?.body.get('client_id')).toBe(usesHeader ? null : 'zme-client')
+  })
+
+  it('sends no client secret for a public client', async () => {
+    const provider = await fakeProvider()
+    vi.stubGlobal('fetch', provider.fetch)
+    await createOidcClient(provider.config).exchangeCallback(
+      new URL('https://app.test/auth/callback?code=public-client&state=state'),
+      'state',
+      'nonce',
+      'verifier',
+    )
+    const tokenRequest = provider.lastTokenRequest()
+    expect(tokenRequest?.authorization).toBeNull()
+    expect(tokenRequest?.body.get('client_secret')).toBeNull()
+    expect(tokenRequest?.body.get('client_id')).toBe('zme-client')
+  })
+
+  it('supports an HTTP localtest.me issuer consistently with configuration validation', async () => {
+    const provider = await fakeProvider({ issuer: 'http://identity.localtest.me' })
+    vi.stubGlobal('fetch', provider.fetch)
+    await expect(provider.config).toMatchObject({ issuer: 'http://identity.localtest.me' })
+    await expect(
+      createOidcClient(provider.config).createAuthorizationRequest('state', 'nonce', 'verifier'),
+    ).resolves.toBeInstanceOf(URL)
   })
 
   it('rejects a token response without an ID token', async () => {
@@ -180,12 +208,14 @@ async function fakeProvider(
     metadata?: Record<string, unknown>
     userInfo?: Record<string, unknown>
     omitIdToken?: boolean
+    issuer?: string
   } = {},
 ) {
-  const issuer = `https://oidc-${crypto.randomUUID()}.test`
+  const issuer = options.issuer ?? `https://oidc-${crypto.randomUUID()}.test`
   let key = options.signingKey ?? (await makeSigningKey('ES256'))
   let tokenRequestCount = 0
   let jwksRequestCount = 0
+  let lastTokenRequest: { authorization: string | null; body: URLSearchParams } | null = null
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init)
     const url = new URL(request.url)
@@ -207,6 +237,7 @@ async function fakeProvider(
     if (url.pathname === '/token') {
       tokenRequestCount += 1
       const body = new URLSearchParams(await request.text())
+      lastTokenRequest = { authorization: request.headers.get('authorization'), body }
       if (body.get('redirect_uri') !== 'https://app.test/auth/callback')
         return json({ error: 'invalid_request' }, { status: 400 })
       return json(
@@ -245,6 +276,7 @@ async function fakeProvider(
     } satisfies AppConfig['oidc'],
     fetch,
     tokenRequests: () => tokenRequestCount,
+    lastTokenRequest: () => lastTokenRequest,
     jwksRequests: () => jwksRequestCount,
     async rotate() {
       key = await makeSigningKey('ES256')

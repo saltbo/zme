@@ -20,8 +20,10 @@ Resolved findings:
 - Indexer, media-source, and downloader health checks now expose readable cached health resources separately from refresh requests.
 - Slow health probes use database-level checked-at compare-and-set semantics, so an older completion cannot overwrite a newer health result for any of the three resource types.
 - CI uses full history and the event's exact base SHA for a mechanically discovered, per-file changed-line coverage gate, fails zero-denominator discoveries, and reconciles native runner files plus individual test identities.
+- The deployment contract is provider-neutral and requires only the public origin, issuer, client ID, administrator subjects, and connector encryption secret; callback, logout, resource audience, and algorithm policy are derived.
+- Current tracked and generated project content passes a case-insensitive zero-match audit for vendor-specific identity names, variables, paths, fixtures, and documentation.
 
-External acceptance still required after code review: real Realmroot preview discovery, registration, DPoP issuance, and the complete Agent workflow require controller-approved management access.
+External acceptance still required after code review: preview discovery, provider-issued DPoP credentials, and the complete Agent workflow must pass against the isolated deployment.
 
 ## Engineering review
 
@@ -38,9 +40,11 @@ Resolved findings:
 - Browser OpenAPI route inventory, health resources, idempotency, conditional writes, and uniform errors are contract-tested.
 - Migration fixtures cover the complete ownership graph and connector-sync legacy backfill, including composite foreign-key validation.
 - Native report reconciliation checks every file and test identity, while changed production inventory is mechanically mapped to Unit/API/Web profiles; zero executable-line denominators fail and TMDB timeout behavior is explicitly covered.
+- Local HTTP issuer handling uses the same localhost, loopback, and `.localtest.me` rule at configuration and protocol boundaries.
+- Public, basic, and post token-endpoint client authentication have exact wire-level assertions; OpenAPI marks DPoP as machine-required with `x-dpop-required`.
 
-External acceptance still required after the final independent re-review: the real Realmroot preview flow must pass before the change can leave Draft or be released. Both independent reviewers classified this as an external acceptance gate rather than a code blocker, so a Draft PR may carry the implementation and evidence while the external failure remains visible.
+External acceptance still required after the final independent re-review: the real preview flow must pass before the change can leave Draft or be released. Both independent reviewers classified this as an external acceptance gate rather than a code blocker, so a Draft PR may carry the implementation and evidence while the missing acceptance remains visible.
 
-## Post-review external acceptance attempt
+## External acceptance gate
 
-The isolated Agent enrolled successfully and discovered the live Realmroot inventory and the exact personal Account authority Resource. Two least-privilege management access requests contained the expected `realmroot_authority` authorization-details array and only `applications:read`, `applications:write`, `resource-servers:read`, and `resource-servers:write`. The Realmroot approval page rejected both its persistent and one-target-token choices with `Invalid input: expected array, received null`; request `accessreq_1920d28cc86341e483b3ce68d0b1a7cd` remained pending and no authorization or credential was issued. ZME did not bypass controller approval, borrow the browser session, or widen authority. Registration, DPoP issuance, and the live business flow remain blocking conditions for Ready-for-review and release, but not for publishing a Draft PR that reports the blocker.
+Use a fresh least-privilege token issued by the configured provider. Do not reuse credentials, bypass interactive approval, or widen scopes. Record discovery, linked OpenAPI, media and release search, candidate selection, downloader submission, and terminal task state before marking the Draft ready.

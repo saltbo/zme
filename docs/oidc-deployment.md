@@ -9,15 +9,14 @@ ZME is an OIDC relying party, not an identity provider. A deployment must config
 | `PUBLIC_APP_ORIGIN` | Exact public origin, with no path |
 | `OIDC_ISSUER` | Exact issuer from discovery |
 | `OIDC_CLIENT_ID` | Registered client identifier |
-| `OIDC_TOKEN_ENDPOINT_AUTH_METHOD` | `none`, `client_secret_basic`, or `client_secret_post` |
-| `OIDC_REDIRECT_URI` | Exact `${PUBLIC_APP_ORIGIN}/auth/callback` allowlisted at the provider |
-| `OIDC_POST_LOGOUT_REDIRECT_URI` | Exact `${PUBLIC_APP_ORIGIN}/login` allowlisted at the provider |
-| `OIDC_ALLOWED_ALGS` | Comma-separated asymmetric ID/access-token algorithms, such as `ES256` |
-| `OIDC_ADMIN_SUBJECTS` | Nonempty comma-separated exact `issuer|subject` allowlist |
-| `REALMROOT_RESOURCE_URL` | Exact `${PUBLIC_APP_ORIGIN}/api` |
+| `OIDC_ADMIN_SUBJECTS` | Nonempty comma-separated exact `sub` allowlist for the configured issuer |
 | `CONNECTOR_CREDENTIALS_SECRET` | Independent secret for third-party connector state |
 
-Set `OIDC_CLIENT_SECRET` as a Worker secret only for confidential clients. It must be absent for `none`. Set `REALMROOT_ISSUER` to the exact same value as `OIDC_ISSUER` only when enabling Realmroot Native Agent access. `OIDC_LEGACY_BINDINGS_JSON` is optional and should exist only during a reviewed upgrade.
+ZME derives the exact callback URI (`${PUBLIC_APP_ORIGIN}/auth/callback`), post-logout URI (`${PUBLIC_APP_ORIGIN}/login`), and resource audience (`${PUBLIC_APP_ORIGIN}/api`). Register the first two at the provider; do not configure them again in ZME.
+
+Set `OIDC_CLIENT_SECRET` as a Worker secret only for confidential clients. Its presence defaults token endpoint authentication to `client_secret_basic`; set optional `OIDC_TOKEN_ENDPOINT_AUTH_METHOD=client_secret_post` only when that is the registered method. Public clients omit both values and use `none`. `OIDC_LEGACY_BINDINGS_JSON` is optional and should exist only during a reviewed upgrade. ZME accepts only its built-in asymmetric JOSE algorithm allowlist and validates provider metadata, token signatures, issuer, audience, expiry, and nonce; algorithms are not deployment configuration.
+
+This breaking draft changed `OIDC_ADMIN_SUBJECTS` from repeated `issuer|subject` values to `subject` values because one deployment already has exactly one issuer. Convert any preview configuration before redeploying; the old format intentionally does not match a subject.
 
 ```bash
 wrangler secret put OIDC_CLIENT_SECRET
@@ -27,7 +26,7 @@ pnpm db:migrate:remote
 pnpm deploy
 ```
 
-Use environment-specific Wrangler configuration or dashboard variables for non-secret values; do not commit production subjects or client secrets. HTTPS is mandatory except for explicit localhost/127.0.0.1 development. The resource URL, redirect URI, logout URI, and app origin are exact values, not prefixes or wildcard allowlists.
+Use environment-specific Wrangler configuration or dashboard variables for non-secret values; do not commit production subjects or client secrets. HTTPS is mandatory except for explicit localhost/127.0.0.1 development. The derived resource URL, redirect URI, logout URI, and app origin are exact values, not prefixes or wildcard allowlists.
 
 The committed Worker configuration enables Cloudflare's `global_fetch_strictly_public` compatibility flag. Keep it enabled when the OIDC Provider is another publicly routed Worker on the same Cloudflare zone; without it, discovery, JWKS, token, or user-info requests can fail with Cloudflare error 1042.
 

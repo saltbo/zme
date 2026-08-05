@@ -1,6 +1,6 @@
 import { downloaderGateways, downloadTaskGateways } from './adapters/gateways/downloaders'
 import { indexerGateways } from './adapters/gateways/indexers'
-import { createOidcClient, createRealmrootTokenValidator } from './adapters/gateways/oidc'
+import { createDpopTokenValidator, createOidcClient } from './adapters/gateways/oidc'
 import { musicBrainzMusicProvider } from './adapters/music-catalogs/musicbrainz'
 import { createMusicConnectorRegistry } from './adapters/music-connectors/registry'
 import { openLibraryBookProvider } from './adapters/providers/books'
@@ -34,7 +34,7 @@ export function createDeps(env: Env): Deps {
   return {
     identityRepo: createIdentityRepo(db),
     oidcClient: createOidcClient(config.oidc),
-    realmrootTokenValidator: createRealmrootTokenValidator(config),
+    dpopTokenValidator: createDpopTokenValidator(config),
     resourceApiRepo: createResourceApiRepo(db),
     libraryRepo: createLibraryRepo(db),
     connectorsRepo: createConnectorsRepo(db),

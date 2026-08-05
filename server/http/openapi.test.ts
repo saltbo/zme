@@ -7,20 +7,19 @@ import { openapiDocument } from './openapi'
 const config: AppConfig = {
   appOrigin: 'https://zme.example',
   resourceUrl: 'https://zme.example/api',
-  realmrootEnabled: true,
   oidc: {
-    issuer: 'https://id.realmroot.example',
+    issuer: 'https://identity.example/tenant',
     clientId: 'zme',
     tokenEndpointAuthMethod: 'none',
     redirectUri: 'https://zme.example/auth/callback',
     postLogoutRedirectUri: 'https://zme.example/login',
     allowedAlgorithms: ['ES256'],
-    adminSubjects: new Set(['https://id.realmroot.example|admin']),
+    adminSubjects: new Set(['https://identity.example/tenant|admin']),
     legacyBindings: new Map(),
   },
 }
 
-describe('Realmroot resource OpenAPI contract', () => {
+describe('DPoP resource OpenAPI contract', () => {
   const document = openapiDocument(config)
   const paths = document.paths as unknown as Record<string, Record<string, Operation>>
   const operations = Object.entries(paths).flatMap(([path, pathItem]) =>
@@ -33,7 +32,7 @@ describe('Realmroot resource OpenAPI contract', () => {
     expect(operationIds.every(Boolean)).toBe(true)
 
     for (const { path, method } of operations.filter(({ operation }) =>
-      operation.security?.some((requirement) => requirement.realmrootOidc),
+      operation.security?.some((requirement) => requirement.oidcDpop),
     )) {
       expect(['get', 'post']).toContain(method)
       expect(path).not.toMatch(/\/(search|create|trigger|download|sync|health)(?:\/|$)/i)
@@ -51,14 +50,14 @@ describe('Realmroot resource OpenAPI contract', () => {
     expect(documented).toEqual(production)
   })
 
-  it('makes least-privilege Realmroot scopes machine-readable on every operation', () => {
+  it('makes least-privilege DPoP scopes machine-readable on every operation', () => {
     const scopes = new Set<string>()
     for (const { operation } of operations) {
       expect(operation.tags?.length).toBeGreaterThan(0)
-      const realmroot = operation.security?.find((requirement) => requirement.realmrootOidc)
-      if (!realmroot) continue
-      expect(realmroot?.realmrootOidc).toHaveLength(1)
-      for (const scope of realmroot?.realmrootOidc ?? []) scopes.add(scope)
+      const dpop = operation.security?.find((requirement) => requirement.oidcDpop)
+      if (!dpop) continue
+      expect(dpop?.oidcDpop).toHaveLength(1)
+      for (const scope of dpop?.oidcDpop ?? []) scopes.add(scope)
     }
     expect(scopes).toEqual(
       new Set([
@@ -75,7 +74,8 @@ describe('Realmroot resource OpenAPI contract', () => {
   it('declares versioning, DPoP semantics, pagination, idempotency, and Problem Details', () => {
     expect(document.info.version).toBe(API_VERSION)
     expect(document.servers).toEqual([{ url: config.resourceUrl }])
-    expect(document.components.securitySchemes.realmrootOidc.description).toMatch(/DPoP-bound/)
+    expect(document.components.securitySchemes.oidcDpop.description).toMatch(/DPoP-bound/)
+    expect(document.components.securitySchemes.oidcDpop['x-dpop-required']).toBe(true)
     expect(document.components.parameters.ApiVersion.schema.const).toBe(API_VERSION)
     expect(document.components.parameters.IdempotencyKey.required).toBe(true)
     expect(document.components.schemas.Problem.required).toEqual(
@@ -97,8 +97,8 @@ describe('Realmroot resource OpenAPI contract', () => {
     expect(document.components.responses.Forbidden.headers).toHaveProperty('WWW-Authenticate')
     expect(
       openapiDocument({ ...config, oidc: { ...config.oidc, issuer: `${config.oidc.issuer}/` } }).components
-        .securitySchemes.realmrootOidc.openIdConnectUrl,
-    ).toBe('https://id.realmroot.example/.well-known/openid-configuration')
+        .securitySchemes.oidcDpop.openIdConnectUrl,
+    ).toBe('https://identity.example/tenant/.well-known/openid-configuration')
   })
 
   it('documents public response headers and browser query constraints precisely', () => {

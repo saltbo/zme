@@ -1,5 +1,5 @@
 import { principalKey, readConfig } from '@server/config'
-import { getLocalSession, IdentityDisabledError, RealmrootCredentialError } from '@server/usecases/identity'
+import { DpopCredentialError, getLocalSession, IdentityDisabledError } from '@server/usecases/identity'
 import type { MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { AppEnv, Principal } from './context'
@@ -45,7 +45,7 @@ async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], ne
   }
   const config = readConfig(c.env)
   try {
-    const token = await c.get('deps').realmrootTokenValidator.validate(c.req.raw)
+    const token = await c.get('deps').dpopTokenValidator.validate(c.req.raw)
     const key = principalKey(token.issuer, token.subject)
     const now = new Date().toISOString()
     const accepted = await c
@@ -83,7 +83,7 @@ async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], ne
     if (error instanceof IdentityDisabledError) {
       return problem(c, 403, 'identity-disabled', 'The local identity projection is disabled')
     }
-    if (error instanceof RealmrootCredentialError) {
+    if (error instanceof DpopCredentialError) {
       c.header('WWW-Authenticate', `DPoP error="${error.kind}"`)
       return problem(c, 401, error.kind.replaceAll('_', '-'), 'The DPoP credential is invalid')
     }

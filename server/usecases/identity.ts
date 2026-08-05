@@ -65,7 +65,7 @@ export interface OidcClient {
   createLogoutUrl(idTokenHint?: string): Promise<URL | null>
 }
 
-export interface RealmrootTokenPrincipal {
+export interface DpopTokenPrincipal {
   issuer: string
   subject: string
   scopes: string[]
@@ -75,8 +75,8 @@ export interface RealmrootTokenPrincipal {
   replayExpiresAt: string
 }
 
-export interface RealmrootTokenValidator {
-  validate(request: Request): Promise<RealmrootTokenPrincipal>
+export interface DpopTokenValidator {
+  validate(request: Request): Promise<DpopTokenPrincipal>
 }
 
 export class IdentityDisabledError extends Error {
@@ -86,14 +86,14 @@ export class IdentityDisabledError extends Error {
   }
 }
 
-export class RealmrootCredentialError extends Error {
+export class DpopCredentialError extends Error {
   constructor(
     readonly kind: 'invalid_token' | 'invalid_dpop_proof',
     message: string,
     options?: ErrorOptions,
   ) {
     super(message, options)
-    this.name = 'RealmrootCredentialError'
+    this.name = 'DpopCredentialError'
   }
 }
 

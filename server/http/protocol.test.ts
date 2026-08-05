@@ -9,13 +9,8 @@ const env = {
   PUBLIC_APP_ORIGIN: 'https://zme.test',
   OIDC_ISSUER: 'https://issuer.zme.test',
   OIDC_CLIENT_ID: 'zme-test-client',
-  OIDC_TOKEN_ENDPOINT_AUTH_METHOD: 'none',
-  OIDC_REDIRECT_URI: 'https://zme.test/auth/callback',
-  OIDC_POST_LOGOUT_REDIRECT_URI: 'https://zme.test/login',
-  OIDC_ALLOWED_ALGS: 'ES256',
-  OIDC_ADMIN_SUBJECTS: 'https://issuer.zme.test|admin-subject',
+  OIDC_ADMIN_SUBJECTS: 'admin-subject',
   OIDC_LEGACY_BINDINGS_JSON: '[]',
-  REALMROOT_RESOURCE_URL: 'https://zme.test/api',
 } as unknown as Env
 
 function protocolApp() {
