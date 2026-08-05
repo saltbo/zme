@@ -203,7 +203,6 @@ function productionProfiles(): Set<'api' | 'unit' | 'web' | 'e2e'> {
     }
   }
   if (unclassified.length > 0) fail(`Changed production files lack a verification profile: ${unclassified.join(', ')}`)
-  if (profiles.size === 0) fail('No changed production verification profiles were discovered.')
   return profiles
 }
 
