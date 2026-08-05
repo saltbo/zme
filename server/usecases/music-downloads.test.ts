@@ -18,6 +18,21 @@ const env = {
   PUBLIC_APP_ORIGIN: 'https://zme.test',
 } as never as Env
 
+function canonicalDownloadsRepo() {
+  let stored: Record<string, unknown> | null = null
+  return {
+    get: async () => stored,
+    create: async (record: Record<string, unknown>) => {
+      stored = record
+      return true
+    },
+    update: async (_userId: string, _id: string, _revision: string, patch: Record<string, unknown>) => {
+      stored = { ...stored, ...patch }
+      return stored
+    },
+  }
+}
+
 const track: MusicTrackRecord = {
   id: 'track-1',
   provider: 'netease',
@@ -120,7 +135,7 @@ function musicConnectors(resolve: (...args: never[]) => unknown) {
 }
 
 describe('music downloads', () => {
-  it('persists a manual request and only wakes the connector lane', async () => {
+  it('creates an independent dispatch for each canonical music download', async () => {
     const records: DownloadRecordRecord[] = []
     const wake = vi.fn(async () => undefined)
     const resolve = vi.fn()
@@ -144,26 +159,43 @@ describe('music downloads', () => {
     } as never as Deps
 
     await expect(
-      submitMusicTrackDownload(deps, 'user-1', 'track-1', {
-        downloaderId: 'downloader-1',
-        releaseId: 'release-1',
-      }),
+      submitMusicTrackDownload(
+        deps,
+        'user-1',
+        'track-1',
+        {
+          downloaderId: 'downloader-1',
+          releaseId: 'release-1',
+        },
+        'download-1',
+      ),
     ).resolves.toMatchObject({
       downloaderId: 'downloader-1',
       downloadRecordId: expect.any(String),
       status: 'queued',
     })
 
-    expect(records).toHaveLength(1)
+    await expect(
+      submitMusicTrackDownload(
+        deps,
+        'user-1',
+        'track-1',
+        { downloaderId: 'downloader-1', releaseId: 'release-1' },
+        'download-2',
+      ),
+    ).resolves.toMatchObject({ status: 'queued' })
+
+    expect(records).toHaveLength(2)
     expect(records[0]).toMatchObject({
       resourceKind: 'music_track',
       resourceKey: 'netease:track:123',
       laneKey: 'music:connector-1',
-      config: { preferredQuality: 'hires' },
+      config: { preferredQuality: 'hires', downloadId: 'download-1' },
       status: 'queued',
       manualRequestedAt: expect.any(String),
     })
-    expect(wake).toHaveBeenCalledOnce()
+    expect(records[1].config.downloadId).toBe('download-2')
+    expect(wake).toHaveBeenCalledTimes(2)
     expect(wake).toHaveBeenCalledWith('music:connector-1')
     expect(getLibraryTrack).toHaveBeenCalledWith('user-1', 'track-1', 'release-1')
     expect(resolve).not.toHaveBeenCalled()
@@ -227,6 +259,7 @@ describe('music downloads', () => {
           return { ...queuedRecord, ...patch }
         },
       },
+      downloadsRepo: canonicalDownloadsRepo(),
       musicDownloadKeysRepo: {
         create: async (record: MusicDownloadKeyRecord) => accesses.push(record),
         revoke: async () => undefined,
@@ -271,7 +304,7 @@ describe('music downloads', () => {
     expect(url.origin).toBe('https://zme.test')
     expect(url.pathname).toBe('/api/music/tracks/track-1/content')
     expect(url.searchParams.get('key')).toMatch(/^[A-Za-z0-9_-]{43}$/)
-    expect(url.searchParams.get('apiVersion')).toBe('2026-08-04')
+    expect(url.searchParams.get('apiVersion')).toBe('2026-08-05')
     expect(updates.at(-1)).toMatchObject({ status: 'accepted', externalTaskId: 'remote-task-1' })
   })
 
@@ -353,6 +386,7 @@ describe('music downloads', () => {
           ...patch,
         }),
       },
+      downloadsRepo: canonicalDownloadsRepo(),
       musicDownloadKeysRepo: { create: async () => undefined, revoke: async () => undefined },
       downloaderGateways: {
         zpan: {

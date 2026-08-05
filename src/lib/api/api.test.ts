@@ -40,7 +40,7 @@ describe('resource api client', () => {
   })
 
   it('builds default resource discovery request paths', async () => {
-    const fetch = stubJsonFetch({ results: [] })
+    const fetch = stubJsonFetch({ items: [] })
 
     await discoverBooks({ mode: 'subject', period: 'daily', subject: 'fantasy', page: 3, pageSize: 30 })
     await discoverMusicAlbums({
@@ -165,7 +165,7 @@ describe('resource api client', () => {
     })
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/release-candidates?q=Dune+2021&searchType=search&categories=2000%7C2040',
+      '/api/release-candidates?query=Dune+2021&searchType=search&categories=2000%7C2040&page=1&pageSize=50',
       expect.objectContaining({ credentials: 'include' }),
     )
   })
@@ -175,8 +175,7 @@ describe('resource api client', () => {
 
     await createDownload({
       downloaderId: 'downloader-1',
-      sourceType: 'magnet',
-      uri: 'magnet:?xt=urn:btih:abc',
+      resourceRef: 'release-ref:v1:opaque',
     })
 
     expect(fetch).toHaveBeenCalledWith(

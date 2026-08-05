@@ -2,12 +2,12 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ZME Resource API",
-    "version": "2026-08-04",
+    "version": "2026-08-05",
     "license": {
       "name": "AGPL-3.0-only",
       "identifier": "AGPL-3.0-only"
     },
-    "description": "Resource-oriented media discovery, release-search job, and download-task API. Local roles and resource ownership further restrict every operation."
+    "description": "Resource-oriented media discovery, ephemeral release search, and download API. Local roles and resource ownership further restrict every operation."
   },
   "servers": [
     {
@@ -37,7 +37,7 @@
     },
     {
       "name": "downloads",
-      "description": "Operate browser-session download records and streams."
+      "description": "Create, inspect, and manage owned downloads."
     },
     {
       "name": "system",
@@ -2261,97 +2261,6 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/music-download-tasks": {
-      "post": {
-        "operationId": "createMusicDownloadTask",
-        "summary": "Create a music download task",
-        "tags": [
-          "downloads"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MusicDownloadTaskEnvelope"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/SessionForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MusicDownloadTaskInput"
-              }
-            }
           }
         }
       }
@@ -4604,119 +4513,6 @@
         }
       }
     },
-    "/release-candidates": {
-      "get": {
-        "operationId": "listReleaseCandidates",
-        "summary": "Search ephemeral release candidates",
-        "tags": [
-          "configuration"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          },
-          {
-            "name": "q",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          {
-            "name": "searchType",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "search",
-                "audiosearch",
-                "booksearch"
-              ]
-            }
-          },
-          {
-            "name": "categories",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "Comma- or pipe-separated positive category identifiers."
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReleaseCandidateResults"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/SessionForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "x-zme-local-role": "admin"
-      }
-    },
     "/indexers": {
       "get": {
         "operationId": "listIndexers",
@@ -6234,13 +6030,18 @@
     "/downloaders": {
       "get": {
         "operationId": "listDownloaders",
-        "summary": "List downloaders",
+        "summary": "List safe downloader choices",
         "tags": [
-          "configuration"
+          "downloads"
         ],
         "security": [
           {
             "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "downloaders:read"
+            ]
           }
         ],
         "parameters": [
@@ -6280,10 +6081,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/SessionForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6410,13 +6211,18 @@
     "/downloaders/{id}": {
       "get": {
         "operationId": "getDownloader",
-        "summary": "Get a downloader",
+        "summary": "Get a safe downloader choice",
         "tags": [
-          "configuration"
+          "downloads"
         ],
         "security": [
           {
             "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "downloaders:read"
+            ]
           }
         ],
         "parameters": [
@@ -6435,7 +6241,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1
+              "format": "uuid"
             }
           }
         ],
@@ -6451,9 +6257,6 @@
               },
               "API-Version": {
                 "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -6468,10 +6271,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
+            "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/SessionForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -6980,289 +6783,6 @@
         }
       }
     },
-    "/downloads": {
-      "get": {
-        "operationId": "listBrowserDownloads",
-        "summary": "List browser download records",
-        "tags": [
-          "downloads"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/DownloadTaskStatus"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 50,
-              "default": 20
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BrowserDownloadTaskPage"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/SessionForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      },
-      "post": {
-        "operationId": "createBrowserDownload",
-        "summary": "Create a browser download",
-        "tags": [
-          "downloads"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          },
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BrowserDownloadResultEnvelope"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/SessionForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BrowserDownloadInput"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/downloads/events": {
-      "get": {
-        "operationId": "streamDownloadEvents",
-        "summary": "Stream browser download events",
-        "tags": [
-          "downloads"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersionQuery"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Server-sent download task events",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/SessionUnauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/SessionForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
     "/media": {
       "get": {
         "operationId": "listMedia",
@@ -7376,10 +6896,10 @@
         }
       }
     },
-    "/release-search-jobs": {
+    "/release-candidates": {
       "get": {
-        "operationId": "listReleaseSearchJobs",
-        "summary": "List release-search jobs owned by the caller",
+        "operationId": "listReleaseCandidates",
+        "summary": "Search ephemeral release candidates",
         "tags": [
           "release-acquisition"
         ],
@@ -7389,7 +6909,7 @@
           },
           {
             "oidcDpop": [
-              "release-search-jobs:read"
+              "release-candidates:read"
             ]
           }
         ],
@@ -7402,6 +6922,155 @@
           },
           {
             "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "mediaKey",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "searchType",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "search",
+                "audiosearch",
+                "booksearch"
+              ]
+            }
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseCandidateCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/downloads": {
+      "get": {
+        "operationId": "listDownloads",
+        "summary": "List downloads owned by the caller",
+        "tags": [
+          "release-acquisition"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "downloads:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/DownloadStatus"
+            }
           },
           {
             "$ref": "#/components/parameters/Page"
@@ -7427,7 +7096,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseSearchJobCollection"
+                  "$ref": "#/components/schemas/DownloadCollection"
                 }
               }
             }
@@ -7468,8 +7137,8 @@
         }
       },
       "post": {
-        "operationId": "createReleaseSearchJob",
-        "summary": "Create and run a release-search job",
+        "operationId": "createDownload",
+        "summary": "Create a download from an opaque resource reference",
         "tags": [
           "release-acquisition"
         ],
@@ -7479,7 +7148,7 @@
           },
           {
             "oidcDpop": [
-              "release-search-jobs:write"
+              "downloads:write"
             ]
           }
         ],
@@ -7502,7 +7171,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateReleaseSearchJob"
+                "$ref": "#/components/schemas/CreateDownload"
               }
             }
           }
@@ -7527,7 +7196,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseSearchJob"
+                  "$ref": "#/components/schemas/Download"
                 }
               }
             }
@@ -7568,10 +7237,10 @@
         }
       }
     },
-    "/release-search-jobs/{releaseSearchJobId}": {
+    "/downloads/{downloadId}": {
       "get": {
-        "operationId": "getReleaseSearchJob",
-        "summary": "Get an owned release-search job",
+        "operationId": "getDownload",
+        "summary": "Get an owned download",
         "tags": [
           "release-acquisition"
         ],
@@ -7581,7 +7250,7 @@
           },
           {
             "oidcDpop": [
-              "release-search-jobs:read"
+              "downloads:read"
             ]
           }
         ],
@@ -7596,7 +7265,7 @@
             "$ref": "#/components/parameters/Tracestate"
           },
           {
-            "name": "releaseSearchJobId",
+            "name": "downloadId",
             "in": "path",
             "required": true,
             "schema": {
@@ -7622,295 +7291,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleaseSearchJob"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/release-search-jobs/{releaseSearchJobId}/results": {
-      "get": {
-        "operationId": "listReleaseSearchResults",
-        "summary": "List candidates produced by a release-search job",
-        "tags": [
-          "release-acquisition"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          },
-          {
-            "oidcDpop": [
-              "release-search-jobs:read"
-            ]
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          },
-          {
-            "name": "releaseSearchJobId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReleaseSearchResultCollection"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/release-search-results/{releaseSearchResultId}": {
-      "get": {
-        "operationId": "getReleaseSearchResult",
-        "summary": "Get an owned release-search candidate",
-        "tags": [
-          "release-acquisition"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          },
-          {
-            "oidcDpop": [
-              "release-search-jobs:read"
-            ]
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          },
-          {
-            "name": "releaseSearchResultId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ReleaseSearchResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/ValidationError"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        }
-      }
-    },
-    "/download-tasks": {
-      "get": {
-        "operationId": "listDownloadTasks",
-        "summary": "List download tasks owned by the caller",
-        "tags": [
-          "release-acquisition"
-        ],
-        "security": [
-          {
-            "oidcSession": []
-          },
-          {
-            "oidcDpop": [
-              "download-tasks:read"
-            ]
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
-            "$ref": "#/components/parameters/Traceparent"
-          },
-          {
-            "$ref": "#/components/parameters/Tracestate"
-          },
-          {
-            "$ref": "#/components/parameters/Page"
-          },
-          {
-            "$ref": "#/components/parameters/PageSize"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful response",
-            "headers": {
-              "Request-Id": {
-                "$ref": "#/components/headers/RequestId"
-              },
-              "Link": {
-                "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadTaskCollection"
+                  "$ref": "#/components/schemas/Download"
                 }
               }
             }
@@ -7950,11 +7331,11 @@
           }
         }
       },
-      "post": {
-        "operationId": "createDownloadTask",
-        "summary": "Create a download task for a release candidate",
+      "delete": {
+        "operationId": "deleteDownload",
+        "summary": "deleteDownload",
         "tags": [
-          "release-acquisition"
+          "downloads"
         ],
         "security": [
           {
@@ -7962,7 +7343,7 @@
           },
           {
             "oidcDpop": [
-              "download-tasks:write"
+              "downloads:manage"
             ]
           }
         ],
@@ -7977,22 +7358,21 @@
             "$ref": "#/components/parameters/Tracestate"
           },
           {
-            "$ref": "#/components/parameters/IdempotencyKey"
+            "name": "downloadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateDownloadTask"
-              }
-            }
-          }
-        },
         "responses": {
-          "201": {
-            "description": "Resource created",
+          "204": {
+            "description": "Resource deleted",
             "headers": {
               "Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -8002,16 +7382,6 @@
               },
               "API-Version": {
                 "$ref": "#/components/headers/ApiVersion"
-              },
-              "Location": {
-                "$ref": "#/components/headers/Location"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DownloadTask"
-                }
               }
             }
           },
@@ -8030,11 +7400,17 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -8051,12 +7427,12 @@
         }
       }
     },
-    "/download-tasks/{downloadTaskId}": {
+    "/downloads/{downloadId}/suspension": {
       "get": {
-        "operationId": "getDownloadTask",
-        "summary": "Get an owned download task",
+        "operationId": "getDownloadSuspension",
+        "summary": "Get DownloadSuspension",
         "tags": [
-          "release-acquisition"
+          "downloads"
         ],
         "security": [
           {
@@ -8064,7 +7440,7 @@
           },
           {
             "oidcDpop": [
-              "download-tasks:read"
+              "downloads:read"
             ]
           }
         ],
@@ -8079,7 +7455,7 @@
             "$ref": "#/components/parameters/Tracestate"
           },
           {
-            "name": "downloadTaskId",
+            "name": "downloadId",
             "in": "path",
             "required": true,
             "schema": {
@@ -8105,7 +7481,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DownloadTask"
+                  "$ref": "#/components/schemas/DownloadSuspension"
                 }
               }
             }
@@ -8144,14 +7520,12 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
-      }
-    },
-    "/download-destinations": {
-      "get": {
-        "operationId": "listDownloadDestinations",
-        "summary": "List safe download destinations available to the caller",
+      },
+      "put": {
+        "operationId": "createDownloadSuspension",
+        "summary": "createDownloadSuspension",
         "tags": [
-          "release-acquisition"
+          "downloads"
         ],
         "security": [
           {
@@ -8159,7 +7533,7 @@
           },
           {
             "oidcDpop": [
-              "download-destinations:read"
+              "downloads:manage"
             ]
           }
         ],
@@ -8172,6 +7546,217 @@
           },
           {
             "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "downloadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Resource created",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadSuspension"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteDownloadSuspension",
+        "summary": "deleteDownloadSuspension",
+        "tags": [
+          "downloads"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "downloads:manage"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "downloadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Resource deleted",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/downloads/{downloadId}/cancellation": {
+      "get": {
+        "operationId": "getDownloadCancellation",
+        "summary": "Get DownloadCancellation",
+        "tags": [
+          "downloads"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "downloads:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "downloadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -8191,7 +7776,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DownloadDestinationCollection"
+                  "$ref": "#/components/schemas/DownloadCancellation"
                 }
               }
             }
@@ -8216,6 +7801,111 @@
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "put": {
+        "operationId": "createDownloadCancellation",
+        "summary": "createDownloadCancellation",
+        "tags": [
+          "downloads"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "downloads:manage"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "downloadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Resource created",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadCancellation"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -8261,7 +7951,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "const": "2026-08-04"
+          "const": "2026-08-05"
         }
       },
       "ApiVersionQuery": {
@@ -8270,7 +7960,7 @@
         "required": true,
         "schema": {
           "type": "string",
-          "const": "2026-08-04"
+          "const": "2026-08-05"
         }
       },
       "IdempotencyKey": {
@@ -8344,7 +8034,7 @@
       "ApiVersion": {
         "schema": {
           "type": "string",
-          "const": "2026-08-04"
+          "const": "2026-08-05"
         }
       },
       "Location": {
@@ -10040,52 +9730,6 @@
           }
         }
       },
-      "MusicDownloadTaskInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "trackId",
-          "downloaderId"
-        ],
-        "properties": {
-          "trackId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "downloaderId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "releaseId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "quality": {
-            "type": "string",
-            "enum": [
-              "standard",
-              "exhigh",
-              "lossless",
-              "hires"
-            ]
-          },
-          "force": {
-            "type": "boolean"
-          }
-        }
-      },
-      "MusicDownloadTaskEnvelope": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "item"
-        ],
-        "properties": {
-          "item": {
-            "$ref": "#/components/schemas/MusicDownloadRecord"
-          }
-        }
-      },
       "MusicDownloadRecord": {
         "type": "object",
         "additionalProperties": false,
@@ -11533,7 +11177,9 @@
           "indexerFlags",
           "imdbId",
           "tmdbId",
-          "tvdbId"
+          "tvdbId",
+          "resourceRef",
+          "resourceRefExpiresAt"
         ],
         "properties": {
           "id": {
@@ -11665,20 +11311,51 @@
               "integer",
               "null"
             ]
+          },
+          "resourceRef": {
+            "type": "string",
+            "pattern": "^release-ref:v1:"
+          },
+          "resourceRefExpiresAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
-      "ReleaseCandidateResults": {
+      "ReleaseCandidateCollection": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
-          "results"
+          "items",
+          "pagination"
         ],
         "properties": {
-          "results": {
+          "items": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ReleaseCandidate"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "required": [
+              "page",
+              "pageSize",
+              "totalItems",
+              "totalPages"
+            ],
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "pageSize": {
+                "type": "integer"
+              },
+              "totalItems": {
+                "type": "integer"
+              },
+              "totalPages": {
+                "type": "integer"
+              }
             }
           }
         }
@@ -12289,250 +11966,6 @@
           }
         }
       },
-      "DownloadTaskStatus": {
-        "type": "string",
-        "enum": [
-          "queued",
-          "assigned",
-          "running",
-          "billing_paused",
-          "pausing",
-          "paused",
-          "uploading",
-          "canceling",
-          "completed",
-          "failed",
-          "canceled"
-        ]
-      },
-      "BrowserDownloadTask": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "downloaderId",
-          "downloaderName",
-          "downloaderKind",
-          "sourceType",
-          "sourceUri",
-          "name",
-          "targetFolder",
-          "category",
-          "tags",
-          "status",
-          "downloadedBytes",
-          "storageUploadedBytes",
-          "totalBytes",
-          "downloadBps",
-          "storageUploadBps",
-          "errorMessage"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "downloaderId": {
-            "type": "string"
-          },
-          "downloaderName": {
-            "type": "string"
-          },
-          "downloaderKind": {
-            "type": "string",
-            "enum": [
-              "zpan",
-              "qbittorrent",
-              "transmission",
-              "aria2"
-            ]
-          },
-          "sourceType": {
-            "type": "string",
-            "enum": [
-              "http",
-              "magnet",
-              "torrent_url"
-            ]
-          },
-          "sourceUri": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "targetFolder": {
-            "type": "string"
-          },
-          "category": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "status": {
-            "$ref": "#/components/schemas/DownloadTaskStatus"
-          },
-          "downloadedBytes": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "storageUploadedBytes": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "totalBytes": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 0
-          },
-          "downloadBps": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "storageUploadBps": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "errorMessage": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "outputObjectId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "BrowserDownloadTaskPage": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "items",
-          "total",
-          "page",
-          "pageSize"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BrowserDownloadTask"
-            }
-          },
-          "total": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "page": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "pageSize": {
-            "type": "integer",
-            "minimum": 1
-          }
-        }
-      },
-      "BrowserDownloadInput": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "downloaderId",
-          "uri",
-          "sourceType"
-        ],
-        "properties": {
-          "downloaderId": {
-            "type": "string",
-            "minLength": 1
-          },
-          "uri": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sourceType": {
-            "type": "string",
-            "enum": [
-              "http",
-              "magnet",
-              "torrent_url"
-            ]
-          },
-          "title": {
-            "type": "string"
-          },
-          "category": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120
-          },
-          "targetSubdirectory": {
-            "type": "string"
-          },
-          "tags": {
-            "type": "array",
-            "maxItems": 20,
-            "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 80
-            }
-          }
-        }
-      },
-      "BrowserDownloadResult": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "downloaderId",
-          "status"
-        ],
-        "properties": {
-          "downloaderId": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "queued",
-              "submitted"
-            ]
-          },
-          "downloadRecordId": {
-            "type": "string"
-          },
-          "externalTaskId": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
-      "BrowserDownloadResultEnvelope": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "item"
-        ],
-        "properties": {
-          "item": {
-            "$ref": "#/components/schemas/BrowserDownloadResult"
-          }
-        }
-      },
       "Media": {
         "type": "object",
         "additionalProperties": false,
@@ -12648,411 +12081,151 @@
           }
         }
       },
-      "DownloadDestination": {
+      "CreateDownload": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resourceRef",
+          "downloaderId"
+        ],
+        "properties": {
+          "resourceRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "downloaderId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "DownloadStatus": {
+        "type": "string",
+        "enum": [
+          "queued",
+          "resolving",
+          "waitingSource",
+          "submitting",
+          "submitted",
+          "running",
+          "pausing",
+          "paused",
+          "resuming",
+          "canceling",
+          "completed",
+          "failed",
+          "canceled"
+        ]
+      },
+      "Download": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "id",
+          "resourceRef",
+          "resourceKind",
+          "resourceKey",
+          "downloaderId",
+          "downloaderName",
+          "downloaderKind",
+          "managementSupported",
+          "sourceType",
+          "sourceUri",
           "name",
-          "kind",
-          "healthStatus",
-          "supportedSourceTypes"
+          "targetFolder",
+          "category",
+          "tags",
+          "status",
+          "stage",
+          "externalTaskId",
+          "downstreamStatus",
+          "progress",
+          "result",
+          "error",
+          "createdAt",
+          "updatedAt",
+          "completedAt",
+          "links"
         ],
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "resourceRef": {
+            "type": "string"
+          },
+          "resourceKind": {
+            "type": "string",
+            "enum": [
+              "release",
+              "music_track"
+            ]
+          },
+          "resourceKey": {
+            "type": "string"
+          },
+          "downloaderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "downloaderName": {
+            "type": "string"
+          },
+          "downloaderKind": {
+            "type": "string",
+            "enum": [
+              "zpan",
+              "qbittorrent",
+              "transmission",
+              "aria2"
+            ]
+          },
+          "managementSupported": {
+            "type": "boolean"
+          },
+          "sourceType": {
+            "type": "string",
+            "enum": [
+              "http",
+              "magnet",
+              "torrent_url"
+            ]
+          },
+          "sourceUri": {
+            "type": "string"
           },
           "name": {
             "type": "string"
           },
-          "kind": {
+          "targetFolder": {
             "type": "string"
           },
-          "healthStatus": {
-            "type": "string",
-            "enum": [
-              "unknown",
-              "online",
-              "offline"
+          "category": {
+            "type": [
+              "string",
+              "null"
             ]
           },
-          "supportedSourceTypes": {
+          "tags": {
             "type": "array",
             "items": {
               "type": "string"
             }
-          }
-        }
-      },
-      "DownloadDestinationCollection": {
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DownloadDestination"
-            }
-          }
-        }
-      },
-      "CreateReleaseSearchJob": {
-        "type": "object",
-        "required": [
-          "mediaKey",
-          "mediaTitle",
-          "query"
-        ],
-        "properties": {
-          "mediaKey": {
-            "type": "string"
-          },
-          "mediaTitle": {
-            "type": "string"
-          },
-          "query": {
-            "type": "string"
-          },
-          "searchType": {
-            "type": "string",
-            "enum": [
-              "search",
-              "audiosearch",
-              "booksearch"
-            ]
-          },
-          "categories": {
-            "type": "array",
-            "items": {
-              "type": "integer"
-            }
-          }
-        }
-      },
-      "ReleaseSearchJob": {
-        "type": "object",
-        "required": [
-          "id",
-          "mediaKey",
-          "mediaTitle",
-          "query",
-          "searchType",
-          "categories",
-          "status",
-          "createdAt",
-          "links"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "mediaKey": {
-            "type": "string"
-          },
-          "mediaTitle": {
-            "type": "string"
-          },
-          "query": {
-            "type": "string"
-          },
-          "searchType": {
-            "type": "string"
-          },
-          "categories": {
-            "type": "array",
-            "items": {
-              "type": "integer"
-            }
           },
           "status": {
-            "type": "string",
+            "$ref": "#/components/schemas/DownloadStatus"
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
             "enum": [
-              "running",
-              "completed",
-              "failed"
-            ]
-          },
-          "error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "completedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "links": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string",
-              "format": "uri"
-            }
-          }
-        }
-      },
-      "ReleaseSearchJobCollection": {
-        "type": "object",
-        "required": [
-          "items",
-          "pagination"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReleaseSearchJob"
-            }
-          },
-          "pagination": {
-            "type": "object",
-            "required": [
-              "page",
-              "pageSize",
-              "totalItems",
-              "totalPages"
-            ],
-            "properties": {
-              "page": {
-                "type": "integer"
-              },
-              "pageSize": {
-                "type": "integer"
-              },
-              "totalItems": {
-                "type": "integer"
-              },
-              "totalPages": {
-                "type": "integer"
-              }
-            }
-          }
-        }
-      },
-      "ReleaseSearchResult": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "id",
-          "jobId",
-          "title",
-          "source",
-          "sizeBytes",
-          "quality",
-          "encoding",
-          "availability",
-          "publishedAt",
-          "links"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "jobId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "title": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "sizeBytes": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "minimum": 0
-          },
-          "quality": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "source",
-              "resolution",
-              "hdr"
-            ],
-            "properties": {
-              "source": {
-                "type": "string"
-              },
-              "resolution": {
-                "type": "string"
-              },
-              "hdr": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "encoding": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "video",
-              "audio"
-            ],
-            "properties": {
-              "video": {
-                "type": "string"
-              },
-              "audio": {
-                "type": "string"
-              }
-            }
-          },
-          "availability": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "seeders",
-              "leechers",
-              "protocol"
-            ],
-            "properties": {
-              "seeders": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "minimum": 0
-              },
-              "leechers": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
-                "minimum": 0
-              },
-              "protocol": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
-          },
-          "publishedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
-          },
-          "links": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string",
-              "format": "uri"
-            }
-          }
-        }
-      },
-      "ReleaseSearchResultCollection": {
-        "type": "object",
-        "required": [
-          "items",
-          "pagination"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ReleaseSearchResult"
-            }
-          },
-          "pagination": {
-            "type": "object",
-            "required": [
-              "page",
-              "pageSize",
-              "totalItems",
-              "totalPages"
-            ],
-            "properties": {
-              "page": {
-                "type": "integer"
-              },
-              "pageSize": {
-                "type": "integer"
-              },
-              "totalItems": {
-                "type": "integer"
-              },
-              "totalPages": {
-                "type": "integer"
-              }
-            }
-          }
-        }
-      },
-      "CreateDownloadTask": {
-        "type": "object",
-        "required": [
-          "releaseSearchResultId",
-          "downloaderId"
-        ],
-        "properties": {
-          "releaseSearchResultId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "downloaderId": {
-            "type": "string",
-            "format": "uuid"
-          }
-        }
-      },
-      "DownloadTask": {
-        "type": "object",
-        "required": [
-          "id",
-          "releaseSearchResultId",
-          "downloaderId",
-          "status",
-          "downstreamStatus",
-          "progress",
-          "result",
-          "createdAt",
-          "links"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "releaseSearchResultId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "downloaderId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "submitting",
-              "submitted",
-              "running",
-              "completed",
-              "failed",
-              "canceled"
+              "downloading",
+              "uploading",
+              null
             ]
           },
           "externalTaskId": {
@@ -13065,20 +12238,6 @@
             "type": [
               "string",
               "null"
-            ],
-            "enum": [
-              "queued",
-              "assigned",
-              "running",
-              "billing_paused",
-              "pausing",
-              "paused",
-              "uploading",
-              "canceling",
-              "completed",
-              "failed",
-              "canceled",
-              null
             ]
           },
           "progress": {
@@ -13159,6 +12318,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "completedAt": {
             "type": [
               "string",
@@ -13175,7 +12338,7 @@
           }
         }
       },
-      "DownloadTaskCollection": {
+      "DownloadCollection": {
         "type": "object",
         "required": [
           "items",
@@ -13185,7 +12348,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/DownloadTask"
+              "$ref": "#/components/schemas/Download"
             }
           },
           "pagination": {
@@ -13209,6 +12372,58 @@
               "totalPages": {
                 "type": "integer"
               }
+            }
+          }
+        }
+      },
+      "DownloadSuspension": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "downloadId",
+          "createdAt",
+          "links"
+        ],
+        "properties": {
+          "downloadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      },
+      "DownloadCancellation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "downloadId",
+          "createdAt",
+          "links"
+        ],
+        "properties": {
+          "downloadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uri"
             }
           }
         }

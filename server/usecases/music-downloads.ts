@@ -5,6 +5,7 @@ import {
   buildMusicDownloadFilename,
   buildMusicDownloadSubdirectory,
   DEFAULT_MUSIC_DOWNLOAD_QUALITY,
+  getZmeDownloadResourceDirectory,
 } from '@shared/download-metadata'
 import type { CreateDownloadResult, MusicDownloadQuality, MusicTrackDownloadInput } from '@shared/types'
 import type { Deps } from './deps'
@@ -12,6 +13,7 @@ import { submitDownload } from './downloaders'
 import { musicLaneKey } from './media-subscriptions'
 import {
   type ConnectorRecord,
+  type DownloadRecord,
   type DownloadRecordRecord,
   MusicResourceUnavailableError,
   type MusicTrackAvailabilityResult,
@@ -35,6 +37,7 @@ export async function submitMusicTrackDownload(
   userId: string,
   trackId: string,
   input: MusicTrackDownloadInput,
+  downloadId?: string,
 ): Promise<CreateDownloadResult> {
   const track = await deps.musicCollectionsRepo.getLibraryTrack(userId, trackId, input.releaseId)
   if (!track) throw new MusicDownloadError('Music track was not found in the library.', 404)
@@ -56,7 +59,9 @@ export async function submitMusicTrackDownload(
   const now = new Date().toISOString()
   const laneKey = musicLaneKey(connector.id)
   const quality = input.quality ?? DEFAULT_MUSIC_DOWNLOAD_QUALITY
-  let current = (await deps.downloadRecordsRepo.listByResourceKeys(userId, 'music_track', [track.mediaKey]))[0]
+  let current = downloadId
+    ? undefined
+    : (await deps.downloadRecordsRepo.listByResourceKeys(userId, 'music_track', [track.mediaKey]))[0]
   let downloadRecordId: string | null = null
 
   if (!current) {
@@ -68,7 +73,7 @@ export async function submitMusicTrackDownload(
       laneKey,
       generation: 1,
       downloaderId: input.downloaderId,
-      config: { preferredQuality: quality, resolvedQuality: null, releaseId: track.release?.id ?? null },
+      config: { preferredQuality: quality, resolvedQuality: null, releaseId: track.release?.id ?? null, downloadId },
       status: 'queued',
       attemptCount: 0,
       externalTaskId: null,
@@ -132,6 +137,7 @@ export async function dispatchMusicDownloadRecord(
   const track = await deps.musicCollectionsRepo.getTrackByMediaKey(record.resourceKey, record.config.releaseId)
   if (!track) throw new MusicDownloadError('Music track was not found.', 404)
   if (!record.downloaderId) throw new MusicDownloadError('Downloader is not available.', 404)
+  const canonicalDownload = await ensureCanonicalDownload(deps, record, track)
   const connector = await deps.connectorsRepo.get(record.userId, connectorId)
   if (!connector?.enabled || connector.status !== 'connected' || !connector.credentialsEncrypted) {
     throw new MusicDownloadError(`The ${track.provider} connector is not available.`, 409)
@@ -151,6 +157,10 @@ export async function dispatchMusicDownloadRecord(
       status: 'canceled',
       errorMessage: null,
       updatedAt: new Date().toISOString(),
+    })
+    await deps.downloadsRepo.update(canonicalDownload.userId, canonicalDownload.id, canonicalDownload.updatedAt, {
+      status: 'canceled',
+      completedAt: new Date().toISOString(),
     })
     return
   }
@@ -180,7 +190,8 @@ export async function dispatchMusicDownloadRecord(
 
   const downloadUrl = new URL(`/api/music/tracks/${encodeURIComponent(track.id)}/content`, env.PUBLIC_APP_ORIGIN)
   downloadUrl.searchParams.set('key', key)
-  downloadUrl.searchParams.set('apiVersion', '2026-08-04')
+  downloadUrl.searchParams.set('apiVersion', '2026-08-05')
+  const targetSubdirectory = buildMusicDownloadSubdirectory(track)
   try {
     const result = await submitDownload(deps, record.userId, {
       downloaderId: record.downloaderId,
@@ -188,7 +199,7 @@ export async function dispatchMusicDownloadRecord(
       uri: downloadUrl.toString(),
       title: filename,
       category: 'zme:music',
-      targetSubdirectory: buildMusicDownloadSubdirectory(track),
+      targetSubdirectory,
       tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
     })
     const acceptedAt = new Date().toISOString()
@@ -200,10 +211,90 @@ export async function dispatchMusicDownloadRecord(
       errorMessage: null,
       updatedAt: acceptedAt,
     })
+    const download = await deps.downloadsRepo.get(canonicalDownload.userId, canonicalDownload.id)
+    if (download) {
+      const downloader = await deps.downloadersRepo.getEnabled(download.userId, download.downloaderId)
+      const updated = await deps.downloadsRepo.update(download.userId, download.id, download.updatedAt, {
+        status: 'submitted',
+        externalTaskId: result.externalTaskId ?? null,
+        spec: {
+          sourceType: 'http',
+          uri: downloadUrl.toString(),
+          title: filename,
+          category: 'zme:music',
+          targetSubdirectory,
+          targetFolder: [
+            downloader?.config.options.targetFolder?.replace(/[\\/]+$/, ''),
+            getZmeDownloadResourceDirectory('zme:music'),
+            targetSubdirectory,
+          ]
+            .filter(Boolean)
+            .join('/'),
+          tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
+        },
+      })
+      if (updated?.externalTaskId) {
+        await deps.downloadReconciliationQueue?.enqueue({ userId: updated.userId, downloadId: updated.id }, 5)
+      }
+    }
   } catch (error) {
     await deps.musicDownloadKeysRepo.revoke(access.id, new Date().toISOString())
     throw error
   }
+}
+
+async function ensureCanonicalDownload(
+  deps: Deps,
+  record: DownloadRecordRecord,
+  track: MusicTrackRecord,
+): Promise<DownloadRecord> {
+  const id = record.config.downloadId ?? record.id
+  const existing = await deps.downloadsRepo.get(record.userId, id)
+  if (existing) return existing
+  if (!record.downloaderId) throw new MusicDownloadError('Downloader is not available.', 404)
+  const download: DownloadRecord = {
+    id,
+    userId: record.userId,
+    idempotencyKey: `dispatch:${record.id}`,
+    requestHash: `dispatch:${record.id}`,
+    resourceRef: `music-track:${track.mediaKey}`,
+    resourceKind: 'music_track',
+    resourceKey: track.mediaKey,
+    downloaderId: record.downloaderId,
+    spec: {
+      sourceType: 'http',
+      uri: `internal:music-track:${track.id}`,
+      title: track.title,
+      category: 'zme:music',
+      tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
+    },
+    status: 'resolving',
+    stage: null,
+    externalTaskId: null,
+    downstreamStatus: null,
+    downstreamRevision: null,
+    downloadedBytes: 0,
+    storageUploadedBytes: 0,
+    totalBytes: null,
+    downloadBps: 0,
+    storageUploadBps: 0,
+    resultObjectId: null,
+    resultName: null,
+    resultTargetFolder: null,
+    error: null,
+    suspensionCreatedAt: null,
+    cancellationCreatedAt: null,
+    legacyDownloadRecordId: record.id,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    completedAt: null,
+  }
+  if (!(await deps.downloadsRepo.create(download))) {
+    const raced = await deps.downloadsRepo.get(record.userId, id)
+    if (raced) return raced
+    throw new Error('Canonical download disappeared while it was created.')
+  }
+  return download
 }
 
 export async function resolveMusicTrackDownload(

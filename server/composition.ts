@@ -10,6 +10,7 @@ import { createConnectorLoginAttemptsRepo } from './adapters/repos/connector-log
 import { createConnectorSyncJobsRepo } from './adapters/repos/connector-sync-jobs'
 import { createConnectorsRepo } from './adapters/repos/connectors'
 import { createDownloadersRepo } from './adapters/repos/downloaders'
+import { createDownloadsRepo } from './adapters/repos/downloads'
 import { createIdentityRepo } from './adapters/repos/identity'
 import { createIndexersRepo } from './adapters/repos/indexers'
 import { createLibraryRepo } from './adapters/repos/library'
@@ -21,13 +22,13 @@ import {
 import { createMediaSourcesRepo } from './adapters/repos/media-sources'
 import { createMusicCollectionsRepo } from './adapters/repos/music-collections'
 import { createMusicDownloadKeysRepo } from './adapters/repos/music-download-keys'
-import { createResourceApiRepo } from './adapters/repos/resource-api'
 import { readConfig } from './config'
 import { createDb } from './db/client'
 import type { Env } from './env'
 import { type TraceContext, traceCarrier } from './observability/trace'
 import type { ConnectorSyncMessage } from './usecases/connectors'
 import type { Deps } from './usecases/deps'
+import type { DownloadReconciliationMessage } from './usecases/downloads'
 
 export function createDeps(env: Env, trace?: TraceContext): Deps {
   const db = createDb(env)
@@ -36,7 +37,6 @@ export function createDeps(env: Env, trace?: TraceContext): Deps {
     identityRepo: createIdentityRepo(db),
     oidcClient: createOidcClient(config.oidc),
     dpopTokenValidator: createDpopTokenValidator(config),
-    resourceApiRepo: createResourceApiRepo(db),
     libraryRepo: createLibraryRepo(db),
     connectorsRepo: createConnectorsRepo(db),
     connectorLoginAttemptsRepo: createConnectorLoginAttemptsRepo(db),
@@ -51,6 +51,17 @@ export function createDeps(env: Env, trace?: TraceContext): Deps {
     musicDownloadKeysRepo: createMusicDownloadKeysRepo(db),
     mediaSubscriptionsRepo: createMediaSubscriptionsRepo(db),
     downloadRecordsRepo: createDownloadRecordsRepo(db),
+    downloadsRepo: createDownloadsRepo(db),
+    downloadReconciliationQueue: {
+      async enqueue(input, delaySeconds) {
+        const message: DownloadReconciliationMessage = {
+          type: 'download_reconciliation',
+          ...input,
+          ...traceCarrier(trace),
+        }
+        await env.MEDIA_DOWNLOAD_DISPATCH.send(message, delaySeconds ? { delaySeconds } : undefined)
+      },
+    },
     dispatchLanesRepo: createDispatchLanesRepo(db),
     downloadDispatchQueue: {
       async wake(laneKey, delaySeconds) {

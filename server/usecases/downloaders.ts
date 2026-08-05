@@ -89,7 +89,7 @@ export async function submitDownload(
   }
 }
 
-async function resolveDownloadInput(deps: Deps, input: CreateDownloadInput): Promise<CreateDownloadInput> {
+export async function resolveDownloadInput(deps: Deps, input: CreateDownloadInput): Promise<CreateDownloadInput> {
   if (input.sourceType !== 'torrent_url') return input
 
   const records = await deps.indexersRepo.listEnabled()

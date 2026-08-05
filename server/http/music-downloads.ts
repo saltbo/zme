@@ -1,11 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import { type MusicFileTags, prepareMusicFile, supportsMusicFileTagging } from '@server/music-tags'
 import { fetchNeteaseMusicCover } from '@server/music-tags/cover-loader'
-import {
-  MusicDownloadError,
-  resolveMusicTrackDownload,
-  submitMusicTrackDownload,
-} from '@server/usecases/music-downloads'
+import { MusicDownloadError, resolveMusicTrackDownload } from '@server/usecases/music-downloads'
 import type { ResolvedMusicResource } from '@server/usecases/ports'
 import type { Hono } from 'hono'
 import { z } from 'zod'
@@ -14,14 +10,6 @@ import { idParamsSchema } from './schemas'
 
 const downloadKeyQuerySchema = z.object({
   key: z.string().trim().min(32).max(256),
-})
-
-const submitMusicDownloadSchema = z.object({
-  trackId: z.string().trim().min(1),
-  downloaderId: z.string().trim().min(1),
-  releaseId: z.string().trim().min(1).optional(),
-  quality: z.enum(['standard', 'exhigh', 'lossless', 'hires']).optional(),
-  force: z.boolean().optional(),
 })
 
 export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
@@ -51,23 +39,6 @@ export function registerPublicMusicDownloadRoutes(routes: Hono<AppEnv>) {
       }
     },
   )
-}
-
-export function registerMusicDownloadRoutes(routes: Hono<AppEnv>) {
-  routes.post('/music-download-tasks', zValidator('json', submitMusicDownloadSchema), async (c) => {
-    try {
-      const item = await submitMusicTrackDownload(
-        c.get('deps'),
-        c.get('user').id,
-        c.req.valid('json').trackId,
-        c.req.valid('json'),
-      )
-      return c.json({ item }, 202)
-    } catch (error) {
-      const status = error instanceof MusicDownloadError ? error.status : 502
-      return c.json({ error: error instanceof Error ? error.message : 'Music download submission failed.' }, status)
-    }
-  })
 }
 
 export function redirectMusicResource(resource: ResolvedMusicResource, filename: string): Response {

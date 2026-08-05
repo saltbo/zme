@@ -48,7 +48,7 @@ if (!/compatibility_flags\s*=\s*\[[^\]]*"global_fetch_strictly_public"/s.test(wo
 }
 
 const e2eRunner = readFileSync(join(root, 'scripts/run-e2e.mjs'), 'utf8')
-for (const variable of ['PUBLIC_APP_ORIGIN', 'OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_ADMIN_SUBJECTS', 'CONNECTOR_CREDENTIALS_SECRET']) {
+for (const variable of ['PUBLIC_APP_ORIGIN', 'OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_ADMIN_SUBJECTS', 'CONNECTOR_CREDENTIALS_SECRET', 'DOWNLOAD_RESOURCE_REF_SECRET']) {
   if (!new RegExp(`\\b${variable}:`).test(e2eRunner)) fail(`The hermetic E2E runner must override ${variable}.`)
 }
 if (!/CLOUDFLARE_ENV:\s*cloudflareEnv/.test(e2eRunner) || !/\.dev\.vars\.\$\{cloudflareEnv\}/.test(e2eRunner)) {

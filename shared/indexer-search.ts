@@ -16,6 +16,7 @@ export interface ReleaseMatchCriteria {
 }
 
 export interface ResourceDownloadSearchInput {
+  mediaKey?: string
   target: DownloadSearchTarget
   query: string
   title?: string

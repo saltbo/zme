@@ -91,6 +91,7 @@ export function getBookReleaseSearchInput(
 
   return {
     target,
+    mediaKey: book.mediaKey,
     query,
     item: toBookReleaseMedia(book, target),
     title: book.title,

@@ -76,6 +76,21 @@ export class ZpanClient {
     return expectDownloadTask(await expectData(result, 'ZPan get download task failed'))
   }
 
+  async setDownloadTaskStatus(id: string, status: 'paused' | 'queued' | 'canceled'): Promise<ZpanDownloadTask> {
+    const result = await zpanApi.setDownloadTaskStatus({
+      client: this.client,
+      path: { id },
+      body: { status },
+    })
+    return expectDownloadTask(await expectData(result, 'ZPan update download task status failed'))
+  }
+
+  async deleteDownloadTask(id: string): Promise<void> {
+    const result = await zpanApi.deleteDownloadTask({ client: this.client, path: { id } })
+    if (result.response?.status === 404) return
+    if (result.error !== undefined) throw new Error(getErrorMessage(result.error, 'ZPan delete download task failed'))
+  }
+
   async streamDownloadTaskEvents(
     signal: AbortSignal,
     onEvent: (event: ZpanDownloadTaskEvent) => void | Promise<void>,

@@ -34,7 +34,7 @@ describe('DPoP resource OpenAPI contract', () => {
     for (const { path, method } of operations.filter(({ operation }) =>
       operation.security?.some((requirement) => requirement.oidcDpop),
     )) {
-      expect(['get', 'post']).toContain(method)
+      expect(['get', 'post', 'put', 'delete']).toContain(method)
       expect(path).not.toMatch(/\/(search|create|trigger|download|sync|health)(?:\/|$)/i)
       expect(path.replaceAll(/\{[^}]+\}/g, '')).not.toMatch(/[A-Z_]/)
     }
@@ -61,12 +61,12 @@ describe('DPoP resource OpenAPI contract', () => {
     }
     expect(scopes).toEqual(
       new Set([
+        'downloaders:read',
         'media:read',
-        'release-search-jobs:write',
-        'release-search-jobs:read',
-        'download-tasks:write',
-        'download-tasks:read',
-        'download-destinations:read',
+        'release-candidates:read',
+        'downloads:write',
+        'downloads:read',
+        'downloads:manage',
       ]),
     )
   })
@@ -83,17 +83,21 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(document.components.schemas.Problem.required).toEqual(
       expect.arrayContaining(['type', 'title', 'status', 'detail', 'instance']),
     )
-    expect(paths['/release-search-jobs'].post.parameters).toEqual(
-      expect.arrayContaining([{ $ref: '#/components/parameters/IdempotencyKey' }]),
-    )
     expect(paths['/connector-sync-jobs'].post.parameters).toEqual(
       expect.arrayContaining([{ $ref: '#/components/parameters/IdempotencyKey' }]),
     )
-    expect(paths['/download-tasks'].get.parameters).toEqual(
+    expect(paths['/downloads'].post.parameters).toEqual(
+      expect.arrayContaining([{ $ref: '#/components/parameters/IdempotencyKey' }]),
+    )
+    expect(paths['/downloads'].get.parameters).toEqual(
       expect.arrayContaining([{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }]),
     )
     expect(document.components.schemas.Media.required).toContain('mediaKey')
-    expect(document.components.schemas.DownloadDestination.properties).not.toHaveProperty('endpoint')
+    expect(document.components.schemas.CreateDownload.required).toEqual(['resourceRef', 'downloaderId'])
+    expect(paths).not.toHaveProperty('/release-search-jobs')
+    expect(paths).not.toHaveProperty('/release-search-results/{releaseSearchResultId}')
+    expect(paths).not.toHaveProperty('/download-tasks')
+    expect(paths).not.toHaveProperty('/download-destinations')
     expect(document.components.schemas).not.toHaveProperty('SessionPayload')
     expect(document.components.responses.Unauthorized.headers).toHaveProperty('WWW-Authenticate')
     expect(document.components.responses.Forbidden.headers).toHaveProperty('WWW-Authenticate')
@@ -126,15 +130,12 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(parameter(paths['/media-recommendations'].get, 'year').schema.maximum).toBe(new Date().getUTCFullYear() + 2)
   })
 
-  it('describes browser requests, path types, SSE, audio, and entity concurrency semantically', () => {
-    expect(paths['/downloads/events'].get.parameters).toContainEqual({
-      $ref: '#/components/parameters/ApiVersionQuery',
-    })
-    expect(paths['/downloads/events'].get.parameters).not.toContainEqual({
-      $ref: '#/components/parameters/ApiVersion',
-    })
-    expect(paths['/downloads/events'].get.responses?.['200'].content).toHaveProperty('text/event-stream')
-    expect(paths['/downloads/events'].get.responses?.['200'].content).not.toHaveProperty('application/json')
+  it('describes download lifecycle, audio, and entity concurrency semantically', () => {
+    expect(paths).not.toHaveProperty('/downloads/events')
+    expect(paths).not.toHaveProperty('/music-download-tasks')
+    expect(paths['/downloads/{downloadId}/suspension']).toHaveProperty('put')
+    expect(paths['/downloads/{downloadId}/suspension']).toHaveProperty('delete')
+    expect(paths['/downloads/{downloadId}/cancellation']).toHaveProperty('put')
 
     expect(paths['/music/tracks/{id}/content'].get.responses?.['200'].content).toHaveProperty('audio/mpeg')
     expect(paths['/music/tracks/{id}/content'].get.responses).toHaveProperty('307')

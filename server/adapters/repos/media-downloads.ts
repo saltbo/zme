@@ -1,5 +1,10 @@
 import type { createDb } from '@server/db/client'
-import { dispatchLanes, downloadRecords, mediaSubscriptions, subscriptionDownloadRecords } from '@server/db/schema'
+import {
+  dispatchLanes,
+  downloadDispatchRecords as downloadRecords,
+  mediaSubscriptions,
+  subscriptionDownloadRecords,
+} from '@server/db/schema'
 import type {
   DispatchLanesRepo,
   DownloadRecordRecord,

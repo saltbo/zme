@@ -2,18 +2,23 @@ import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, In
 import { apiRequest, jsonBody, mergePatch, query } from './client'
 
 export async function searchIndexerOnce(input: {
+  mediaKey?: string
   query: string
   searchType?: 'search' | 'audiosearch' | 'booksearch'
   categories?: number[]
 }) {
-  return apiRequest<{ results: IndexerSearchItem[] }>(
+  const response = await apiRequest<{ items: IndexerSearchItem[] }>(
     `/api/release-candidates${query({
-      q: input.query,
+      mediaKey: input.mediaKey,
+      query: input.query,
       searchType: input.searchType,
       categories: input.categories?.join('|'),
+      page: 1,
+      pageSize: 50,
     })}`,
     'Failed to search indexers.',
   )
+  return { results: response.items }
 }
 
 export async function listIndexers() {

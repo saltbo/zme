@@ -109,14 +109,20 @@ function apiPath(path: string): string {
 
 function agentScope(method: string, path: string): string | null {
   if (method === 'GET' && path === '/media') return 'media:read'
-  if (method === 'POST' && path === '/release-search-jobs') return 'release-search-jobs:write'
-  if (method === 'GET' && /^\/release-search-jobs(?:\/[^/]+(?:\/results)?)?$/.test(path)) {
-    return 'release-search-jobs:read'
+  if (method === 'GET' && path === '/release-candidates') return 'release-candidates:read'
+  if (method === 'GET' && (path === '/downloaders' || /^\/downloaders\/[^/]+$/.test(path))) {
+    return 'downloaders:read'
   }
-  if (method === 'GET' && /^\/release-search-results\/[^/]+$/.test(path)) return 'release-search-jobs:read'
-  if (method === 'POST' && path === '/download-tasks') return 'download-tasks:write'
-  if (method === 'GET' && /^\/download-tasks(?:\/[^/]+)?$/.test(path)) return 'download-tasks:read'
-  if (method === 'GET' && path === '/download-destinations') return 'download-destinations:read'
+  if (method === 'POST' && path === '/downloads') return 'downloads:write'
+  if (method === 'GET' && /^\/downloads(?:\/[^/]+(?:\/(?:suspension|cancellation))?)?$/.test(path)) {
+    return 'downloads:read'
+  }
+  if (
+    (method === 'PUT' || method === 'DELETE') &&
+    /^\/downloads\/[^/]+(?:\/(?:suspension|cancellation))?$/.test(path)
+  ) {
+    return 'downloads:manage'
+  }
   return null
 }
 

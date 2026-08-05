@@ -90,8 +90,7 @@ export const normalizeProblemMiddleware: MiddlewareHandler<AppEnv> = async (c, n
 
 export const apiVersionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const queryVersioned =
-    (c.req.method === 'GET' && c.req.path === '/api/downloads/events') ||
-    ((c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/music\/tracks\/[^/]+\/content$/.test(c.req.path))
+    (c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/music\/tracks\/[^/]+\/content$/.test(c.req.path)
   const version = queryVersioned ? c.req.query('apiVersion') : c.req.header('API-Version')
   if (version !== API_VERSION) {
     return problem(c, 400, 'unsupported-api-version', `API-Version must be ${API_VERSION}`)

@@ -10,7 +10,9 @@ import type {
   DownloadDispatchQueue,
   DownloaderGateway,
   DownloadersRepo,
+  DownloadReconciliationQueue,
   DownloadRecordsRepo,
+  DownloadsRepo,
   DownloadTaskGateway,
   IndexerGateway,
   IndexersRepo,
@@ -23,14 +25,12 @@ import type {
   MusicConnectorModule,
   MusicDownloadKeysRepo,
   MusicProvider,
-  ResourceApiRepo,
 } from './ports'
 
 export interface Deps {
   identityRepo: IdentityRepo
   oidcClient: OidcClient
   dpopTokenValidator: DpopTokenValidator
-  resourceApiRepo: ResourceApiRepo
   libraryRepo: LibraryRepo
   connectorsRepo: ConnectorsRepo
   connectorLoginAttemptsRepo: ConnectorLoginAttemptsRepo
@@ -40,6 +40,8 @@ export interface Deps {
   musicDownloadKeysRepo: MusicDownloadKeysRepo
   mediaSubscriptionsRepo: MediaSubscriptionsRepo
   downloadRecordsRepo: DownloadRecordsRepo
+  downloadsRepo: DownloadsRepo
+  downloadReconciliationQueue?: DownloadReconciliationQueue
   dispatchLanesRepo: DispatchLanesRepo
   downloadDispatchQueue: DownloadDispatchQueue
   downloadersRepo: DownloadersRepo

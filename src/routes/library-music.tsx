@@ -558,7 +558,7 @@ function MusicTrackDownloadButton({
   async function handleDownload(downloader: DownloaderSummary, force = false) {
     setSubmittingDownloaderId(downloader.id)
     try {
-      await submitMusicTrackDownload(track.id, {
+      await submitMusicTrackDownload(track.mediaKey, {
         downloaderId: downloader.id,
         releaseId: track.release?.id,
         force,

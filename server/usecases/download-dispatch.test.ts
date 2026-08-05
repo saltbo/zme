@@ -7,6 +7,21 @@ import type { DownloadRecordRecord } from './ports'
 
 const laneKey = 'music:connector-1'
 
+function canonicalDownloadsRepo() {
+  let stored: Record<string, unknown> | null = null
+  return {
+    get: async () => stored,
+    create: async (record: Record<string, unknown>) => {
+      stored = record
+      return true
+    },
+    update: async (_userId: string, _id: string, _revision: string, patch: Record<string, unknown>) => {
+      stored = { ...stored, ...patch }
+      return stored
+    },
+  }
+}
+
 function downloadRecord(id: string, resourceKey: string): DownloadRecordRecord {
   return {
     id,
@@ -73,6 +88,7 @@ describe('download dispatch lanes', () => {
         },
         hasQueued: async () => records.some((record) => record.status === 'queued'),
       },
+      downloadsRepo: canonicalDownloadsRepo(),
       musicCollectionsRepo: {
         getTrackByMediaKey: async (mediaKey: string) => ({
           id: `track-${mediaKey.at(-1)}`,

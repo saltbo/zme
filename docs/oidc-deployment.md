@@ -7,6 +7,7 @@ ZME is an OIDC relying party, not an identity provider. A deployment must config
 | Variable | Meaning |
 | --- | --- |
 | `PUBLIC_APP_ORIGIN` | Exact public origin, with no path |
+| `DOWNLOAD_RESOURCE_REF_SECRET` | Independent high-entropy secret used to encrypt one-hour release references |
 | `OIDC_ISSUER` | Exact issuer from discovery |
 | `OIDC_CLIENT_ID` | Registered client identifier |
 | `OIDC_ADMIN_SUBJECTS` | Nonempty comma-separated exact `sub` allowlist for the configured issuer |

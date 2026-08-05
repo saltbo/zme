@@ -1,33 +1,44 @@
-import { zValidator } from '@hono/zod-validator'
-import { type DownloadTaskEvent, listDownloadTasks, streamDownloadTaskEvents } from '@server/usecases/download-tasks'
-import { submitDownload } from '@server/usecases/downloaders'
-import { DownloadSubmissionRejectedError, DownloadSubmissionUnknownError } from '@server/usecases/ports'
-import { isValidDownloadSubdirectory } from '@shared/download-metadata'
-import type { Hono } from 'hono'
+import { InvalidDownloadResourceRefError } from '@server/security/download-resource-ref'
+import {
+  cancelDownload,
+  createDownload,
+  deleteDownload,
+  getDownload,
+  listDownloads,
+  resumeDownload,
+  suspendDownload,
+} from '@server/usecases/downloads'
+import type { DownloadRecord } from '@server/usecases/ports'
+import { StaleWriteError } from '@server/usecases/ports'
+import {
+  DownloadManagementUnsupportedError,
+  DownloadNotTerminalError,
+  IdempotencyConflictError,
+  ResourceConflictError,
+  ResourceNotFoundError,
+  ResourceUpstreamError,
+} from '@server/usecases/resource-errors'
+import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { setPageLinks } from './protocol'
+import { entityTag, ifMatchRevision, problem, setPageLinks } from './protocol'
 
-const createDownloadSchema = z.object({
-  downloaderId: z.string().trim().min(1),
-  uri: z.string().trim().min(1),
-  sourceType: z.enum(['http', 'magnet', 'torrent_url']),
-  title: z.string().trim().optional(),
-  category: z.string().trim().min(1).max(120).optional(),
-  targetSubdirectory: z.string().trim().refine(isValidDownloadSubdirectory).optional(),
-  tags: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+const createSchema = z.object({
+  resourceRef: z.string().trim().min(1).max(8_000),
+  downloaderId: z.string().uuid(),
 })
-
-const downloadsQuerySchema = z.object({
+const listSchema = z.object({
   status: z
     .enum([
       'queued',
-      'assigned',
+      'resolving',
+      'waitingSource',
+      'submitting',
+      'submitted',
       'running',
-      'billing_paused',
       'pausing',
       'paused',
-      'uploading',
+      'resuming',
       'canceling',
       'completed',
       'failed',
@@ -39,72 +50,206 @@ const downloadsQuerySchema = z.object({
 })
 
 export function registerDownloadRoutes(routes: Hono<AppEnv>) {
-  routes.get('/downloads', zValidator('query', downloadsQuerySchema), async (c) => {
-    const result = await listDownloadTasks(c.get('deps'), c.get('user').id, c.req.valid('query'), c.req.raw.signal)
-    setPageLinks(c, c.req.valid('query'), result.total)
-    return c.json(result)
-  })
-
-  routes.get('/downloads/events', (c) => {
-    const deps = c.get('deps')
-    const userId = c.get('user').id
-    // Owns stream teardown: aborts upstream downloader streams both when the
-    // request is aborted and when the response body consumer cancels.
-    const aborter = new AbortController()
-    c.req.raw.signal.addEventListener('abort', () => aborter.abort(), { once: true })
-    const encoder = new TextEncoder()
-    let closed = false
-
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(encoder.encode('retry: 5000\n\n'))
-        const send = (event: DownloadTaskEvent) => {
-          if (closed) return
-          controller.enqueue(encoder.encode(`event: ${event.event}\ndata: ${JSON.stringify(event.data)}\n\n`))
-        }
-
-        streamDownloadTaskEvents(deps, userId, aborter.signal, send)
-          .catch((error) => {
-            send({
-              event: 'stream-error',
-              data: { message: error instanceof Error ? error.message : 'Download task stream failed.' },
-            })
-          })
-          .finally(() => {
-            if (closed) return
-            closed = true
-            controller.close()
-          })
-      },
-      cancel() {
-        closed = true
-        aborter.abort()
-      },
-    })
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
+  routes.get('/downloads', async (c) => {
+    const parsed = listSchema.safeParse(c.req.query())
+    if (!parsed.success) return problem(c, 422, 'validation-error', 'Request validation failed')
+    const result = await listDownloads(c.get('deps'), c.get('principal').userId, parsed.data)
+    setPageLinks(c, parsed.data, result.total)
+    return c.json({
+      items: await Promise.all(result.items.map((item) => representation(c, item))),
+      pagination: {
+        ...parsed.data,
+        totalItems: result.total,
+        totalPages: Math.ceil(result.total / parsed.data.pageSize),
       },
     })
   })
 
-  routes.post('/downloads', zValidator('json', createDownloadSchema), async (c) => {
-    const idempotencyKey = c.req.header('Idempotency-Key')?.trim()
-    if (!idempotencyKey || idempotencyKey.length > 200) {
-      return c.json({ error: 'Idempotency-Key is required.' }, 400)
-    }
+  routes.post('/downloads', async (c) => {
+    const key = c.req.header('Idempotency-Key')?.trim()
+    if (!key || key.length > 200) return problem(c, 400, 'idempotency-key-required', 'Idempotency-Key is required')
+    const parsed = createSchema.safeParse(await safeJson(c))
+    if (!parsed.success) return problem(c, 422, 'validation-error', 'Request validation failed')
     try {
-      const item = await submitDownload(c.get('deps'), c.get('user').id, c.req.valid('json'), idempotencyKey)
-      return c.json({ item }, 202)
+      const item = await createDownload(c.get('deps'), c.env, c.get('principal').userId, key, parsed.data)
+      c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}`)
+      c.header('ETag', entityTag(item.updatedAt))
+      return c.json(await representation(c, item), 201)
     } catch (error) {
-      if (error instanceof DownloadSubmissionRejectedError) return c.json({ error: error.message }, 422)
-      if (error instanceof DownloadSubmissionUnknownError) {
-        return c.json({ error: 'Download submission outcome is unknown; retry with the same Idempotency-Key.' }, 502)
-      }
-      throw error
+      return resourceError(c, error)
     }
   })
+
+  routes.get('/downloads/:id', async (c) => {
+    const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
+    if (!item) return problem(c, 404, 'not-found', 'Download not found')
+    c.header('ETag', entityTag(item.updatedAt))
+    c.header('Cache-Control', 'private, no-store')
+    return c.json(await representation(c, item))
+  })
+
+  routes.delete('/downloads/:id', async (c) => {
+    const revision = requireIfMatch(c)
+    if (revision instanceof Response) return revision
+    try {
+      await deleteDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      return c.body(null, 204)
+    } catch (error) {
+      return resourceError(c, error)
+    }
+  })
+
+  routes.get('/downloads/:id/suspension', async (c) => {
+    const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
+    if (!item) return problem(c, 404, 'not-found', 'Download not found')
+    if (!item.suspensionCreatedAt) return problem(c, 404, 'not-found', 'Download suspension not found')
+    c.header('ETag', entityTag(item.updatedAt))
+    return c.json(suspensionRepresentation(c, item))
+  })
+
+  routes.put('/downloads/:id/suspension', async (c) => {
+    const revision = requireIfMatch(c)
+    if (revision instanceof Response) return revision
+    try {
+      const existing = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
+      const item = await suspendDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}/suspension`)
+      c.header('ETag', entityTag(item.updatedAt))
+      return existing?.suspensionCreatedAt
+        ? c.json(suspensionRepresentation(c, item), 200)
+        : c.json(suspensionRepresentation(c, item), 201)
+    } catch (error) {
+      return resourceError(c, error)
+    }
+  })
+
+  routes.delete('/downloads/:id/suspension', async (c) => {
+    const revision = requireIfMatch(c)
+    if (revision instanceof Response) return revision
+    try {
+      const item = await resumeDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      c.header('ETag', entityTag(item.updatedAt))
+      return c.body(null, 204)
+    } catch (error) {
+      return resourceError(c, error)
+    }
+  })
+
+  routes.get('/downloads/:id/cancellation', async (c) => {
+    const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
+    if (!item) return problem(c, 404, 'not-found', 'Download not found')
+    if (!item.cancellationCreatedAt) return problem(c, 404, 'not-found', 'Download cancellation not found')
+    c.header('ETag', entityTag(item.updatedAt))
+    return c.json(cancellationRepresentation(c, item))
+  })
+
+  routes.put('/downloads/:id/cancellation', async (c) => {
+    const revision = requireIfMatch(c)
+    if (revision instanceof Response) return revision
+    try {
+      const existing = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
+      const item = await cancelDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}/cancellation`)
+      c.header('ETag', entityTag(item.updatedAt))
+      return existing?.cancellationCreatedAt
+        ? c.json(cancellationRepresentation(c, item), 200)
+        : c.json(cancellationRepresentation(c, item), 201)
+    } catch (error) {
+      return resourceError(c, error)
+    }
+  })
+}
+
+async function representation(c: Context<AppEnv>, item: DownloadRecord) {
+  const base = `${new URL(c.req.url).origin}/api`
+  const downloader = await c.get('deps').downloadersRepo.get(item.userId, item.downloaderId)
+  const managementSupported = downloader?.kind === 'zpan' && c.get('deps').downloadTaskGateways.zpan !== undefined
+  return {
+    id: item.id,
+    resourceRef: item.resourceRef,
+    resourceKind: item.resourceKind,
+    resourceKey: item.resourceKey,
+    downloaderId: item.downloaderId,
+    downloaderName: downloader?.description ?? downloader?.kind ?? item.downloaderId,
+    downloaderKind: downloader?.kind ?? 'aria2',
+    managementSupported,
+    sourceType: item.spec.sourceType,
+    sourceUri: item.spec.uri,
+    name: item.spec.title ?? item.resourceKey,
+    targetFolder: item.spec.targetFolder ?? '',
+    category: item.spec.category ?? null,
+    tags: item.spec.tags ?? [],
+    status: item.status,
+    stage: item.stage,
+    externalTaskId: item.externalTaskId,
+    downstreamStatus: item.downstreamStatus,
+    progress: {
+      downloadedBytes: item.downloadedBytes,
+      storageUploadedBytes: item.storageUploadedBytes,
+      totalBytes: item.totalBytes,
+      downloadBps: item.downloadBps,
+      storageUploadBps: item.storageUploadBps,
+    },
+    result:
+      item.status === 'completed'
+        ? { objectId: item.resultObjectId, name: item.resultName, targetFolder: item.resultTargetFolder }
+        : null,
+    error: item.error,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    completedAt: item.completedAt,
+    links: {
+      self: `${base}/downloads/${item.id}`,
+      suspension: `${base}/downloads/${item.id}/suspension`,
+      cancellation: `${base}/downloads/${item.id}/cancellation`,
+      downloader: `${base}/downloaders/${item.downloaderId}`,
+    },
+  }
+}
+
+function suspensionRepresentation(c: Context<AppEnv>, item: DownloadRecord) {
+  return {
+    downloadId: item.id,
+    createdAt: item.suspensionCreatedAt,
+    links: { self: `${new URL(c.req.url).origin}/api/downloads/${item.id}/suspension` },
+  }
+}
+
+function cancellationRepresentation(c: Context<AppEnv>, item: DownloadRecord) {
+  return {
+    downloadId: item.id,
+    createdAt: item.cancellationCreatedAt,
+    links: { self: `${new URL(c.req.url).origin}/api/downloads/${item.id}/cancellation` },
+  }
+}
+
+function requireIfMatch(c: Context<AppEnv>): string | Response {
+  const revision = ifMatchRevision(c)
+  return revision ?? problem(c, 428, 'precondition-required', 'If-Match is required')
+}
+
+function resourceError(c: Context<AppEnv>, error: unknown): Response {
+  if (error instanceof InvalidDownloadResourceRefError)
+    return problem(c, 422, 'invalid-resource-ref', 'The download resource reference is invalid', error.message)
+  if (error instanceof IdempotencyConflictError)
+    return problem(c, 409, 'idempotency-conflict', 'Idempotency-Key was reused with different content')
+  if (error instanceof ResourceNotFoundError) return problem(c, 404, 'not-found', error.message)
+  if (error instanceof StaleWriteError)
+    return problem(c, 412, 'precondition-failed', 'The Download changed after it was read')
+  if (error instanceof DownloadManagementUnsupportedError)
+    return problem(c, 409, 'download-management-unsupported', error.message)
+  if (error instanceof DownloadNotTerminalError) return problem(c, 409, 'download-not-terminal', error.message)
+  if (error instanceof ResourceConflictError) {
+    return problem(c, 409, 'download-conflict', error.message)
+  }
+  if (error instanceof ResourceUpstreamError) return problem(c, 502, 'downloader-unavailable', error.message)
+  throw error
+}
+
+async function safeJson(c: Context<AppEnv>): Promise<unknown> {
+  try {
+    return await c.req.json()
+  } catch {
+    return null
+  }
 }

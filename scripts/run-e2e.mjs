@@ -20,6 +20,7 @@ const e2eVars = {
   OIDC_LEGACY_BINDINGS_JSON: '[]',
   CONNECTOR_CREDENTIALS_SECRET: 'e2e-independent-connector-secret-32-chars',
   MUSIC_AUTO_TAGGING_ENABLED: 'true',
+  DOWNLOAD_RESOURCE_REF_SECRET: 'e2e-download-resource-ref-secret',
 }
 
 try {

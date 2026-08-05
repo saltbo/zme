@@ -6,8 +6,7 @@ import { expect, it } from 'vitest'
 it('preserves legacy users and every representative ownership edge during the OIDC migration', async () => {
   const migrationDb = (env as typeof env & { MIGRATION_DB: D1Database }).MIGRATION_DB
   const migrations = env.TEST_MIGRATIONS
-  const identityMigrations = migrations.slice(-7)
-  expect(identityMigrations.map((migration) => migration.name)).toEqual([
+  const identityMigrationNames = [
     '20260804163838_pretty_wonder_man.sql',
     '20260804164145_strange_chimera.sql',
     '20260804173146_fair_iron_monger.sql',
@@ -15,9 +14,12 @@ it('preserves legacy users and every representative ownership edge during the OI
     '20260804193231_lively_centennial.sql',
     '20260804194251_fine_ma_gnuci.sql',
     '20260804200947_tranquil_mindworm.sql',
-  ])
+  ]
+  const identityMigrations = migrations.filter((migration) => identityMigrationNames.includes(migration.name))
+  expect(identityMigrations.map((migration) => migration.name)).toEqual(identityMigrationNames)
 
-  await applyD1Migrations(migrationDb, migrations.slice(0, -7))
+  const firstIdentityMigration = migrations.findIndex((migration) => migration.name === identityMigrationNames[0])
+  await applyD1Migrations(migrationDb, migrations.slice(0, firstIdentityMigration))
   await migrationDb.batch([
     migrationDb
       .prepare(

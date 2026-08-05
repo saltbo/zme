@@ -1,5 +1,4 @@
 import type {
-  CreateDownloadResult,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
   MusicDiscoveryInput,
@@ -51,10 +50,8 @@ export async function getMusicAlbumDetails(mediaKey: string) {
   )
 }
 
-export async function submitMusicTrackDownload(trackId: string, input: MusicTrackDownloadInput) {
-  return apiRequest<{ item: CreateDownloadResult }>(
-    '/api/music-download-tasks',
-    'Failed to submit music download.',
-    jsonBody({ trackId, ...input }),
-  )
+export async function submitMusicTrackDownload(mediaKey: string, input: MusicTrackDownloadInput) {
+  const init = jsonBody({ resourceRef: `music-track:${mediaKey}`, downloaderId: input.downloaderId })
+  init.headers = { 'Idempotency-Key': crypto.randomUUID() }
+  return apiRequest('/api/downloads', 'Failed to submit music download.', init)
 }

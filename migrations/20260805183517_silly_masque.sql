@@ -1,0 +1,2 @@
+DROP INDEX `download_records_user_resource_idx`;--> statement-breakpoint
+CREATE INDEX `download_dispatch_records_user_resource_idx` ON `download_dispatch_records` (`user_id`,`resource_kind`,`resource_key`);

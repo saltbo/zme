@@ -23,7 +23,7 @@ export async function apiRequest<T>(path: string, fallbackMessage: string, init?
     ...init,
     credentials: 'include',
     headers: {
-      'API-Version': '2026-08-04',
+      'API-Version': '2026-08-05',
       ...(init?.body ? { 'content-type': 'application/json' } : {}),
       ...init?.headers,
     },

@@ -16,7 +16,7 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL,
-    extraHTTPHeaders: { 'API-Version': '2026-08-04' },
+    extraHTTPHeaders: { 'API-Version': '2026-08-05' },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

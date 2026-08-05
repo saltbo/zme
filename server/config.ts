@@ -1,6 +1,6 @@
 import type { Env } from './env'
 
-export const API_VERSION = '2026-08-04'
+export const API_VERSION = '2026-08-05'
 const ASYMMETRIC_JWT_ALGORITHMS = new Set([
   'RS256',
   'RS384',
@@ -23,6 +23,7 @@ export interface IdentityBinding {
 export interface AppConfig {
   appOrigin: string
   resourceUrl: string
+  downloadResourceRefSecret?: string
   oidc: {
     issuer: string
     clientId: string
@@ -70,6 +71,7 @@ export function readConfig(env: Env): AppConfig {
   return {
     appOrigin,
     resourceUrl,
+    downloadResourceRefSecret: env.DOWNLOAD_RESOURCE_REF_SECRET?.trim() || undefined,
     oidc: {
       issuer,
       clientId,

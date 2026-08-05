@@ -51,8 +51,8 @@ export const dpopReplays = sqliteTable(
   (table) => [uniqueIndex('dpop_replays_issuer_jti_key_idx').on(table.issuer, table.proofJti, table.keyThumbprint)],
 )
 
-export const releaseSearchJobs = sqliteTable(
-  'release_search_jobs',
+export const downloads = sqliteTable(
+  'downloads',
   {
     id: text('id').primaryKey(),
     userId: text('user_id')
@@ -60,69 +60,33 @@ export const releaseSearchJobs = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     idempotencyKey: text('idempotency_key').notNull(),
     requestHash: text('request_hash').notNull(),
-    mediaKey: text('media_key').notNull(),
-    mediaTitle: text('media_title').notNull(),
-    query: text('query').notNull(),
-    searchType: text('search_type').notNull(),
-    categoriesJson: text('categories_json').notNull().default('[]'),
-    status: text('status', { enum: ['running', 'completed', 'failed'] }).notNull(),
-    error: text('error'),
-    leaseOwner: text('lease_owner'),
-    leaseExpiresAt: text('lease_expires_at'),
-    createdAt: text('created_at').notNull(),
-    completedAt: text('completed_at'),
-  },
-  (table) => [uniqueIndex('release_search_jobs_user_idempotency_idx').on(table.userId, table.idempotencyKey)],
-)
-
-export const releaseSearchResults = sqliteTable(
-  'release_search_results',
-  {
-    id: text('id').primaryKey(),
-    jobId: text('job_id')
-      .notNull()
-      .references(() => releaseSearchJobs.id, { onDelete: 'cascade' }),
-    position: integer('position').notNull(),
-    payloadJson: text('payload_json').notNull(),
-    createdAt: text('created_at').notNull(),
-  },
-  (table) => [uniqueIndex('release_search_results_job_position_idx').on(table.jobId, table.position)],
-)
-
-export const manualDownloadTasks = sqliteTable(
-  'manual_download_tasks',
-  {
-    id: text('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
-    idempotencyKey: text('idempotency_key').notNull(),
-    requestHash: text('request_hash').notNull(),
-    releaseSearchResultId: text('release_search_result_id')
-      .notNull()
-      .references(() => releaseSearchResults.id, { onDelete: 'restrict' }),
+    resourceRef: text('resource_ref').notNull(),
+    resourceKind: text('resource_kind', { enum: ['release', 'music_track'] }).notNull(),
+    resourceKey: text('resource_key').notNull(),
     downloaderId: text('downloader_id')
       .notNull()
       .references(() => downloaders.id, { onDelete: 'restrict' }),
+    specJson: text('spec_json').notNull(),
     status: text('status', {
-      enum: ['submitting', 'submitted', 'running', 'completed', 'failed', 'canceled'],
-    }).notNull(),
-    externalTaskId: text('external_task_id'),
-    downstreamStatus: text('downstream_status', {
       enum: [
         'queued',
-        'assigned',
+        'resolving',
+        'waitingSource',
+        'submitting',
+        'submitted',
         'running',
-        'billing_paused',
         'pausing',
         'paused',
-        'uploading',
+        'resuming',
         'canceling',
         'completed',
         'failed',
         'canceled',
       ],
-    }),
+    }).notNull(),
+    stage: text('stage', { enum: ['downloading', 'uploading'] }),
+    externalTaskId: text('external_task_id'),
+    downstreamStatus: text('downstream_status'),
     downstreamRevision: text('downstream_revision'),
     downloadedBytes: integer('downloaded_bytes').notNull().default(0),
     storageUploadedBytes: integer('storage_uploaded_bytes').notNull().default(0),
@@ -133,10 +97,18 @@ export const manualDownloadTasks = sqliteTable(
     resultName: text('result_name'),
     resultTargetFolder: text('result_target_folder'),
     error: text('error'),
+    suspensionCreatedAt: text('suspension_created_at'),
+    cancellationCreatedAt: text('cancellation_created_at'),
+    legacyDownloadRecordId: text('legacy_download_record_id'),
     createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
     completedAt: text('completed_at'),
   },
-  (table) => [uniqueIndex('manual_download_tasks_user_idempotency_idx').on(table.userId, table.idempotencyKey)],
+  (table) => [
+    uniqueIndex('downloads_user_idempotency_idx').on(table.userId, table.idempotencyKey),
+    index('downloads_user_created_idx').on(table.userId, table.createdAt),
+    index('downloads_status_updated_idx').on(table.status, table.updatedAt),
+  ],
 )
 
 export const downloaders = sqliteTable('downloaders', {
@@ -473,8 +445,8 @@ export const mediaSubscriptions = sqliteTable(
   ],
 )
 
-export const downloadRecords = sqliteTable(
-  'download_records',
+export const downloadDispatchRecords = sqliteTable(
+  'download_dispatch_records',
   {
     id: text('id').primaryKey(),
     userId: text('user_id')
@@ -501,7 +473,7 @@ export const downloadRecords = sqliteTable(
     updatedAt: text('updated_at').notNull(),
   },
   (table) => [
-    uniqueIndex('download_records_user_resource_idx').on(table.userId, table.resourceKind, table.resourceKey),
+    index('download_dispatch_records_user_resource_idx').on(table.userId, table.resourceKind, table.resourceKey),
     index('download_records_status_idx').on(table.status, table.updatedAt),
   ],
 )
@@ -514,7 +486,7 @@ export const subscriptionDownloadRecords = sqliteTable(
       .references(() => mediaSubscriptions.id, { onDelete: 'cascade' }),
     downloadRecordId: text('download_record_id')
       .notNull()
-      .references(() => downloadRecords.id, { onDelete: 'cascade' }),
+      .references(() => downloadDispatchRecords.id, { onDelete: 'cascade' }),
     createdAt: text('created_at').notNull(),
   },
   (table) => [
@@ -549,5 +521,5 @@ export type MusicReleaseRow = typeof musicReleases.$inferSelect
 export type MusicReleaseTrackRow = typeof musicReleaseTracks.$inferSelect
 export type MusicDownloadKey = typeof musicDownloadKeys.$inferSelect
 export type MediaSubscription = typeof mediaSubscriptions.$inferSelect
-export type DownloadRecord = typeof downloadRecords.$inferSelect
+export type DownloadDispatchRecord = typeof downloadDispatchRecords.$inferSelect
 export type DispatchLane = typeof dispatchLanes.$inferSelect

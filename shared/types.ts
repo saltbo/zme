@@ -639,6 +639,8 @@ export type DownloadSearchTarget = 'music' | 'ebook' | 'audiobook'
 
 export interface IndexerSearchItem {
   id: string
+  resourceRef?: string
+  resourceRefExpiresAt?: string
   downloadTarget: DownloadSearchTarget | null
   title: string
   fileName: string | null
@@ -772,12 +774,14 @@ export interface DownloaderInput {
 
 export type DownloadTaskStatus =
   | 'queued'
-  | 'assigned'
+  | 'resolving'
+  | 'waitingSource'
+  | 'submitting'
+  | 'submitted'
   | 'running'
-  | 'billing_paused'
   | 'pausing'
   | 'paused'
-  | 'uploading'
+  | 'resuming'
   | 'canceling'
   | 'completed'
   | 'failed'
@@ -795,6 +799,7 @@ export interface DownloadTaskSummary {
   category: string | null
   tags: string[]
   status: DownloadTaskStatus
+  stage?: 'downloading' | 'uploading' | null
   downloadedBytes: number
   storageUploadedBytes: number
   totalBytes: number | null

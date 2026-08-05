@@ -166,7 +166,18 @@ async function stubReleaseSearchApis(page: Page, getSearchGate: () => Promise<vo
   })
   await page.route(/\/api\/release-candidates(?:\?.*)?$/, async (route) => {
     await getSearchGate()
-    await route.fulfill({ json: { results: [indexerRelease()] } })
+    await route.fulfill({
+      json: {
+        items: [
+          {
+            ...indexerRelease(),
+            resourceRef: 'release-ref:v1:e2e-opaque',
+            resourceRefExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          },
+        ],
+        pagination: { page: 1, pageSize: 50, totalItems: 1, totalPages: 1 },
+      },
+    })
   })
 }
 

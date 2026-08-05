@@ -11,6 +11,9 @@ OIDC_ADMIN_SUBJECTS=local-admin-subject
 # Required for encrypting third-party connector sessions at rest.
 CONNECTOR_CREDENTIALS_SECRET=replace-with-an-independent-32-character-secret
 
+# Required for one-hour, user-bound encrypted release candidate references.
+DOWNLOAD_RESOURCE_REF_SECRET=replace-with-another-independent-32-character-secret
+
 # Streams MP3/FLAC files through ZME only when standard music tags need to be added or corrected.
 MUSIC_AUTO_TAGGING_ENABLED=false
 

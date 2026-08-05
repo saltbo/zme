@@ -25,14 +25,17 @@ import { cn, formatBytes } from '@/lib/utils'
 
 const activeStatuses = new Set<DownloadTaskStatus>([
   'queued',
-  'assigned',
+  'resolving',
+  'waitingSource',
+  'submitting',
+  'submitted',
   'running',
-  'billing_paused',
   'pausing',
-  'uploading',
+  'paused',
+  'resuming',
   'canceling',
 ])
-const statusFilters: DownloadTaskStatus[] = ['running', 'uploading', 'paused', 'completed', 'failed', 'canceled']
+const statusFilters: DownloadTaskStatus[] = ['running', 'paused', 'completed', 'failed', 'canceled']
 const skeletonKeys = ['download-skeleton-1', 'download-skeleton-2', 'download-skeleton-3', 'download-skeleton-4']
 type StatusFilter = 'all' | DownloadTaskStatus
 type TaggedResource = { kind: 'music' | 'book'; mediaKey: string }
@@ -279,7 +282,7 @@ function getStatusMeta(status: DownloadTaskStatus, t: (key: string) => string) {
       className: 'text-red-100',
     }
   }
-  if (status === 'queued' || status === 'assigned') {
+  if (status === 'queued' || status === 'resolving' || status === 'waitingSource' || status === 'submitting') {
     return { label: getStatusLabel(status, t), icon: Clock, className: 'text-amber-100' }
   }
   return { label: getStatusLabel(status, t), icon: LoaderCircle, className: 'text-white' }
@@ -300,18 +303,18 @@ function getPrimaryProgress(
   status: DownloadTaskStatus,
   progress: ReturnType<typeof getProgress>,
 ): { value: number; label: string } {
-  return status === 'uploading' || status === 'completed' ? progress.upload : progress.download
+  return status === 'completed' ? progress.upload : progress.download
 }
 
 function getStageMetric(task: DownloadTaskSummary, progress: { value: number; label: string }) {
-  if (task.status === 'running') {
+  if (task.status === 'running' && task.stage !== 'uploading') {
     return {
       icon: DownloadCloud,
       className: 'text-sky-200',
       label: `${formatRate(task.downloadBps)}/s · ${progress.label}`,
     }
   }
-  if (task.status === 'uploading') {
+  if (task.status === 'running' && task.stage === 'uploading') {
     return {
       icon: UploadCloud,
       className: 'text-emerald-200',

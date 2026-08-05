@@ -41,6 +41,7 @@ export interface MediaReleaseSearchOptions {
 export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: IndexerSearchItem[]) => void
 
 interface SearchTask {
+  mediaKey?: string
   query: string
   kind: ReleaseSearchStepKind
   searchType?: 'search' | 'audiosearch' | 'booksearch'
@@ -71,6 +72,7 @@ export async function searchMediaReleasesInSteps(
 
   for (const [batchIndex, searchesInBatch] of batches.entries()) {
     const batch = searchesInBatch.map((search) => ({
+      mediaKey: input.tmdbId && input.kind ? `tmdb:${input.kind}:${input.tmdbId}` : undefined,
       query: search.query,
       kind: search.titleKind,
     }))
@@ -100,7 +102,11 @@ export async function searchResourceReleasesInSteps(
   onProgress: ReleaseSearchProgressHandler,
 ): Promise<ReleaseSearchOutcome> {
   const collected: IndexerSearchItem[] = []
-  const targeted = getResourceSearchQueries(input, true).map((search) => ({ ...search, kind: 'targeted' as const }))
+  const targeted = getResourceSearchQueries(input, true).map((search) => ({
+    ...search,
+    mediaKey: input.mediaKey,
+    kind: 'targeted' as const,
+  }))
   const primaryError = await runSearches(
     targeted,
     'automatic',
@@ -112,7 +118,11 @@ export async function searchResourceReleasesInSteps(
   const primaryResults = scoreResourceResults(collected, input)
   if (primaryResults.length > 0) return { items: primaryResults, stoppedEarly: false }
 
-  const fallback = getResourceSearchQueries(input, false).map((search) => ({ ...search, kind: 'fallback' as const }))
+  const fallback = getResourceSearchQueries(input, false).map((search) => ({
+    ...search,
+    mediaKey: input.mediaKey,
+    kind: 'fallback' as const,
+  }))
   const fallbackError = await runSearches(
     fallback,
     'fallback',
@@ -169,6 +179,7 @@ async function runSearches(
         emit()
 
         void searchIndexerOnce({
+          mediaKey: searches[index].mediaKey,
           query: searches[index].query,
           searchType: searches[index].searchType,
           categories: searches[index].categories,

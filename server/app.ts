@@ -12,7 +12,7 @@ import { registerMediaRoutes } from './http/media'
 import { registerMediaSourceRoutes } from './http/media-sources'
 import { requireAdminMiddleware, requireAuthMiddleware } from './http/middleware'
 import { registerMusicRoutes } from './http/music'
-import { registerMusicDownloadRoutes, registerPublicMusicDownloadRoutes } from './http/music-downloads'
+import { registerPublicMusicDownloadRoutes } from './http/music-downloads'
 import { registerMusicLibraryRoutes } from './http/music-library'
 import { apiVersionMiddleware, normalizeProblemMiddleware, problem, requestBoundaryMiddleware } from './http/protocol'
 import { registerPublicContractRoutes, registerResourceApiRoutes } from './http/resource-api'
@@ -43,7 +43,6 @@ registerResourceApiRoutes(routes)
 registerMediaRoutes(routes)
 registerBookRoutes(routes)
 registerMusicRoutes(routes)
-registerMusicDownloadRoutes(routes)
 registerMusicLibraryRoutes(routes)
 registerConnectorRoutes(routes)
 registerIndexerRoutes(routes)

@@ -1,4 +1,6 @@
 import { zValidator } from '@hono/zod-validator'
+import { readConfig } from '@server/config'
+import { issueReleaseResourceRef } from '@server/security/download-resource-ref'
 import {
   checkIndexerHealth,
   createIndexer,
@@ -17,9 +19,12 @@ import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protoc
 import { idParamsSchema } from './schemas'
 
 const indexerSearchQuerySchema = z.object({
-  q: z.string().trim().min(1),
+  mediaKey: z.string().trim().min(1).max(300),
+  query: z.string().trim().min(1).max(300),
   searchType: z.enum(['search', 'audiosearch', 'booksearch']).optional(),
   categories: z.string().trim().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(50),
 })
 
 const indexerSchema = z.object({
@@ -33,15 +38,38 @@ const indexerSchema = z.object({
 const indexerPatchSchema = indexerSchema.partial().refine((value) => Object.keys(value).length > 0)
 export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   routes.get('/release-candidates', zValidator('query', indexerSearchQuerySchema), async (c) => {
-    const { q, searchType, categories } = c.req.valid('query')
+    const { mediaKey, query, searchType, categories, page, pageSize } = c.req.valid('query')
     try {
       const deps = c.get('deps')
       const results = await searchIndexers(deps, {
-        query: q,
+        query,
         searchType,
         categories: parseNumberList(categories),
       })
-      return c.json({ results })
+      const configured = readConfig(c.env)
+      const principal = c.get('principal')
+      const downloadable = results.filter((item) => item.magnetUrl || item.downloadUrl)
+      const withRefs = await Promise.all(
+        downloadable.map(async (item) => ({
+          ...item,
+          ...(await issueReleaseResourceRef(
+            requiredResourceRefSecret(configured.downloadResourceRefSecret),
+            principal.userId,
+            mediaKey,
+            item,
+          )),
+        })),
+      )
+      const start = (page - 1) * pageSize
+      return c.json({
+        items: withRefs.slice(start, start + pageSize),
+        pagination: {
+          page,
+          pageSize,
+          totalItems: withRefs.length,
+          totalPages: Math.ceil(withRefs.length / pageSize),
+        },
+      })
     } catch (error) {
       if (error instanceof IndexerNotConfiguredError) {
         return c.json({ code: 'INDEXER_NOT_CONFIGURED', error: error.message }, 503)
@@ -119,6 +147,11 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
       return c.json({ error: 'Health observation not found.' }, 404)
     return c.json({ item: health })
   })
+}
+
+function requiredResourceRefSecret(value: string | undefined): string {
+  if (!value) throw new Error('DOWNLOAD_RESOURCE_REF_SECRET is required.')
+  return value
 }
 
 function parseNumberList(value: string | undefined): number[] {

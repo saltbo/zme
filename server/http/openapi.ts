@@ -31,18 +31,13 @@ const publicErrors = {
 }
 const operationSummaries: Record<string, string> = {
   listMedia: 'Search the configured media catalog',
-  listReleaseSearchJobs: 'List release-search jobs owned by the caller',
-  createReleaseSearchJob: 'Create and run a release-search job',
-  getReleaseSearchJob: 'Get an owned release-search job',
-  listReleaseSearchResults: 'List candidates produced by a release-search job',
-  getReleaseSearchResult: 'Get an owned release-search candidate',
-  listDownloadTasks: 'List download tasks owned by the caller',
-  createDownloadTask: 'Create a download task for a release candidate',
-  getDownloadTask: 'Get an owned download task',
-  listDownloadDestinations: 'List safe download destinations available to the caller',
+  listDownloads: 'List downloads owned by the caller',
+  createDownload: 'Create a download from an opaque resource reference',
+  getDownload: 'Get an owned download',
 }
 
 export function openapiDocument(config: AppConfig) {
+  const sessionPaths = sessionApiPaths()
   return {
     openapi: '3.1.0',
     info: {
@@ -50,7 +45,7 @@ export function openapiDocument(config: AppConfig) {
       version: API_VERSION,
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
       description:
-        'Resource-oriented media discovery, release-search job, and download-task API. Local roles and resource ownership further restrict every operation.',
+        'Resource-oriented media discovery, ephemeral release search, and download API. Local roles and resource ownership further restrict every operation.',
     },
     servers: [{ url: config.resourceUrl }],
     tags: [
@@ -59,11 +54,33 @@ export function openapiDocument(config: AppConfig) {
       { name: 'library', description: 'Operate the signed-in user library and music collections.' },
       { name: 'connectors', description: 'Operate signed-in user connector projections.' },
       { name: 'configuration', description: 'Administrator-only indexer, source, and downloader configuration.' },
-      { name: 'downloads', description: 'Operate browser-session download records and streams.' },
+      { name: 'downloads', description: 'Create, inspect, and manage owned downloads.' },
       { name: 'system', description: 'Public service metadata and health.' },
     ],
     paths: {
-      ...sessionApiPaths(),
+      ...sessionPaths,
+      '/downloaders': {
+        ...sessionPaths['/downloaders'],
+        get: {
+          operationId: 'listDownloaders',
+          summary: 'List safe downloader choices',
+          tags: ['downloads'],
+          security: secured('downloaders:read'),
+          parameters,
+          responses: { '200': success('#/components/schemas/DownloaderCollection'), ...errors },
+        },
+      },
+      '/downloaders/{id}': {
+        ...sessionPaths['/downloaders/{id}'],
+        get: {
+          operationId: 'getDownloader',
+          summary: 'Get a safe downloader choice',
+          tags: ['downloads'],
+          security: secured('downloaders:read'),
+          parameters: [...parameters, pathParameter('id')],
+          responses: { '200': success('#/components/schemas/DownloaderEnvelope'), ...errors },
+        },
+      },
       '/media': {
         get: {
           operationId: 'listMedia',
@@ -79,70 +96,51 @@ export function openapiDocument(config: AppConfig) {
           responses: { '200': success('#/components/schemas/MediaCollection'), ...errors },
         },
       },
-      '/release-search-jobs': {
-        get: listOperation(
-          'listReleaseSearchJobs',
-          'release-search-jobs:read',
-          '#/components/schemas/ReleaseSearchJobCollection',
-        ),
-        post: createOperation(
-          'createReleaseSearchJob',
-          'release-search-jobs:write',
-          '#/components/schemas/CreateReleaseSearchJob',
-          '#/components/schemas/ReleaseSearchJob',
-        ),
-      },
-      '/release-search-jobs/{releaseSearchJobId}': {
-        get: getOperation(
-          'getReleaseSearchJob',
-          'release-search-jobs:read',
-          'releaseSearchJobId',
-          '#/components/schemas/ReleaseSearchJob',
-        ),
-      },
-      '/release-search-jobs/{releaseSearchJobId}/results': {
-        get: childListOperation(
-          'listReleaseSearchResults',
-          'release-search-jobs:read',
-          'releaseSearchJobId',
-          '#/components/schemas/ReleaseSearchResultCollection',
-        ),
-      },
-      '/release-search-results/{releaseSearchResultId}': {
-        get: getOperation(
-          'getReleaseSearchResult',
-          'release-search-jobs:read',
-          'releaseSearchResultId',
-          '#/components/schemas/ReleaseSearchResult',
-        ),
-      },
-      '/download-tasks': {
-        get: listOperation('listDownloadTasks', 'download-tasks:read', '#/components/schemas/DownloadTaskCollection'),
-        post: createOperation(
-          'createDownloadTask',
-          'download-tasks:write',
-          '#/components/schemas/CreateDownloadTask',
-          '#/components/schemas/DownloadTask',
-        ),
-      },
-      '/download-tasks/{downloadTaskId}': {
-        get: getOperation(
-          'getDownloadTask',
-          'download-tasks:read',
-          'downloadTaskId',
-          '#/components/schemas/DownloadTask',
-        ),
-      },
-      '/download-destinations': {
+      '/release-candidates': {
         get: {
-          operationId: 'listDownloadDestinations',
-          summary: operationSummaries.listDownloadDestinations,
+          operationId: 'listReleaseCandidates',
+          summary: 'Search ephemeral release candidates',
           tags: ['release-acquisition'],
-          security: secured('download-destinations:read'),
-          parameters,
-          responses: { '200': success('#/components/schemas/DownloadDestinationCollection'), ...errors },
+          security: secured('release-candidates:read'),
+          parameters: [
+            ...parameters,
+            { name: 'mediaKey', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
+            { name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
+            {
+              name: 'searchType',
+              in: 'query',
+              schema: { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] },
+            },
+            { name: 'categories', in: 'query', schema: { type: 'string' } },
+            { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+            { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 50, default: 50 } },
+          ],
+          responses: { '200': success('#/components/schemas/ReleaseCandidateCollection'), ...errors },
         },
       },
+      '/downloads': {
+        get: {
+          ...listOperation('listDownloads', 'downloads:read', '#/components/schemas/DownloadCollection'),
+          parameters: [
+            ...parameters,
+            { name: 'status', in: 'query', schema: { $ref: '#/components/schemas/DownloadStatus' } },
+            { $ref: '#/components/parameters/Page' },
+            { $ref: '#/components/parameters/PageSize' },
+          ],
+        },
+        post: createOperation(
+          'createDownload',
+          'downloads:write',
+          '#/components/schemas/CreateDownload',
+          '#/components/schemas/Download',
+        ),
+      },
+      '/downloads/{downloadId}': {
+        get: getOperation('getDownload', 'downloads:read', 'downloadId', '#/components/schemas/Download'),
+        delete: managedDownloadOperation('deleteDownload', '204'),
+      },
+      '/downloads/{downloadId}/suspension': managedSingletonPath('DownloadSuspension'),
+      '/downloads/{downloadId}/cancellation': managedSingletonPath('DownloadCancellation', false),
     },
     components: {
       securitySchemes: {
@@ -290,7 +288,6 @@ const sessionOperations: SessionOperation[] = [
   ['get', '/music', 'listMusic', 'Search music', 'media-catalog'],
   ['get', '/music-recommendations', 'listMusicRecommendations', 'List music recommendations', 'media-catalog'],
   ['get', '/music/{mediaKey}', 'getMusic', 'Get music details', 'media-catalog'],
-  ['post', '/music-download-tasks', 'createMusicDownloadTask', 'Create a music download task', 'downloads'],
   ['get', '/library', 'listLibraryResources', 'List library resources', 'library'],
   ['get', '/library/states', 'listLibraryStates', 'List library resource states', 'library'],
   ['put', '/library/resources/{mediaKey}', 'putLibraryResource', 'Create or replace a library resource', 'library'],
@@ -339,14 +336,6 @@ const sessionOperations: SessionOperation[] = [
   ['get', '/connector-sync-jobs/{id}', 'getConnectorSyncJob', 'Get a connector sync job', 'connectors'],
   ['get', '/connectors/{id}/playlists', 'listConnectorPlaylists', 'List connector playlists', 'connectors'],
   ['put', '/connectors/{id}/playlists', 'putConnectorPlaylists', 'Replace selected connector playlists', 'connectors'],
-  [
-    'get',
-    '/release-candidates',
-    'listReleaseCandidates',
-    'Search ephemeral release candidates',
-    'configuration',
-    'admin',
-  ],
   ['get', '/indexers', 'listIndexers', 'List indexers', 'configuration', 'admin'],
   ['get', '/indexers/{id}', 'getIndexer', 'Get an indexer', 'configuration', 'admin'],
   ['post', '/indexers', 'createIndexer', 'Create an indexer', 'configuration', 'admin'],
@@ -431,9 +420,6 @@ const sessionOperations: SessionOperation[] = [
     'Get a downloader health observation',
     'configuration',
   ],
-  ['get', '/downloads', 'listBrowserDownloads', 'List browser download records', 'downloads'],
-  ['get', '/downloads/events', 'streamDownloadEvents', 'Stream browser download events', 'downloads'],
-  ['post', '/downloads', 'createBrowserDownload', 'Create a browser download', 'downloads'],
 ]
 
 function sessionApiPaths() {
@@ -463,9 +449,7 @@ function sessionApiPaths() {
               : parameters),
         ...pathParameters,
         ...sessionQueryParameters(operationId),
-        ...(['createConnectorSyncJob', 'createBrowserDownload'].includes(operationId)
-          ? [{ $ref: '#/components/parameters/IdempotencyKey' }]
-          : []),
+        ...(operationId === 'createConnectorSyncJob' ? [{ $ref: '#/components/parameters/IdempotencyKey' }] : []),
         ...(optimisticMutation ? [{ $ref: '#/components/parameters/IfMatch' }] : []),
       ],
       responses: {
@@ -511,8 +495,6 @@ function sessionApiPaths() {
 
 function sessionSuccessStatus(operationId: string, method: SessionOperation[0]) {
   const overrides: Record<string, string> = {
-    createMusicDownloadTask: '202',
-    createBrowserDownload: '202',
     putConnectorPlaylists: '202',
     putMusicCollectionSubscription: '202',
     deleteConnector: '204',
@@ -543,7 +525,6 @@ const sessionResponseSchemaByOperation: Record<string, string> = {
   listMusic: 'MusicPage',
   listMusicRecommendations: 'MusicPage',
   getMusic: 'MusicAlbumEnvelope',
-  createMusicDownloadTask: 'MusicDownloadTaskEnvelope',
   listLibraryResources: 'LibraryPage',
   listLibraryStates: 'LibraryStateCollection',
   putLibraryResource: 'LibraryStateEnvelope',
@@ -567,7 +548,6 @@ const sessionResponseSchemaByOperation: Record<string, string> = {
   getConnectorSyncJob: 'ConnectorSyncJobEnvelope',
   listConnectorPlaylists: 'MusicCollectionCollection',
   putConnectorPlaylists: 'PlaylistSelectionResult',
-  listReleaseCandidates: 'ReleaseCandidateResults',
   listIndexers: 'IndexerCollection',
   getIndexer: 'IndexerEnvelope',
   createIndexer: 'IndexerEnvelope',
@@ -589,12 +569,9 @@ const sessionResponseSchemaByOperation: Record<string, string> = {
   listDownloaderHealthObservations: 'HealthCollection',
   createDownloaderHealthObservation: 'HealthEnvelope',
   getDownloaderHealthObservation: 'HealthEnvelope',
-  listBrowserDownloads: 'BrowserDownloadTaskPage',
-  createBrowserDownload: 'BrowserDownloadResultEnvelope',
 }
 
 const sessionRequestSchemaByOperation: Record<string, string> = {
-  createMusicDownloadTask: '#/components/schemas/MusicDownloadTaskInput',
   putLibraryResource: '#/components/schemas/LibraryResourceStateInput',
   putMusicCollectionSubscription: '#/components/schemas/MusicSubscriptionInput',
   createLibraryMusicAlbum: '#/components/schemas/MusicAlbumInput',
@@ -611,7 +588,6 @@ const sessionRequestSchemaByOperation: Record<string, string> = {
   updateMediaSource: '#/components/schemas/MediaSourcePatch',
   createDownloader: '#/components/schemas/DownloaderInput',
   updateDownloader: '#/components/schemas/DownloaderPatch',
-  createBrowserDownload: '#/components/schemas/BrowserDownloadInput',
 }
 
 function sessionRequestSchema(operationId: string) {
@@ -775,15 +751,13 @@ function sessionQueryParameters(operationId: string): object[] {
     ],
     listMusicCollections: [queryParameter('kind', { type: 'string', enum: ['playlist', 'album'] }, true)],
     listReleaseCandidates: [
-      queryParameter('q', { type: 'string', minLength: 1 }, true),
+      queryParameter('mediaKey', { type: 'string', minLength: 1 }, true),
+      queryParameter('query', { type: 'string', minLength: 1 }, true),
       queryParameter('searchType', { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] }),
       queryParameter('categories', {
         type: 'string',
         description: 'Comma- or pipe-separated positive category identifiers.',
       }),
-    ],
-    listBrowserDownloads: [
-      queryParameter('status', { $ref: '#/components/schemas/DownloadTaskStatus' }),
       page,
       queryParameter('pageSize', { type: 'integer', minimum: 1, maximum: 50, default: 20 }),
     ],
@@ -823,17 +797,6 @@ function listOperation(operationId: string, scope: string, schema: string) {
     responses: { '200': success(schema), ...errors },
   }
 }
-function childListOperation(operationId: string, scope: string, name: string, schema: string) {
-  return {
-    ...listOperation(operationId, scope, schema),
-    parameters: [
-      ...parameters,
-      pathParameter(name),
-      { $ref: '#/components/parameters/Page' },
-      { $ref: '#/components/parameters/PageSize' },
-    ],
-  }
-}
 function getOperation(operationId: string, scope: string, name: string, schema: string) {
   return {
     operationId,
@@ -843,6 +806,51 @@ function getOperation(operationId: string, scope: string, name: string, schema: 
     parameters: [...parameters, pathParameter(name)],
     responses: { '200': success(schema), ...errors },
   }
+}
+function managedDownloadOperation(operationId: string, successStatus: '200' | '204') {
+  return {
+    operationId,
+    summary: operationId,
+    tags: ['downloads'],
+    security: secured('downloads:manage'),
+    parameters: [...parameters, pathParameter('downloadId'), { $ref: '#/components/parameters/IfMatch' }],
+    responses: {
+      [successStatus]:
+        successStatus === '204'
+          ? { description: 'Resource deleted', headers: headers() }
+          : success('#/components/schemas/Download'),
+      '412': { $ref: '#/components/responses/PreconditionFailed' },
+      '428': { $ref: '#/components/responses/PreconditionRequired' },
+      ...errors,
+    },
+  }
+}
+function managedSingletonPath(schema: 'DownloadSuspension' | 'DownloadCancellation', removable = true) {
+  const path = {
+    get: {
+      operationId: `get${schema}`,
+      summary: `Get ${schema}`,
+      tags: ['downloads'],
+      security: secured('downloads:read'),
+      parameters: [...parameters, pathParameter('downloadId')],
+      responses: { '200': success(`#/components/schemas/${schema}`), ...errors },
+    },
+    put: {
+      ...managedDownloadOperation(`create${schema}`, '200'),
+      responses: {
+        '201': {
+          ...success(`#/components/schemas/${schema}`),
+          description: 'Resource created',
+          headers: { ...headers(), Location: { $ref: '#/components/headers/Location' } },
+        },
+        '412': { $ref: '#/components/responses/PreconditionFailed' },
+        '428': { $ref: '#/components/responses/PreconditionRequired' },
+        ...errors,
+      },
+    },
+  } as Record<string, object>
+  if (removable) path.delete = managedDownloadOperation('deleteDownloadSuspension', '204')
+  return path
 }
 function pathParameter(name: string, schema: object = { type: 'string', format: 'uuid' }) {
   return { name, in: 'path', required: true, schema }
@@ -1365,24 +1373,6 @@ function schemas() {
       },
     },
     MusicAlbumEnvelope: envelope('MusicResource'),
-    MusicDownloadTaskInput: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['trackId', 'downloaderId'],
-      properties: {
-        trackId: { type: 'string', minLength: 1 },
-        downloaderId: { type: 'string', minLength: 1 },
-        releaseId: { type: 'string', minLength: 1 },
-        quality: { type: 'string', enum: ['standard', 'exhigh', 'lossless', 'hires'] },
-        force: { type: 'boolean' },
-      },
-    },
-    MusicDownloadTaskEnvelope: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['item'],
-      properties: { item: { $ref: '#/components/schemas/MusicDownloadRecord' } },
-    },
     MusicDownloadRecord: {
       type: 'object',
       additionalProperties: false,
@@ -1918,6 +1908,8 @@ function schemas() {
         'imdbId',
         'tmdbId',
         'tvdbId',
+        'resourceRef',
+        'resourceRefExpiresAt',
       ],
       properties: {
         id: { type: 'string' },
@@ -1941,14 +1933,11 @@ function schemas() {
         imdbId: { type: ['integer', 'null'] },
         tmdbId: { type: ['integer', 'null'] },
         tvdbId: { type: ['integer', 'null'] },
+        resourceRef: { type: 'string', pattern: '^release-ref:v1:' },
+        resourceRefExpiresAt: dateTime,
       },
     },
-    ReleaseCandidateResults: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['results'],
-      properties: { results: { type: 'array', items: { $ref: '#/components/schemas/ReleaseCandidate' } } },
-    },
+    ReleaseCandidateCollection: collection('#/components/schemas/ReleaseCandidate'),
     Health: health,
     HealthEnvelope: envelope('Health'),
     HealthCollection: items('#/components/schemas/Health'),
@@ -2124,102 +2113,6 @@ function schemas() {
         enabled: { type: 'boolean' },
       },
     },
-    DownloadTaskStatus: {
-      type: 'string',
-      enum: [
-        'queued',
-        'assigned',
-        'running',
-        'billing_paused',
-        'pausing',
-        'paused',
-        'uploading',
-        'canceling',
-        'completed',
-        'failed',
-        'canceled',
-      ],
-    },
-    BrowserDownloadTask: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'id',
-        'downloaderId',
-        'downloaderName',
-        'downloaderKind',
-        'sourceType',
-        'sourceUri',
-        'name',
-        'targetFolder',
-        'category',
-        'tags',
-        'status',
-        'downloadedBytes',
-        'storageUploadedBytes',
-        'totalBytes',
-        'downloadBps',
-        'storageUploadBps',
-        'errorMessage',
-      ],
-      properties: {
-        id: { type: 'string' },
-        downloaderId: { type: 'string' },
-        downloaderName: { type: 'string' },
-        downloaderKind: { type: 'string', enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] },
-        sourceType: { type: 'string', enum: ['http', 'magnet', 'torrent_url'] },
-        sourceUri: { type: 'string' },
-        name: { type: 'string' },
-        targetFolder: { type: 'string' },
-        category: nullableString,
-        tags: { type: 'array', items: { type: 'string' } },
-        status: { $ref: '#/components/schemas/DownloadTaskStatus' },
-        downloadedBytes: { type: 'integer', minimum: 0 },
-        storageUploadedBytes: { type: 'integer', minimum: 0 },
-        totalBytes: { type: ['integer', 'null'], minimum: 0 },
-        downloadBps: { type: 'integer', minimum: 0 },
-        storageUploadBps: { type: 'integer', minimum: 0 },
-        errorMessage: nullableString,
-        outputObjectId: nullableString,
-      },
-    },
-    BrowserDownloadTaskPage: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['items', 'total', 'page', 'pageSize'],
-      properties: {
-        items: { type: 'array', items: { $ref: '#/components/schemas/BrowserDownloadTask' } },
-        total: { type: 'integer', minimum: 0 },
-        page: { type: 'integer', minimum: 1 },
-        pageSize: { type: 'integer', minimum: 1 },
-      },
-    },
-    BrowserDownloadInput: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['downloaderId', 'uri', 'sourceType'],
-      properties: {
-        downloaderId: { type: 'string', minLength: 1 },
-        uri: { type: 'string', minLength: 1 },
-        sourceType: { type: 'string', enum: ['http', 'magnet', 'torrent_url'] },
-        title: { type: 'string' },
-        category: { type: 'string', minLength: 1, maxLength: 120 },
-        targetSubdirectory: { type: 'string' },
-        tags: { type: 'array', maxItems: 20, items: { type: 'string', minLength: 1, maxLength: 80 } },
-      },
-    },
-    BrowserDownloadResult: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['downloaderId', 'status'],
-      properties: {
-        downloaderId: { type: 'string' },
-        status: { type: 'string', enum: ['queued', 'submitted'] },
-        downloadRecordId: { type: 'string' },
-        externalTaskId: nullableString,
-      },
-    },
-    BrowserDownloadResultEnvelope: envelope('BrowserDownloadResult'),
     Media: {
       type: 'object',
       additionalProperties: false,
@@ -2251,148 +2144,82 @@ function schemas() {
       },
     },
     MediaCollection: collection('#/components/schemas/Media'),
-    DownloadDestination: {
+    CreateDownload: {
       type: 'object',
       additionalProperties: false,
-      required: ['id', 'name', 'kind', 'healthStatus', 'supportedSourceTypes'],
+      required: ['resourceRef', 'downloaderId'],
       properties: {
-        id: { type: 'string', format: 'uuid' },
-        name: { type: 'string' },
-        kind: { type: 'string' },
-        healthStatus: { type: 'string', enum: ['unknown', 'online', 'offline'] },
-        supportedSourceTypes: { type: 'array', items: { type: 'string' } },
-      },
-    },
-    DownloadDestinationCollection: {
-      type: 'object',
-      required: ['items'],
-      properties: { items: { type: 'array', items: { $ref: '#/components/schemas/DownloadDestination' } } },
-    },
-    CreateReleaseSearchJob: {
-      type: 'object',
-      required: ['mediaKey', 'mediaTitle', 'query'],
-      properties: {
-        mediaKey: { type: 'string' },
-        mediaTitle: { type: 'string' },
-        query: { type: 'string' },
-        searchType: { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] },
-        categories: { type: 'array', items: { type: 'integer' } },
-      },
-    },
-    ReleaseSearchJob: {
-      type: 'object',
-      required: ['id', 'mediaKey', 'mediaTitle', 'query', 'searchType', 'categories', 'status', 'createdAt', 'links'],
-      properties: {
-        id: { type: 'string', format: 'uuid' },
-        mediaKey: { type: 'string' },
-        mediaTitle: { type: 'string' },
-        query: { type: 'string' },
-        searchType: { type: 'string' },
-        categories: { type: 'array', items: { type: 'integer' } },
-        status: { type: 'string', enum: ['running', 'completed', 'failed'] },
-        error: { type: ['string', 'null'] },
-        createdAt: { type: 'string', format: 'date-time' },
-        completedAt: { type: ['string', 'null'], format: 'date-time' },
-        links,
-      },
-    },
-    ReleaseSearchJobCollection: collection('#/components/schemas/ReleaseSearchJob'),
-    ReleaseSearchResult: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'id',
-        'jobId',
-        'title',
-        'source',
-        'sizeBytes',
-        'quality',
-        'encoding',
-        'availability',
-        'publishedAt',
-        'links',
-      ],
-      properties: {
-        id: { type: 'string', format: 'uuid' },
-        jobId: { type: 'string', format: 'uuid' },
-        title: { type: 'string' },
-        source: { type: 'string' },
-        sizeBytes: { type: ['integer', 'null'], minimum: 0 },
-        quality: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['source', 'resolution', 'hdr'],
-          properties: {
-            source: { type: 'string' },
-            resolution: { type: 'string' },
-            hdr: { type: 'array', items: { type: 'string' } },
-          },
-        },
-        encoding: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['video', 'audio'],
-          properties: { video: { type: 'string' }, audio: { type: 'string' } },
-        },
-        availability: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['seeders', 'leechers', 'protocol'],
-          properties: {
-            seeders: { type: ['integer', 'null'], minimum: 0 },
-            leechers: { type: ['integer', 'null'], minimum: 0 },
-            protocol: { type: ['string', 'null'] },
-          },
-        },
-        publishedAt: { type: ['string', 'null'], format: 'date-time' },
-        links,
-      },
-    },
-    ReleaseSearchResultCollection: collection('#/components/schemas/ReleaseSearchResult'),
-    CreateDownloadTask: {
-      type: 'object',
-      required: ['releaseSearchResultId', 'downloaderId'],
-      properties: {
-        releaseSearchResultId: { type: 'string', format: 'uuid' },
+        resourceRef: { type: 'string', minLength: 1, maxLength: 8000 },
         downloaderId: { type: 'string', format: 'uuid' },
       },
     },
-    DownloadTask: {
+    DownloadStatus: {
+      type: 'string',
+      enum: [
+        'queued',
+        'resolving',
+        'waitingSource',
+        'submitting',
+        'submitted',
+        'running',
+        'pausing',
+        'paused',
+        'resuming',
+        'canceling',
+        'completed',
+        'failed',
+        'canceled',
+      ],
+    },
+    Download: {
       type: 'object',
+      additionalProperties: false,
       required: [
         'id',
-        'releaseSearchResultId',
+        'resourceRef',
+        'resourceKind',
+        'resourceKey',
         'downloaderId',
+        'downloaderName',
+        'downloaderKind',
+        'managementSupported',
+        'sourceType',
+        'sourceUri',
+        'name',
+        'targetFolder',
+        'category',
+        'tags',
         'status',
+        'stage',
+        'externalTaskId',
         'downstreamStatus',
         'progress',
         'result',
+        'error',
         'createdAt',
+        'updatedAt',
+        'completedAt',
         'links',
       ],
       properties: {
         id: { type: 'string', format: 'uuid' },
-        releaseSearchResultId: { type: 'string', format: 'uuid' },
+        resourceRef: { type: 'string' },
+        resourceKind: { type: 'string', enum: ['release', 'music_track'] },
+        resourceKey: { type: 'string' },
         downloaderId: { type: 'string', format: 'uuid' },
-        status: { type: 'string', enum: ['submitting', 'submitted', 'running', 'completed', 'failed', 'canceled'] },
-        externalTaskId: { type: ['string', 'null'] },
-        downstreamStatus: {
-          type: ['string', 'null'],
-          enum: [
-            'queued',
-            'assigned',
-            'running',
-            'billing_paused',
-            'pausing',
-            'paused',
-            'uploading',
-            'canceling',
-            'completed',
-            'failed',
-            'canceled',
-            null,
-          ],
-        },
+        downloaderName: { type: 'string' },
+        downloaderKind: { type: 'string', enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] },
+        managementSupported: { type: 'boolean' },
+        sourceType: { type: 'string', enum: ['http', 'magnet', 'torrent_url'] },
+        sourceUri: { type: 'string' },
+        name: { type: 'string' },
+        targetFolder: { type: 'string' },
+        category: nullableString,
+        tags: { type: 'array', items: { type: 'string' } },
+        status: { $ref: '#/components/schemas/DownloadStatus' },
+        stage: { type: ['string', 'null'], enum: ['downloading', 'uploading', null] },
+        externalTaskId: nullableString,
+        downstreamStatus: nullableString,
         progress: {
           type: 'object',
           additionalProperties: false,
@@ -2409,18 +2236,27 @@ function schemas() {
           type: ['object', 'null'],
           additionalProperties: false,
           required: ['objectId', 'name', 'targetFolder'],
-          properties: {
-            objectId: { type: ['string', 'null'] },
-            name: { type: ['string', 'null'] },
-            targetFolder: { type: ['string', 'null'] },
-          },
+          properties: { objectId: nullableString, name: nullableString, targetFolder: nullableString },
         },
-        error: { type: ['string', 'null'] },
-        createdAt: { type: 'string', format: 'date-time' },
-        completedAt: { type: ['string', 'null'], format: 'date-time' },
+        error: nullableString,
+        createdAt: dateTime,
+        updatedAt: dateTime,
+        completedAt: nullableDateTime,
         links,
       },
     },
-    DownloadTaskCollection: collection('#/components/schemas/DownloadTask'),
+    DownloadCollection: collection('#/components/schemas/Download'),
+    DownloadSuspension: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['downloadId', 'createdAt', 'links'],
+      properties: { downloadId: { type: 'string', format: 'uuid' }, createdAt: dateTime, links },
+    },
+    DownloadCancellation: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['downloadId', 'createdAt', 'links'],
+      properties: { downloadId: { type: 'string', format: 'uuid' }, createdAt: dateTime, links },
+    },
   }
 }

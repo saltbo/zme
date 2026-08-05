@@ -18,8 +18,8 @@ export const queryKeys = {
     playlists: (id: string) => ['connectors', id, 'playlists'] as const,
   },
   downloaders: ['downloaders'] as const,
-  downloadTasksRoot: ['download-tasks'] as const,
-  downloadTasks: (status: string) => ['download-tasks', status] as const,
+  downloadTasksRoot: ['downloads'] as const,
+  downloadTasks: (status: string) => ['downloads', status] as const,
   indexers: ['indexers'] as const,
   mediaSources: ['media-sources'] as const,
   books: {

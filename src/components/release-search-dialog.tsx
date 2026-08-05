@@ -1,4 +1,3 @@
-import { toZmeDownloadCategory } from '@shared/download-metadata'
 import {
   analyzeIndexerRelease,
   compareIndexerReleasesByRecommendation,
@@ -255,7 +254,6 @@ function ReleaseSearchContent({
 
         <div className="py-4 sm:py-5">
           <ReleasePanel
-            media={media}
             items={visibleItems}
             loading={loading}
             progress={progress}
@@ -295,7 +293,6 @@ function ReleaseSearchContent({
 
       <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4 sm:p-5">
         <ReleasePanel
-          media={media}
           items={visibleItems}
           loading={loading}
           progress={progress}
@@ -849,7 +846,6 @@ function ReleaseStatusPill({
 
 function ReleasePanel({
   downloaders,
-  media,
   items,
   loading,
   progress,
@@ -860,7 +856,6 @@ function ReleasePanel({
   layout,
 }: {
   downloaders: DownloaderSummary[]
-  media: ReleaseSearchMedia
   items: IndexerSearchItem[]
   loading: boolean
   progress?: ReleaseSearchProgress | null
@@ -920,7 +915,6 @@ function ReleasePanel({
       {items.map((item) => (
         <ReleaseRow
           key={item.id}
-          media={media}
           item={item}
           downloaders={downloaders}
           loadingDownloaders={loadingDownloaders}
@@ -1007,13 +1001,11 @@ function getReleaseSearchStepLabel(kind: ReleaseSearchProgress['steps'][number][
 
 function ReleaseRow({
   downloaders,
-  media,
   item,
   loadingDownloaders,
   layout,
 }: {
   downloaders: DownloaderSummary[]
-  media: ReleaseSearchMedia
   item: IndexerSearchItem
   loadingDownloaders: boolean
   layout: ReleaseRowLayout
@@ -1023,21 +1015,17 @@ function ReleaseRow({
   const title = item.fileName || item.title
 
   async function handleDownload(downloader: DownloaderSummary) {
-    const source = getDownloadSource(item)
-    if (!source) {
+    if (!getDownloadSource(item)) {
       toast.error(t('releaseMissingUrl'))
       return
     }
 
     setSubmittingDownloaderId(downloader.id)
     try {
+      if (!item.resourceRef) throw new Error('Release candidate has no resource reference.')
       await createDownload({
         downloaderId: downloader.id,
-        uri: source.uri,
-        sourceType: source.sourceType,
-        title,
-        category: media.downloadCategory ?? toZmeDownloadCategory(media.kind),
-        tags: getMediaTags(media, item),
+        resourceRef: item.resourceRef,
       })
       toast.success(t('downloadSubmitted'))
     } catch (error) {
@@ -1349,16 +1337,6 @@ function getEditionTooltip(label: string, t: TFunction) {
   if (label === 'Unrated') return t('releaseEditionUnratedTooltip')
   if (label === 'Criterion') return t('releaseEditionCriterionTooltip')
   return t('releaseEditionTooltip')
-}
-
-function getMediaTags(media: ReleaseSearchMedia, item: IndexerSearchItem) {
-  if (media.downloadTags) return media.downloadTags
-
-  return [
-    `tmdbId=${item.tmdbId ?? media.id}`,
-    item.imdbId ? `imdbId=${item.imdbId}` : null,
-    item.tvdbId ? `tvdbId=${item.tvdbId}` : null,
-  ].filter((tag): tag is string => Boolean(tag))
 }
 
 function getDownloadSource(item: IndexerSearchItem) {

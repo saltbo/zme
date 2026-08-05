@@ -13,6 +13,11 @@ import {
   processDownloadDispatch,
   recoverDownloadDispatches,
 } from '@server/usecases/download-dispatch'
+import {
+  type DownloadReconciliationMessage,
+  processDownloadReconciliation,
+  recoverDownloadReconciliations,
+} from '@server/usecases/downloads'
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -26,10 +31,37 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(runScheduled(env))
   },
-  async queue(batch: MessageBatch<DownloadDispatchMessage | ConnectorSyncMessage>, env: Env): Promise<void> {
+  async queue(
+    batch: MessageBatch<DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage>,
+    env: Env,
+  ): Promise<void> {
     for (const message of batch.messages) {
       const trace = continueTrace(message.body)
       const tracedDeps = createDeps(env, trace)
+      if (isDownloadReconciliationMessage(message.body)) {
+        try {
+          const delaySeconds = await processDownloadReconciliation(tracedDeps, message.body)
+          if (delaySeconds) {
+            await tracedDeps.downloadReconciliationQueue?.enqueue(
+              { userId: message.body.userId, downloadId: message.body.downloadId },
+              delaySeconds,
+            )
+          }
+          message.ack()
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: 'download.reconciliation.failed',
+              downloadId: message.body.downloadId,
+              errorClass: error instanceof Error ? error.name : 'UnknownError',
+              traceId: trace.traceId,
+              spanId: trace.spanId,
+            }),
+          )
+          message.retry({ delaySeconds: 60 })
+        }
+        continue
+      }
       if (isConnectorSyncMessage(message.body)) {
         try {
           const retryAfterSeconds = await processConnectorSyncJob(tracedDeps, env, message.body)
@@ -74,10 +106,17 @@ async function runScheduled(env: Env): Promise<void> {
   await recoverQueuedConnectorSyncJobs(deps)
   await syncEnabledConnectors(deps, env)
   await recoverDownloadDispatches(deps)
+  await recoverDownloadReconciliations(deps)
 }
 
 function isConnectorSyncMessage(
-  message: DownloadDispatchMessage | ConnectorSyncMessage,
+  message: DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage,
 ): message is ConnectorSyncMessage {
   return 'type' in message && message.type === 'connector_sync'
+}
+
+function isDownloadReconciliationMessage(
+  message: DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage,
+): message is DownloadReconciliationMessage {
+  return 'type' in message && message.type === 'download_reconciliation'
 }

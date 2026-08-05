@@ -2,7 +2,7 @@ import type { Env } from '@server/env'
 import type { Deps } from './deps'
 import { parseMusicLaneKey } from './media-subscriptions'
 import { dispatchMusicDownloadRecord } from './music-downloads'
-import { MusicResourceUnavailableError } from './ports'
+import { type DownloadRecordRecord, MusicResourceUnavailableError } from './ports'
 
 const LANE_LEASE_MS = 5 * 60_000
 const RISK_PAUSE_MS = 6 * 60 * 60 * 1000
@@ -70,6 +70,7 @@ export async function processDownloadDispatch(
         errorMessage: error.message,
         updatedAt: failedAt,
       })
+      await syncCanonicalStatus(deps, record, 'waitingSource', error.message, null)
     } else if (isRiskError(error)) {
       nextDelaySeconds = Math.ceil(RISK_PAUSE_MS / 1000)
       await deps.downloadRecordsRepo.update(record.id, record.generation, {
@@ -77,6 +78,7 @@ export async function processDownloadDispatch(
         errorMessage: getErrorMessage(error),
         updatedAt: failedAt,
       })
+      await syncCanonicalStatus(deps, record, 'waitingSource', getErrorMessage(error), null)
       console.warn(
         JSON.stringify({
           event: 'download.dispatch.risk_paused',
@@ -91,12 +93,14 @@ export async function processDownloadDispatch(
         errorMessage: getErrorMessage(error),
         updatedAt: failedAt,
       })
+      await syncCanonicalStatus(deps, record, 'queued', getErrorMessage(error), null)
     } else {
       await deps.downloadRecordsRepo.update(record.id, record.generation, {
         status: 'failed',
         errorMessage: getErrorMessage(error),
         updatedAt: failedAt,
       })
+      await syncCanonicalStatus(deps, record, 'failed', getErrorMessage(error), failedAt)
     }
   }
 
@@ -107,6 +111,19 @@ export async function processDownloadDispatch(
     await deps.downloadDispatchQueue.wake(message.laneKey, nextDelaySeconds)
   }
   return { retryAfterSeconds: null }
+}
+
+async function syncCanonicalStatus(
+  deps: Deps,
+  record: DownloadRecordRecord,
+  status: 'waitingSource' | 'queued' | 'failed',
+  error: string,
+  completedAt: string | null,
+) {
+  const id = record.config.downloadId ?? record.id
+  const download = await deps.downloadsRepo.get(record.userId, id)
+  if (!download) return
+  await deps.downloadsRepo.update(download.userId, download.id, download.updatedAt, { status, error, completedAt })
 }
 
 export async function recoverDownloadDispatches(deps: Deps): Promise<void> {

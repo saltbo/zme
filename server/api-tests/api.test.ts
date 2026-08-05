@@ -7,7 +7,7 @@ function request(path: string, init?: RequestInit & { cookie?: string }) {
   const headers = new Headers(init?.headers)
   if (init?.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
   if (init?.cookie) headers.set('cookie', init.cookie)
-  if (path.startsWith('/api/')) headers.set('API-Version', '2026-08-04')
+  if (path.startsWith('/api/')) headers.set('API-Version', '2026-08-05')
   return app.fetch(new Request(`https://zme.test${path}`, { ...init, headers }), env)
 }
 
@@ -288,7 +288,7 @@ describe('admin-managed connectors', () => {
     expect((await request('/api/media-sources', { cookie })).status).toBe(403)
     expect((await request('/api/indexers', { cookie })).status).toBe(403)
     // Indexer search stays available to regular users.
-    const search = await request('/api/release-candidates?q=dune', { cookie })
+    const search = await request('/api/release-candidates?mediaKey=tmdb%3Amovie%3A438631&query=dune', { cookie })
     expect(search.status).toBe(503)
     expect(await search.json()).toMatchObject({
       type: 'https://zme.test/problems/http-503',

@@ -49,6 +49,12 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
     const task = await getClient(config).getDownloadTask({ id })
     return task ? toTaskSummary(owner, task) : null
   },
+  async setStatus(config, owner, id, status) {
+    return toTaskSummary(owner, await getClient(config).setDownloadTaskStatus(id, status))
+  },
+  async delete(config, id) {
+    await getClient(config).deleteDownloadTask(id)
+  },
   async list(config, owner, input: ListDownloadTasksInput, signal?: AbortSignal): Promise<DownloadTaskPage> {
     const items = await listAllDownloadTasks(
       getClient(config),
@@ -235,6 +241,12 @@ function toTaskSummary(owner: DownloadTaskOwner, task: ZpanTaskSummarySource): D
     category: task.spec.labels.category ?? null,
     tags: task.spec.labels.tags,
     status: fromZpanStatus(task.status.state),
+    stage:
+      task.status.state === 'uploading'
+        ? 'uploading'
+        : ['downloading', 'interrupted'].includes(task.status.state)
+          ? 'downloading'
+          : null,
     downloadedBytes: progress.download.bytes,
     storageUploadedBytes: progress.upload.bytes,
     totalBytes: progress.download.totalBytes ?? null,
@@ -248,12 +260,17 @@ function toTaskSummary(owner: DownloadTaskOwner, task: ZpanTaskSummarySource): D
 
 function toZpanStatus(status: DownloadTaskStatus): ZpanDownloadTaskState {
   if (status === 'running') return 'downloading'
-  if (status === 'billing_paused') return 'suspended'
+  if (status === 'paused') return 'suspended'
+  if (status === 'submitted' || status === 'resolving' || status === 'waitingSource' || status === 'submitting')
+    return 'queued'
+  if (status === 'resuming') return 'queued'
   return status
 }
 
 function fromZpanStatus(status: ZpanDownloadTaskState): DownloadTaskStatus {
   if (status === 'downloading' || status === 'interrupted') return 'running'
-  if (status === 'suspended') return 'billing_paused'
-  return status
+  if (status === 'suspended') return 'paused'
+  if (status === 'assigned') return 'submitted'
+  if (status === 'uploading') return 'running'
+  return status as DownloadTaskStatus
 }
