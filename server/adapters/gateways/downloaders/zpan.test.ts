@@ -1,5 +1,10 @@
 import { ZpanClient, type ZpanDownloadTask } from '@server/adapters/gateways/zpan-client'
-import type { ConnectorConfig, DownloaderGateway, DownloadTaskOwner } from '@server/usecases/ports'
+import {
+  type ConnectorConfig,
+  type DownloaderGateway,
+  DownloaderGatewayRateLimitError,
+  type DownloadTaskOwner,
+} from '@server/usecases/ports'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse, stubFetch } from './test-support'
 import { zpanDownloaderGateway, zpanDownloadTaskGateway } from './zpan'
@@ -230,42 +235,54 @@ describe('zpanDownloadTaskGateway', () => {
     })
   })
 
-  it('maps successive ZPan snapshots to changed live speed and progress [spec: downloads/live-task-monitoring]', async () => {
+  it('coalesces successive ZPan changes into one bounded snapshot refresh [spec: downloads/live-task-monitoring]', async () => {
+    vi.useFakeTimers()
     const upstreamSnapshots = [zpanTask(50, 5), zpanTask(100, 10), zpanTask(400, 40)]
-    vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockImplementation(async () => ({
+    const list = vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockImplementation(async () => ({
       items: [upstreamSnapshots.shift() ?? zpanTask(400, 40)],
       nextPageToken: null,
     }))
-    vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (_signal, emit) => {
-      await emit({ event: 'resource-change', data: { resourceType: 'download-task' } })
-      await emit({ event: 'resource-change', data: { resourceType: 'download-task' } })
+    let upstreamEmit: Parameters<ZpanClient['streamDownloadTaskEvents']>[1] | undefined
+    vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (signal, emit) => {
+      upstreamEmit = emit
+      await waitForAbort(signal)
     })
 
+    const aborter = new AbortController()
     const snapshots: Array<{ downloadedBytes: number; downloadBps: number }> = []
-    await zpanDownloadTaskGateway.stream(config, owner, new AbortController().signal, (event) => {
+    const stream = zpanDownloadTaskGateway.stream(config, owner, aborter.signal, (event) => {
       if (event.event !== 'snapshot') return
       snapshots.push({
         downloadedBytes: event.data.items[0].downloadedBytes,
         downloadBps: event.data.items[0].downloadBps,
       })
     })
+    await vi.advanceTimersByTimeAsync(0)
 
+    await upstreamEmit?.({ event: 'resource-change', data: { resourceType: 'download-task' } })
+    await upstreamEmit?.({ event: 'resource-change', data: { resourceType: 'download-task' } })
+    await upstreamEmit?.({ event: 'heartbeat', data: { at: '2026-08-05T00:00:00.000Z' } })
+    expect(list).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(list).toHaveBeenCalledTimes(2)
+
+    aborter.abort()
+    await stream
     expect(snapshots).toEqual([
       { downloadedBytes: 50, downloadBps: 5 },
       { downloadedBytes: 100, downloadBps: 10 },
-      { downloadedBytes: 400, downloadBps: 40 },
     ])
+    vi.useRealTimers()
   })
 
-  it('refreshes a complete paginated snapshot when ZPan sends a heartbeat', async () => {
-    const firstPage = Array.from({ length: 50 }, (_, index) => zpanTask(index, index))
-    const lastTask = { ...zpanTask(50, 50), id: 'task-51' }
-    const list = vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockImplementation(async (params) => ({
-      items: params.pageToken ? [lastTask] : firstPage,
-      nextPageToken: params.pageToken ? null : 'next-page',
-    }))
+  it('does not refresh tasks for a ZPan heartbeat', async () => {
+    const list = vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockResolvedValue({
+      items: [zpanTask(50, 5)],
+      nextPageToken: null,
+    })
     vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (_signal, emit) => {
-      await emit({ event: 'heartbeat', data: { at: '2026-07-19T00:00:00.000Z' } })
+      await emit({ event: 'heartbeat', data: { at: '2026-08-05T00:00:00.000Z' } })
     })
 
     const snapshots: string[][] = []
@@ -273,16 +290,68 @@ describe('zpanDownloadTaskGateway', () => {
       if (event.event === 'snapshot') snapshots.push(event.data.items.map((item) => item.id))
     })
 
-    expect(snapshots).toHaveLength(2)
-    expect(snapshots[0]).toHaveLength(51)
-    expect(snapshots[1]).toHaveLength(51)
-    expect(snapshots[1]).toContain('task-51')
-    expect(list.mock.calls.map(([params]) => params.pageToken)).toEqual([
-      undefined,
-      'next-page',
-      undefined,
-      'next-page',
-    ])
+    expect(snapshots).toHaveLength(1)
+    expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps ZPan rate limits with their retry delay', async () => {
+    stubFetch(() =>
+      jsonResponse(
+        { error: { code: 429, message: 'Rate limit exceeded.', status: 'RESOURCE_EXHAUSTED' } },
+        { status: 429, headers: { 'Retry-After': '28' } },
+      ),
+    )
+
+    const result = new ZpanClient(config.endpoint, config.credentials.apiKey).listDownloadTasks({ pageSize: 1 })
+    const error = await result.catch((cause: unknown) => cause)
+
+    expect(error).toBeInstanceOf(DownloaderGatewayRateLimitError)
+    expect(error).toMatchObject({ retryAfterMs: 28_000 })
+  })
+
+  it('maps an HTTP-date ZPan retry delay', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime('2026-08-05T12:00:00.000Z')
+    stubFetch(() =>
+      jsonResponse(
+        { error: { code: 429, message: 'Rate limit exceeded.', status: 'RESOURCE_EXHAUSTED' } },
+        { status: 429, headers: { 'Retry-After': 'Wed, 05 Aug 2026 12:00:30 GMT' } },
+      ),
+    )
+
+    const result = new ZpanClient(config.endpoint, config.credentials.apiKey).listDownloadTasks({ pageSize: 1 })
+    const error = await result.catch((cause: unknown) => cause)
+
+    expect(error).toMatchObject({ retryAfterMs: 30_000 })
+    vi.useRealTimers()
+  })
+
+  it('refreshes after a ZPan resync signal', async () => {
+    vi.useFakeTimers()
+    const upstreamSnapshots = [zpanTask(50, 5), zpanTask(100, 10)]
+    vi.spyOn(ZpanClient.prototype, 'listDownloadTasks').mockImplementation(async () => ({
+      items: [upstreamSnapshots.shift() ?? zpanTask(100, 10)],
+      nextPageToken: null,
+    }))
+    let upstreamEmit: Parameters<ZpanClient['streamDownloadTaskEvents']>[1] | undefined
+    vi.spyOn(ZpanClient.prototype, 'streamDownloadTaskEvents').mockImplementation(async (signal, emit) => {
+      upstreamEmit = emit
+      await waitForAbort(signal)
+    })
+
+    const aborter = new AbortController()
+    const snapshots: number[] = []
+    const stream = zpanDownloadTaskGateway.stream(config, owner, aborter.signal, (event) => {
+      if (event.event === 'snapshot') snapshots.push(event.data.items[0].downloadedBytes)
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    await upstreamEmit?.({ event: 'resync', data: { sequence: 12 } })
+    await vi.advanceTimersByTimeAsync(1_500)
+
+    aborter.abort()
+    await stream
+    expect(snapshots).toEqual([50, 100])
+    vi.useRealTimers()
   })
 
   it('rejects a repeated upstream page token', async () => {
@@ -440,4 +509,11 @@ function zpanTask(downloadedBytes: number, downloadBps: number): ZpanDownloadTas
       updatedAt: '2026-07-18T00:00:01.000Z',
     },
   }
+}
+
+function waitForAbort(signal: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    if (signal.aborted) return resolve()
+    signal.addEventListener('abort', () => resolve(), { once: true })
+  })
 }

@@ -71,6 +71,16 @@ export interface DownloaderGateway {
 
 export class DownloadSubmissionRejectedError extends Error {}
 export class DownloadSubmissionUnknownError extends Error {}
+export class DownloaderGatewayRateLimitError extends Error {
+  constructor(
+    message: string,
+    readonly retryAfterMs: number,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
+    this.name = 'DownloaderGatewayRateLimitError'
+  }
+}
 export class IndexerSearchError extends Error {}
 
 export interface DownloadTaskOwner {

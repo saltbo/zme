@@ -20,6 +20,7 @@ type ZpanDownloadTaskState = ZpanDownloadTask['status']['state']
 const upstreamPageSize = 100
 const maxUpstreamPages = 100
 const upstreamScanTimeoutMs = 10_000
+const snapshotRefreshIntervalMs = 1_500
 
 export const zpanDownloaderGateway: DownloaderGateway = {
   supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
@@ -68,16 +69,42 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
   async stream(config, owner, signal, emit) {
     const client = getClient(config)
     await emitSnapshot(emit, owner, await listAllDownloadTasks(client, {}, signal))
+    const streamAborter = new AbortController()
+    const streamSignal = AbortSignal.any([signal, streamAborter.signal])
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined
+    let refresh = Promise.resolve()
+    let refreshFailure: unknown
 
-    await client.streamDownloadTaskEvents(signal, async (event) => {
-      if (event.event === 'resource-change' || event.event === 'resync' || event.event === 'heartbeat') {
-        await emitSnapshot(emit, owner, await listAllDownloadTasks(client, {}, signal))
-        return
-      }
-      if (event.event === 'error') {
-        await emit({ event: 'error', data: { message: getZpanEventErrorMessage(event.data) } })
-      }
-    })
+    const scheduleRefresh = () => {
+      if (refreshTimer || streamSignal.aborted) return
+      refreshTimer = setTimeout(() => {
+        refreshTimer = undefined
+        if (streamSignal.aborted) return
+        refresh = refresh
+          .then(async () => emitSnapshot(emit, owner, await listAllDownloadTasks(client, {}, streamSignal)))
+          .catch((error: unknown) => {
+            refreshFailure = error
+            streamAborter.abort(error)
+          })
+      }, snapshotRefreshIntervalMs)
+    }
+
+    try {
+      await client.streamDownloadTaskEvents(streamSignal, async (event) => {
+        if (event.event === 'resource-change' || event.event === 'resync') {
+          scheduleRefresh()
+          return
+        }
+        if (event.event === 'error') {
+          await emit({ event: 'error', data: { message: getZpanEventErrorMessage(event.data) } })
+        }
+      })
+      await refresh
+      if (refreshFailure) throw refreshFailure
+    } finally {
+      if (refreshTimer) clearTimeout(refreshTimer)
+      streamAborter.abort()
+    }
   },
 }
 

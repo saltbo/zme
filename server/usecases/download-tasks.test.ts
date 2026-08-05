@@ -2,7 +2,12 @@ import type { DownloadTaskSummary } from '@shared/types'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
 import { listDownloadTasks, streamDownloadTaskEvents } from './download-tasks'
-import type { DownloaderRecord, DownloadTaskEvent, DownloadTaskGateway } from './ports'
+import {
+  DownloaderGatewayRateLimitError,
+  type DownloaderRecord,
+  type DownloadTaskEvent,
+  type DownloadTaskGateway,
+} from './ports'
 
 function downloaderRecord(id: string, kind: DownloaderRecord['kind'], description: string): DownloaderRecord {
   return {
@@ -218,6 +223,44 @@ describe('streamDownloadTaskEvents', () => {
         downloaderName: 'Broken ZPan',
         message: 'Broken ZPan: upstream gone',
         retryingInMs: 25,
+      },
+    })
+  })
+
+  it('honors an upstream rate-limit retry delay', async () => {
+    const zpanA = downloaderRecord('zpan-a', 'zpan', 'Limited ZPan')
+
+    const gateway: DownloadTaskGateway = {
+      list: async () => ({ items: [], total: 0, page: 1, pageSize: 20 }),
+      stream: async () => {
+        throw new DownloaderGatewayRateLimitError('Rate limit exceeded.', 28_000)
+      },
+    }
+    const deps = {
+      downloadersRepo: { listEnabled: async () => [zpanA] },
+      downloadTaskGateways: { zpan: gateway },
+    } as never as Deps
+
+    const aborter = new AbortController()
+    const events: DownloadTaskEvent[] = []
+    await streamDownloadTaskEvents(
+      deps,
+      'user-1',
+      aborter.signal,
+      (event) => {
+        events.push(event)
+        if (event.event === 'upstream-error') aborter.abort()
+      },
+      { initialRetryDelayMs: 1_000 },
+    )
+
+    expect(events).toContainEqual({
+      event: 'upstream-error',
+      data: {
+        downloaderId: 'zpan-a',
+        downloaderName: 'Limited ZPan',
+        message: 'Limited ZPan: Rate limit exceeded.',
+        retryingInMs: 28_000,
       },
     })
   })

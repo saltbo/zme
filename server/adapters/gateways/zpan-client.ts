@@ -8,7 +8,11 @@ import type {
   GetDownloadTaskData,
   ListDownloadTasksData,
 } from '@server/clients/zpan/types.gen'
-import { DownloadSubmissionRejectedError, DownloadSubmissionUnknownError } from '@server/usecases/ports'
+import {
+  DownloaderGatewayRateLimitError,
+  DownloadSubmissionRejectedError,
+  DownloadSubmissionUnknownError,
+} from '@server/usecases/ports'
 
 export type ZpanListDownloadTasksParams = NonNullable<ListDownloadTasksData['query']>
 export type ZpanDownloadTaskPage = Omit<DownloadTaskListPage, 'nextPageToken'> & { nextPageToken: string | null }
@@ -242,7 +246,21 @@ async function expectData<T>(
   fallbackMessage: string,
 ): Promise<T> {
   if (result.data !== undefined) return result.data
-  throw new Error(getErrorMessage(result.error, fallbackMessage))
+  const message = getErrorMessage(result.error, fallbackMessage)
+  if (result.response?.status === 429) {
+    throw new DownloaderGatewayRateLimitError(message, retryAfterMilliseconds(result.response), {
+      cause: result.error,
+    })
+  }
+  throw new Error(message, { cause: result.error })
+}
+
+function retryAfterMilliseconds(response: Response): number {
+  const value = response.headers.get('Retry-After')?.trim()
+  if (!value) return 0
+  if (/^\d+$/.test(value)) return Number(value) * 1_000
+  const retryAt = Date.parse(value)
+  return Number.isNaN(retryAt) ? 0 : Math.max(0, retryAt - Date.now())
 }
 
 function getErrorMessage(error: unknown, fallbackMessage: string) {

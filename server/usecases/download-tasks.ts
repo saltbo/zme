@@ -7,6 +7,7 @@ import type {
   DownloadTaskOwner,
   ListDownloadTasksInput,
 } from './ports'
+import { DownloaderGatewayRateLimitError } from './ports'
 
 const heartbeatIntervalMs = 15_000
 const initialRetryDelayMs = 1_000
@@ -122,6 +123,8 @@ async function superviseDownloaderStream(
       failure = error
     }
 
+    const attemptRetryDelay =
+      failure instanceof DownloaderGatewayRateLimitError ? Math.max(retryDelay, failure.retryAfterMs) : retryDelay
     if (!failureReported) {
       const downloaderName = getDownloaderName(downloader)
       emit({
@@ -130,13 +133,13 @@ async function superviseDownloaderStream(
           downloaderId: downloader.id,
           downloaderName,
           message: `${downloaderName}: ${getErrorMessage(failure)}`,
-          retryingInMs: retryDelay,
+          retryingInMs: attemptRetryDelay,
         },
       })
       failureReported = true
     }
 
-    await delay(retryDelay, signal)
+    await delay(attemptRetryDelay, signal)
     retryDelay = Math.min(retryDelay * 2, maximumRetryDelay)
   }
 }
