@@ -213,7 +213,7 @@ function isTransferProgress(value: unknown) {
     isRecord(value) &&
     typeof value.bytes === 'number' &&
     typeof value.bytesPerSecond === 'number' &&
-    (value.totalBytes === undefined || typeof value.totalBytes === 'number')
+    (value.totalBytes === undefined || value.totalBytes === null || typeof value.totalBytes === 'number')
   )
 }
 

@@ -126,6 +126,25 @@ describe('zpanDownloadTaskGateway', () => {
     expect(calls[0].url.pathname).toBe('/api/downloads/tasks/task-1')
   })
 
+  it('accepts an exact task whose transfer totals are not known yet', async () => {
+    const task = zpanTask(25, 5) as unknown as {
+      status: {
+        progress: {
+          download: { totalBytes: number | null }
+          upload: { totalBytes: number | null }
+        }
+      }
+    }
+    task.status.progress.download.totalBytes = null
+    task.status.progress.upload.totalBytes = null
+    stubFetch(() => jsonResponse(task))
+
+    await expect(zpanDownloadTaskGateway.get?.(config, owner, 'task-1')).resolves.toMatchObject({
+      id: 'task-1',
+      totalBytes: null,
+    })
+  })
+
   it('rejects a malformed exact-task response', async () => {
     stubFetch(() => jsonResponse({ id: 'task-1' }))
 
