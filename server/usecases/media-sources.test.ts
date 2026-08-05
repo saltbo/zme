@@ -56,6 +56,7 @@ it('applies media-source mutations with the expected revision', async () => {
   const deletes: unknown[][] = []
   const deps = {
     mediaSourcesRepo: {
+      get: async () => sourceRecord(),
       update: async (...args: unknown[]) => {
         updates.push(args)
         return sourceRecord()
@@ -71,7 +72,9 @@ it('applies media-source mutations with the expected revision', async () => {
     id: 'media-source-1',
   })
   await expect(deleteMediaSource(deps, 'media-source-1', 'revision-2')).resolves.toBe(true)
-  expect(updates).toEqual([['media-source-1', input, 'revision-1']])
+  expect(updates).toEqual([
+    ['media-source-1', { ...input, description: sourceRecord().description ?? undefined }, 'revision-1'],
+  ])
   expect(deletes).toEqual([['media-source-1', 'revision-2']])
 })
 

@@ -1,4 +1,4 @@
-import type { DownloaderGateway } from '@server/usecases/ports'
+import { type DownloaderGateway, DownloadSubmissionRejectedError } from '@server/usecases/ports'
 import { assertOk, basicAuthHeader, getTypedDownloadDirectory, normalizeBaseUrl } from './shared'
 
 export const transmissionDownloaderGateway: DownloaderGateway = {
@@ -15,10 +15,10 @@ export const transmissionDownloaderGateway: DownloaderGateway = {
     }
 
     const response = await requestWithSession(endpoint, config.credentials, body)
-    await assertOk(response, 'Transmission')
+    await assertOk(response, 'Transmission', true)
     const payload = (await response.json()) as { result?: string }
     if (payload.result && payload.result !== 'success') {
-      throw new Error(`Transmission rejected download: ${payload.result}`)
+      throw new DownloadSubmissionRejectedError(`Transmission rejected download: ${payload.result}`)
     }
     return { externalTaskId: null }
   },

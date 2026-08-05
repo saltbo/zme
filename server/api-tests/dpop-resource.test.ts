@@ -1,7 +1,27 @@
 import { env } from 'cloudflare:test'
+import { createIdentityRepo } from '@server/adapters/repos/identity'
 import { app } from '@server/app'
+import { createDb } from '@server/db/client'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { expect, it, vi } from 'vitest'
+
+it('atomically accepts one concurrent use of a DPoP proof', async () => {
+  const repo = createIdentityRepo(createDb(env))
+  const now = new Date().toISOString()
+  const accepted = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      repo.recordDpopProof(
+        'https://issuer.zme.test',
+        'concurrent-proof',
+        'concurrent-thumbprint',
+        new Date(Date.now() + 300_000).toISOString(),
+        now,
+      ),
+    ),
+  )
+
+  expect(accepted.filter(Boolean)).toHaveLength(1)
+})
 
 it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', async () => {
   const fixture = await dpopFixture()
@@ -13,7 +33,9 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
     fixture.env,
   )
   expect(bearer.status).toBe(401)
-  expect(bearer.headers.get('www-authenticate')).toBe('DPoP error="invalid_token"')
+  expect(bearer.headers.get('www-authenticate')).toBe(
+    'DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES384 ES512 EdDSA", error="invalid_token"',
+  )
 
   const missingProof = await app.fetch(
     new Request('https://zme.test/api/media?query=test', {
@@ -22,7 +44,41 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
     fixture.env,
   )
   expect(missingProof.status).toBe(401)
-  expect(missingProof.headers.get('www-authenticate')).toBe('DPoP error="invalid_dpop_proof"')
+  expect(missingProof.headers.get('www-authenticate')).toBe(
+    'DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES384 ES512 EdDSA", error="invalid_dpop_proof"',
+  )
+
+  const lowercaseSchemeRequest = await fixture.signedRequest('/api/media-sources', ['media:read'])
+  const lowercaseSchemeHeaders = new Headers(lowercaseSchemeRequest.headers)
+  lowercaseSchemeHeaders.set(
+    'authorization',
+    lowercaseSchemeHeaders.get('authorization')?.replace(/^DPoP /, 'dpop ') ?? '',
+  )
+  const lowercaseScheme = await app.fetch(
+    new Request(lowercaseSchemeRequest, { headers: lowercaseSchemeHeaders }),
+    fixture.env,
+  )
+  expect(lowercaseScheme.status).toBe(403)
+  expect(await lowercaseScheme.json()).toMatchObject({
+    type: expect.stringContaining('/problems/agent-operation-forbidden'),
+  })
+
+  const wrongBinding = await app.fetch(
+    await fixture.signedRequest(
+      '/api/media?query=test',
+      ['media:read'],
+      'different-user',
+      'GET',
+      undefined,
+      undefined,
+      true,
+    ),
+    fixture.env,
+  )
+  expect(wrongBinding.status).toBe(401)
+  expect(wrongBinding.headers.get('www-authenticate')).toBe(
+    'DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES384 ES512 EdDSA", error="invalid_token"',
+  )
 
   const ownerId = crypto.randomUUID()
   const jobId = crypto.randomUUID()
@@ -46,16 +102,24 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
   expect(deniedByOwnership.headers.get('link')).toBe(
     '<https://zme.test/api/openapi.json>; rel="service-desc"; type="application/openapi+json"',
   )
-  expect(auditLog.mock.calls.map(([entry]) => JSON.parse(String(entry)))).toEqual(
+  const auditEntries = auditLog.mock.calls.map(([entry]) => JSON.parse(String(entry)))
+  expect(auditEntries).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ principalKind: 'agent', actorSubject: 'agent-e2e', status: 404 }),
+      expect.objectContaining({
+        principalKind: 'agent',
+        actorFingerprint: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+        status: 404,
+      }),
     ]),
   )
+  expect(JSON.stringify(auditEntries)).not.toContain('agent-e2e')
   auditLog.mockRestore()
 
   const replay = await app.fetch(asAppRequest(crossOwner.clone()), fixture.env)
   expect(replay.status).toBe(401)
-  expect(replay.headers.get('www-authenticate')).toBe('DPoP error="invalid_dpop_proof"')
+  expect(replay.headers.get('www-authenticate')).toBe(
+    'DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES384 ES512 EdDSA", error="invalid_dpop_proof"',
+  )
 
   const insufficient = await app.fetch(
     await fixture.signedRequest(`/api/release-search-jobs/${jobId}`, ['media:read']),
@@ -63,7 +127,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
   )
   expect(insufficient.status).toBe(403)
   expect(insufficient.headers.get('www-authenticate')).toBe(
-    'DPoP error="insufficient_scope", scope="release-search-jobs:read"',
+    'DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES384 ES512 EdDSA", error="insufficient_scope", scope="release-search-jobs:read"',
   )
 
   const highRisk = await app.fetch(
@@ -333,13 +397,17 @@ async function dpopFixture() {
       method = 'GET',
       body?: unknown,
       idempotencyKey?: string,
+      useWrongBinding = false,
     ) {
       const url = `https://zme.test${path}`
       const { privateKey: proofPrivateKey, publicKey: proofPublicKey } = await generateKeyPair('ES256', {
         extractable: true,
       })
       const proofJwk = await exportJWK(proofPublicKey)
-      const thumbprint = await calculateJwkThumbprint(proofJwk)
+      const bindingJwk = useWrongBinding
+        ? await exportJWK((await generateKeyPair('ES256', { extractable: true })).publicKey)
+        : proofJwk
+      const thumbprint = await calculateJwkThumbprint(bindingJwk)
       const now = Math.floor(Date.now() / 1000)
       const accessToken = await new SignJWT({
         scope: scopes.join(' '),

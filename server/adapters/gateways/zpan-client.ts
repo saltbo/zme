@@ -8,6 +8,7 @@ import type {
   GetDownloadTaskData,
   ListDownloadTasksData,
 } from '@server/clients/zpan/types.gen'
+import { DownloadSubmissionRejectedError, DownloadSubmissionUnknownError } from '@server/usecases/ports'
 
 export type ZpanListDownloadTasksParams = NonNullable<ListDownloadTasksData['query']>
 export type ZpanDownloadTaskPage = Omit<DownloadTaskListPage, 'nextPageToken'> & { nextPageToken: string | null }
@@ -38,9 +39,31 @@ export class ZpanClient {
     return expectDownloadTaskPage(await expectData(result, 'ZPan list download tasks failed'))
   }
 
-  async createDownloadTask(input: ZpanCreateDownloadTaskInput): Promise<ZpanDownloadTask> {
-    const result = await zpanApi.createDownloadTask({ client: this.client, body: input })
-    return expectCreatedDownloadTask(await expectData(result, 'ZPan create download task failed'))
+  async createDownloadTask(input: ZpanCreateDownloadTaskInput, idempotencyKey?: string): Promise<ZpanDownloadTask> {
+    let result: Awaited<ReturnType<typeof zpanApi.createDownloadTask>>
+    try {
+      result = await zpanApi.createDownloadTask({
+        client: this.client,
+        body: input,
+        headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+      })
+    } catch (error) {
+      throw new DownloadSubmissionUnknownError('ZPan create download task outcome is unknown.', { cause: error })
+    }
+    if (result.data === undefined) {
+      const message = getErrorMessage(result.error, 'ZPan create download task failed')
+      if (result.response?.status && result.response.status >= 400 && result.response.status < 500) {
+        throw new DownloadSubmissionRejectedError(message)
+      }
+      throw new DownloadSubmissionUnknownError(message)
+    }
+    try {
+      return expectCreatedDownloadTask(result.data)
+    } catch (error) {
+      throw new DownloadSubmissionUnknownError('ZPan create download task returned an invalid response.', {
+        cause: error,
+      })
+    }
   }
 
   async getDownloadTask(path: ZpanGetDownloadTaskPath): Promise<ZpanDownloadTask | null> {

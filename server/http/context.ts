@@ -1,4 +1,5 @@
 import type { Env } from '@server/env'
+import type { TraceContext } from '@server/observability/trace'
 import type { Deps } from '@server/usecases/deps'
 import type { AuthenticatedUser } from '@server/usecases/identity'
 
@@ -18,6 +19,7 @@ export type AppEnv = {
     user: AuthenticatedUser
     principal: Principal
     requestId: string
+    trace: TraceContext
     deps: Deps
   }
 }

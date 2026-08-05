@@ -1,6 +1,6 @@
 import type { AppConfig } from '@server/config'
 import type { DpopTokenPrincipal, DpopTokenValidator, OidcClient, OidcProfile } from '@server/usecases/identity'
-import { DpopCredentialError } from '@server/usecases/identity'
+import { DpopCredentialError, OidcCallbackError } from '@server/usecases/identity'
 import {
   calculateJwkThumbprint,
   createRemoteJWKSet,
@@ -39,48 +39,56 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
     },
 
     async exchangeCallback(callbackUrl, expectedState, nonce, codeVerifier) {
-      const metadata = await discover(config.issuer)
-      const parameters = oauth.validateAuthResponse(metadata, client, callbackUrl, expectedState)
-      const response = await oauth.authorizationCodeGrantRequest(
-        metadata,
-        client,
-        clientAuthentication(config),
-        parameters,
-        config.redirectUri,
-        codeVerifier,
-        {
-          [oauth.customFetch]: timedFetch,
-          [oauth.allowInsecureRequests]: isLocalIssuer(config.issuer),
-        },
-      )
-      const tokens = await oauth.processAuthorizationCodeResponse(metadata, client, response, {
-        expectedNonce: nonce,
-        requireIdToken: true,
-      })
-      if (!tokens.id_token) throw new Error('The OIDC token response omitted an ID token.')
-      const header = decodeProtectedHeader(tokens.id_token)
-      if (!header.alg || !config.allowedAlgorithms.includes(header.alg)) {
-        throw new Error('The ID token uses an unapproved signature algorithm.')
-      }
-      const jwksCache = jwksCaches.get(config.issuer) ?? {}
-      jwksCaches.set(config.issuer, jwksCache)
-      await oauth.validateApplicationLevelSignature(metadata, response, {
-        [oauth.jwksCache]: jwksCache,
-        [oauth.customFetch]: timedFetch,
-        [oauth.allowInsecureRequests]: isLocalIssuer(config.issuer),
-      })
-      const claims = oauth.getValidatedIdTokenClaims(tokens)
-      if (!claims) throw new Error('The validated OIDC response did not contain ID token claims.')
-
-      let source: Record<string, unknown> = claims
-      if (metadata.userinfo_endpoint) {
-        const userInfoResponse = await oauth.userInfoRequest(metadata, client, tokens.access_token, {
+      try {
+        const metadata = await discover(config.issuer)
+        const parameters = oauth.validateAuthResponse(metadata, client, callbackUrl, expectedState)
+        const response = await oauth.authorizationCodeGrantRequest(
+          metadata,
+          client,
+          clientAuthentication(config),
+          parameters,
+          config.redirectUri,
+          codeVerifier,
+          {
+            [oauth.customFetch]: timedFetch,
+            [oauth.allowInsecureRequests]: isLocalIssuer(config.issuer),
+          },
+        )
+        const tokens = await oauth.processAuthorizationCodeResponse(metadata, client, response, {
+          expectedNonce: nonce,
+          requireIdToken: true,
+        })
+        if (!tokens.id_token) throw new OidcCallbackError('The OIDC token response omitted an ID token.')
+        const header = decodeProtectedHeader(tokens.id_token)
+        if (!header.alg || !config.allowedAlgorithms.includes(header.alg)) {
+          throw new OidcCallbackError('The ID token uses an unapproved signature algorithm.')
+        }
+        const jwksCache = jwksCaches.get(config.issuer) ?? {}
+        jwksCaches.set(config.issuer, jwksCache)
+        await oauth.validateApplicationLevelSignature(metadata, response, {
+          [oauth.jwksCache]: jwksCache,
           [oauth.customFetch]: timedFetch,
           [oauth.allowInsecureRequests]: isLocalIssuer(config.issuer),
         })
-        source = await oauth.processUserInfoResponse(metadata, client, claims.sub, userInfoResponse)
+        const claims = oauth.getValidatedIdTokenClaims(tokens)
+        if (!claims) throw new OidcCallbackError('The validated OIDC response did not contain ID token claims.')
+
+        let source: Record<string, unknown> = claims
+        if (metadata.userinfo_endpoint) {
+          const userInfoResponse = await oauth.userInfoRequest(metadata, client, tokens.access_token, {
+            [oauth.customFetch]: timedFetch,
+            [oauth.allowInsecureRequests]: isLocalIssuer(config.issuer),
+          })
+          source = await oauth.processUserInfoResponse(metadata, client, claims.sub, userInfoResponse)
+        }
+        return profileFromClaims(config.issuer, claims.sub, source)
+      } catch (error) {
+        if (error instanceof OidcCallbackError) throw error
+        if (error instanceof OidcProviderError || error instanceof oauth.OperationProcessingError) {
+          throw new OidcCallbackError('The OIDC callback could not be validated.', { cause: error })
+        }
+        throw error
       }
-      return profileFromClaims(config.issuer, claims.sub, source)
     },
 
     async createLogoutUrl() {
@@ -103,14 +111,10 @@ export function createDpopTokenValidator(config: AppConfig): DpopTokenValidator 
 }
 
 export async function validateDpopRequest(config: AppConfig, request: Request): Promise<DpopTokenPrincipal> {
-  const authorization = request.headers.get('authorization')
-  if (!authorization?.startsWith('DPoP ') || authorization.slice(5).trim().includes(' ')) {
-    throw new Error('A DPoP access token is required.')
-  }
+  const accessToken = dpopAccessToken(request.headers.get('authorization'))
   const proof = request.headers.get('dpop')
-  if (!proof) throw new Error('A DPoP proof is required.')
+  if (!proof) throw new DpopCredentialError('invalid_dpop_proof', 'A DPoP proof is required.')
   const metadata = await discover(config.oidc.issuer)
-  const accessToken = authorization.slice(5)
   try {
     const jwks = accessTokenJwks.get(config.oidc.issuer) ?? createAccessTokenJwks(metadata)
     accessTokenJwks.set(config.oidc.issuer, jwks)
@@ -125,6 +129,7 @@ export async function validateDpopRequest(config: AppConfig, request: Request): 
     if (!Number.isInteger(verified.payload.iat) || (verified.payload.iat as number) > now + 60) {
       throw new Error('Invalid issued-at claim.')
     }
+    requireDpopBinding(verified.payload.cnf)
     if (
       !verified.payload.act ||
       typeof verified.payload.act !== 'object' ||
@@ -147,7 +152,8 @@ export async function validateDpopRequest(config: AppConfig, request: Request): 
       [oauth.allowInsecureRequests]: isLocalIssuer(config.oidc.issuer),
     })
   } catch (cause) {
-    throw new DpopCredentialError('invalid_dpop_proof', 'The DPoP proof is invalid.', { cause })
+    const kind = isDpopKeyBindingFailure(cause) ? 'invalid_token' : 'invalid_dpop_proof'
+    throw new DpopCredentialError(kind, 'The DPoP credential is invalid.', { cause })
   }
   const now = Math.floor(Date.now() / 1000)
   if (!Number.isInteger(claims.iat) || (claims.iat as number) > now + 60) {
@@ -174,6 +180,30 @@ export async function validateDpopRequest(config: AppConfig, request: Request): 
     keyThumbprint: await calculateJwkThumbprint(proofHeader.jwk),
     replayExpiresAt: new Date(((proofClaims.iat as number) + 300) * 1000).toISOString(),
   }
+}
+
+function dpopAccessToken(authorization: string | null): string {
+  const match = authorization?.match(/^([^\s]+)[\t ]+([^\t ]+)[\t ]*$/)
+  if (match?.[1].toLowerCase() !== 'dpop') {
+    throw new DpopCredentialError('invalid_token', 'A DPoP access token is required.')
+  }
+  return match[2]
+}
+
+function requireDpopBinding(confirmation: unknown): void {
+  if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
+    throw new Error('The access token confirmation claim is invalid.')
+  }
+  const entries = Object.entries(confirmation)
+  if (entries.length !== 1 || entries[0][0] !== 'jkt' || typeof entries[0][1] !== 'string' || !entries[0][1]) {
+    throw new Error('The access token must contain one jkt confirmation method.')
+  }
+}
+
+function isDpopKeyBindingFailure(error: unknown): boolean {
+  if (!(error instanceof oauth.OperationProcessingError)) return false
+  const cause = error.cause
+  return Boolean(cause && typeof cause === 'object' && (cause as Record<string, unknown>).claim === 'cnf.jkt')
 }
 
 function createAccessTokenJwks(metadata: oauth.AuthorizationServer) {
@@ -217,10 +247,16 @@ function stringClaim(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+async function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const signal = AbortSignal.any([init?.signal ?? new AbortController().signal, AbortSignal.timeout(10_000)])
-  return fetch(input, { ...init, signal })
+  try {
+    return await fetch(input, { ...init, signal })
+  } catch (error) {
+    throw new OidcProviderError('OIDC provider request failed.', { cause: error })
+  }
 }
+
+class OidcProviderError extends Error {}
 
 function isLocalIssuer(issuer: string): boolean {
   const url = new URL(issuer)

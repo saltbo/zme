@@ -1,5 +1,5 @@
 import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
-import { apiRequest, jsonBody, query } from './client'
+import { apiRequest, jsonBody, mergePatch, query } from './client'
 
 export async function searchIndexerOnce(input: {
   query: string
@@ -30,9 +30,8 @@ export async function getIndexer(id: string) {
 
 export async function updateIndexer(id: string, input: IndexerInput, expectedUpdatedAt: string) {
   return apiRequest<{ item: IndexerSummary }>(`/api/indexers/${id}`, 'Failed to update indexer.', {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
+    ...mergePatch(input),
+    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
@@ -44,7 +43,9 @@ export async function deleteIndexer(id: string, expectedUpdatedAt: string) {
 }
 
 export async function checkIndexerHealth(id: string) {
-  return apiRequest<{ health: IndexerHealth }>(`/api/indexers/${id}/health`, 'Failed to check indexer health.', {
-    method: 'PUT',
-  })
+  return apiRequest<{ item: IndexerHealth }>(
+    `/api/indexers/${id}/health-observations`,
+    'Failed to check indexer health.',
+    { method: 'POST' },
+  )
 }

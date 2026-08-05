@@ -30,10 +30,14 @@ export async function listLibraryStates() {
 }
 
 export async function saveLibraryResource(input: LibraryResourceStateInput) {
-  return apiRequest<{ item: LibraryStateItem }>('/api/library/resources', 'Failed to save library item.', {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  })
+  return apiRequest<{ item: LibraryStateItem }>(
+    `/api/library/resources/${encodeURIComponent(input.mediaKey)}`,
+    'Failed to save library item.',
+    {
+      method: 'PUT',
+      body: JSON.stringify({ status: input.status }),
+    },
+  )
 }
 
 export async function removeLibraryResource(input: LibraryResourceInput) {
@@ -42,7 +46,6 @@ export async function removeLibraryResource(input: LibraryResourceInput) {
     'Failed to remove library item.',
     {
       method: 'DELETE',
-      body: JSON.stringify(input),
     },
   )
 }

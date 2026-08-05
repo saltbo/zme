@@ -2,18 +2,28 @@ import type { AppConfig } from '@server/config'
 import { API_VERSION } from '@server/config'
 
 const secured = (scope: string) => [{ oidcSession: [] }, { oidcDpop: [scope] }]
-const parameters = [{ $ref: '#/components/parameters/ApiVersion' }]
+const traceParameters = [
+  { $ref: '#/components/parameters/Traceparent' },
+  { $ref: '#/components/parameters/Tracestate' },
+]
+const parameters = [{ $ref: '#/components/parameters/ApiVersion' }, ...traceParameters]
 const errors = {
   '400': { $ref: '#/components/responses/BadRequest' },
   '401': { $ref: '#/components/responses/Unauthorized' },
   '403': { $ref: '#/components/responses/Forbidden' },
   '404': { $ref: '#/components/responses/NotFound' },
   '409': { $ref: '#/components/responses/Conflict' },
+  '415': { $ref: '#/components/responses/UnsupportedMediaType' },
   '422': { $ref: '#/components/responses/ValidationError' },
   '429': { $ref: '#/components/responses/TooManyRequests' },
   '502': { $ref: '#/components/responses/BadGateway' },
   '503': { $ref: '#/components/responses/ServiceUnavailable' },
   '500': { $ref: '#/components/responses/InternalError' },
+}
+const sessionErrors = {
+  ...errors,
+  '401': { $ref: '#/components/responses/SessionUnauthorized' },
+  '403': { $ref: '#/components/responses/SessionForbidden' },
 }
 const publicErrors = {
   '400': { $ref: '#/components/responses/PublicBadRequest' },
@@ -181,6 +191,20 @@ export function openapiDocument(config: AppConfig) {
           description: 'Strong ETag returned by the most recent read or write of this resource.',
           schema: { type: 'string', pattern: '^".+"$' },
         },
+        Traceparent: {
+          name: 'traceparent',
+          in: 'header',
+          required: false,
+          description: 'Optional W3C Trace Context parent. Invalid values are ignored and replaced at the boundary.',
+          schema: { type: 'string', pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$' },
+        },
+        Tracestate: {
+          name: 'tracestate',
+          in: 'header',
+          required: false,
+          description: 'Optional W3C vendor trace state propagated only with valid trace context.',
+          schema: { type: 'string', minLength: 1, maxLength: 512 },
+        },
         Page: { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
         PageSize: { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 50, default: 20 } },
       },
@@ -191,16 +215,21 @@ export function openapiDocument(config: AppConfig) {
         Link: { schema: { type: 'string' } },
         ETag: { schema: { type: 'string', pattern: '^".+"$' } },
         WwwAuthenticate: {
-          description: 'DPoP challenge or error for token/proof/scope failures.',
+          description:
+            'DPoP challenge with supported proof algorithms and, when applicable, a token, proof, or scope error.',
           schema: { type: 'string', pattern: '^DPoP(?: |$)' },
+          example: 'DPoP algs="ES256", error="invalid_token"',
         },
       },
       responses: {
         BadRequest: problemResponse('Invalid protocol request'),
         Unauthorized: problemResponse('Authentication required', true),
         Forbidden: problemResponse('Authorization denied', true),
+        SessionUnauthorized: problemResponse('Browser session authentication required'),
+        SessionForbidden: problemResponse('Browser session authorization denied'),
         NotFound: problemResponse('Resource not found'),
         Conflict: problemResponse('Resource conflict'),
+        UnsupportedMediaType: problemResponse('Request media type is not supported'),
         ValidationError: problemResponse('Request validation failed'),
         PreconditionFailed: problemResponse('The resource changed after it was read'),
         PreconditionRequired: problemResponse('If-Match is required for this mutation'),
@@ -264,7 +293,7 @@ const sessionOperations: SessionOperation[] = [
   ['post', '/music-download-tasks', 'createMusicDownloadTask', 'Create a music download task', 'downloads'],
   ['get', '/library', 'listLibraryResources', 'List library resources', 'library'],
   ['get', '/library/states', 'listLibraryStates', 'List library resource states', 'library'],
-  ['put', '/library/resources', 'putLibraryResource', 'Create or replace a library resource', 'library'],
+  ['put', '/library/resources/{mediaKey}', 'putLibraryResource', 'Create or replace a library resource', 'library'],
   ['delete', '/library/resources/{mediaKey}', 'deleteLibraryResource', 'Delete a library resource', 'library'],
   ['get', '/library/music/collections', 'listMusicCollections', 'List music collections', 'library'],
   ['get', '/library/music/collections/{id}', 'getMusicCollection', 'Get a music collection', 'library'],
@@ -288,7 +317,7 @@ const sessionOperations: SessionOperation[] = [
   ['put', '/library/music/favorites', 'putFavoriteMusicTrack', 'Create or replace a favorite track', 'library'],
   ['get', '/connectors/providers', 'listConnectorProviders', 'List connector providers', 'connectors'],
   ['get', '/connectors', 'listConnectors', 'List connectors', 'connectors'],
-  ['post', '/connectors/douban', 'createDoubanConnector', 'Create a Douban connector', 'connectors'],
+  ['post', '/connectors', 'createConnector', 'Create a connector', 'connectors'],
   [
     'post',
     '/connector-login-attempts',
@@ -323,8 +352,30 @@ const sessionOperations: SessionOperation[] = [
   ['post', '/indexers', 'createIndexer', 'Create an indexer', 'configuration', 'admin'],
   ['patch', '/indexers/{id}', 'updateIndexer', 'Update an indexer', 'configuration', 'admin'],
   ['delete', '/indexers/{id}', 'deleteIndexer', 'Delete an indexer', 'configuration', 'admin'],
-  ['get', '/indexers/{id}/health', 'getIndexerHealth', 'Get the latest indexer health', 'configuration', 'admin'],
-  ['put', '/indexers/{id}/health', 'putIndexerHealth', 'Refresh the latest indexer health', 'configuration', 'admin'],
+  [
+    'get',
+    '/indexers/{id}/health-observations',
+    'listIndexerHealthObservations',
+    'List indexer health observations',
+    'configuration',
+    'admin',
+  ],
+  [
+    'post',
+    '/indexers/{id}/health-observations',
+    'createIndexerHealthObservation',
+    'Create an indexer health observation',
+    'configuration',
+    'admin',
+  ],
+  [
+    'get',
+    '/indexers/{id}/health-observations/{checkedAt}',
+    'getIndexerHealthObservation',
+    'Get an indexer health observation',
+    'configuration',
+    'admin',
+  ],
   ['get', '/media-sources', 'listMediaSources', 'List media sources', 'configuration', 'admin'],
   ['get', '/media-sources/{id}', 'getMediaSource', 'Get a media source', 'configuration', 'admin'],
   ['post', '/media-sources', 'createMediaSource', 'Create a media source', 'configuration', 'admin'],
@@ -332,17 +383,25 @@ const sessionOperations: SessionOperation[] = [
   ['delete', '/media-sources/{id}', 'deleteMediaSource', 'Delete a media source', 'configuration', 'admin'],
   [
     'get',
-    '/media-sources/{id}/health',
-    'getMediaSourceHealth',
-    'Get the latest media-source health',
+    '/media-sources/{id}/health-observations',
+    'listMediaSourceHealthObservations',
+    'List media-source health observations',
     'configuration',
     'admin',
   ],
   [
-    'put',
-    '/media-sources/{id}/health',
-    'putMediaSourceHealth',
-    'Refresh the latest media-source health',
+    'post',
+    '/media-sources/{id}/health-observations',
+    'createMediaSourceHealthObservation',
+    'Create a media-source health observation',
+    'configuration',
+    'admin',
+  ],
+  [
+    'get',
+    '/media-sources/{id}/health-observations/{checkedAt}',
+    'getMediaSourceHealthObservation',
+    'Get a media-source health observation',
     'configuration',
     'admin',
   ],
@@ -351,8 +410,27 @@ const sessionOperations: SessionOperation[] = [
   ['post', '/downloaders', 'createDownloader', 'Create a downloader', 'configuration'],
   ['patch', '/downloaders/{id}', 'updateDownloader', 'Update a downloader', 'configuration'],
   ['delete', '/downloaders/{id}', 'deleteDownloader', 'Delete a downloader', 'configuration'],
-  ['get', '/downloaders/{id}/health', 'getDownloaderHealth', 'Get the latest downloader health', 'configuration'],
-  ['put', '/downloaders/{id}/health', 'putDownloaderHealth', 'Refresh the latest downloader health', 'configuration'],
+  [
+    'get',
+    '/downloaders/{id}/health-observations',
+    'listDownloaderHealthObservations',
+    'List downloader health observations',
+    'configuration',
+  ],
+  [
+    'post',
+    '/downloaders/{id}/health-observations',
+    'createDownloaderHealthObservation',
+    'Create a downloader health observation',
+    'configuration',
+  ],
+  [
+    'get',
+    '/downloaders/{id}/health-observations/{checkedAt}',
+    'getDownloaderHealthObservation',
+    'Get a downloader health observation',
+    'configuration',
+  ],
   ['get', '/downloads', 'listBrowserDownloads', 'List browser download records', 'downloads'],
   ['get', '/downloads/events', 'streamDownloadEvents', 'Stream browser download events', 'downloads'],
   ['post', '/downloads', 'createBrowserDownload', 'Create a browser download', 'downloads'],
@@ -377,15 +455,17 @@ function sessionApiPaths() {
       security,
       parameters: [
         ...(policy === 'public'
-          ? []
+          ? traceParameters
           : policy === 'signed-key'
-            ? [{ $ref: '#/components/parameters/ApiVersionQuery' }]
+            ? [{ $ref: '#/components/parameters/ApiVersionQuery' }, ...traceParameters]
             : operationId === 'streamDownloadEvents'
-              ? [{ $ref: '#/components/parameters/ApiVersionQuery' }]
+              ? [{ $ref: '#/components/parameters/ApiVersionQuery' }, ...traceParameters]
               : parameters),
         ...pathParameters,
         ...sessionQueryParameters(operationId),
-        ...(operationId === 'createConnectorSyncJob' ? [{ $ref: '#/components/parameters/IdempotencyKey' }] : []),
+        ...(['createConnectorSyncJob', 'createBrowserDownload'].includes(operationId)
+          ? [{ $ref: '#/components/parameters/IdempotencyKey' }]
+          : []),
         ...(optimisticMutation ? [{ $ref: '#/components/parameters/IfMatch' }] : []),
       ],
       responses: {
@@ -394,6 +474,7 @@ function sessionApiPaths() {
           : sessionSuccessResponse(
               operationId,
               optimisticResource || (method === 'post' && /^\/(downloaders|indexers|media-sources)$/.test(path)),
+              successStatus === '201',
             ),
         ...(optimisticMutation
           ? {
@@ -401,7 +482,7 @@ function sessionApiPaths() {
               '428': { $ref: '#/components/responses/PreconditionRequired' },
             }
           : {}),
-        ...(policy === 'public' ? publicErrors : errors),
+        ...(policy === 'public' ? publicErrors : sessionErrors),
       },
     }
     if (policy === 'admin') operation['x-zme-local-role'] = 'admin'
@@ -414,7 +495,13 @@ function sessionApiPaths() {
     }
     const requestSchema = sessionRequestSchema(operationId)
     if (requestSchema) {
-      operation.requestBody = { required: true, content: json({ $ref: requestSchema }) }
+      operation.requestBody = {
+        required: true,
+        content:
+          method === 'patch'
+            ? { 'application/merge-patch+json': { schema: { $ref: requestSchema } } }
+            : json({ $ref: requestSchema }),
+      }
     }
     paths[path] ??= {}
     paths[path][method] = operation
@@ -425,7 +512,7 @@ function sessionApiPaths() {
 function sessionSuccessStatus(operationId: string, method: SessionOperation[0]) {
   const overrides: Record<string, string> = {
     createMusicDownloadTask: '202',
-    createDoubanConnector: '200',
+    createBrowserDownload: '202',
     putConnectorPlaylists: '202',
     putMusicCollectionSubscription: '202',
     deleteConnector: '204',
@@ -471,7 +558,7 @@ const sessionResponseSchemaByOperation: Record<string, string> = {
   putFavoriteMusicTrack: 'MusicCollectionEnvelope',
   listConnectorProviders: 'ConnectorProviderCollection',
   listConnectors: 'ConnectorCollection',
-  createDoubanConnector: 'ConnectorEnvelope',
+  createConnector: 'ConnectorEnvelope',
   createConnectorLoginAttempt: 'ConnectorLoginResult',
   getConnectorLoginAttempt: 'ConnectorLoginResult',
   putConnectorLoginResponse: 'ConnectorLoginResult',
@@ -485,43 +572,45 @@ const sessionResponseSchemaByOperation: Record<string, string> = {
   getIndexer: 'IndexerEnvelope',
   createIndexer: 'IndexerEnvelope',
   updateIndexer: 'IndexerEnvelope',
-  getIndexerHealth: 'HealthEnvelope',
-  putIndexerHealth: 'HealthEnvelope',
+  listIndexerHealthObservations: 'HealthCollection',
+  createIndexerHealthObservation: 'HealthEnvelope',
+  getIndexerHealthObservation: 'HealthEnvelope',
   listMediaSources: 'MediaSourceCollection',
   getMediaSource: 'MediaSourceEnvelope',
   createMediaSource: 'MediaSourceEnvelope',
   updateMediaSource: 'MediaSourceEnvelope',
-  getMediaSourceHealth: 'HealthEnvelope',
-  putMediaSourceHealth: 'HealthEnvelope',
+  listMediaSourceHealthObservations: 'HealthCollection',
+  createMediaSourceHealthObservation: 'HealthEnvelope',
+  getMediaSourceHealthObservation: 'HealthEnvelope',
   listDownloaders: 'DownloaderCollection',
   getDownloader: 'DownloaderEnvelope',
   createDownloader: 'DownloaderEnvelope',
   updateDownloader: 'DownloaderEnvelope',
-  getDownloaderHealth: 'HealthEnvelope',
-  putDownloaderHealth: 'HealthEnvelope',
+  listDownloaderHealthObservations: 'HealthCollection',
+  createDownloaderHealthObservation: 'HealthEnvelope',
+  getDownloaderHealthObservation: 'HealthEnvelope',
   listBrowserDownloads: 'BrowserDownloadTaskPage',
   createBrowserDownload: 'BrowserDownloadResultEnvelope',
 }
 
 const sessionRequestSchemaByOperation: Record<string, string> = {
   createMusicDownloadTask: '#/components/schemas/MusicDownloadTaskInput',
-  putLibraryResource: '#/components/schemas/LibraryResourceInput',
-  deleteLibraryResource: '#/components/schemas/LibraryResourceInput',
+  putLibraryResource: '#/components/schemas/LibraryResourceStateInput',
   putMusicCollectionSubscription: '#/components/schemas/MusicSubscriptionInput',
   createLibraryMusicAlbum: '#/components/schemas/MusicAlbumInput',
   putFavoriteMusicTrack: '#/components/schemas/FavoriteTrackMutation',
-  createDoubanConnector: '#/components/schemas/DoubanConnectorInput',
+  createConnector: '#/components/schemas/ConnectorInput',
   createConnectorLoginAttempt: '#/components/schemas/ConnectorLoginStartInput',
   putConnectorLoginResponse: '#/components/schemas/ConnectorLoginResponseInput',
   updateConnector: '#/components/schemas/ConnectorPatch',
   createConnectorSyncJob: '#/components/schemas/ConnectorSyncJobInput',
   putConnectorPlaylists: '#/components/schemas/PlaylistSelectionInput',
   createIndexer: '#/components/schemas/IndexerInput',
-  updateIndexer: '#/components/schemas/IndexerInput',
+  updateIndexer: '#/components/schemas/IndexerPatch',
   createMediaSource: '#/components/schemas/MediaSourceInput',
-  updateMediaSource: '#/components/schemas/MediaSourceInput',
+  updateMediaSource: '#/components/schemas/MediaSourcePatch',
   createDownloader: '#/components/schemas/DownloaderInput',
-  updateDownloader: '#/components/schemas/DownloaderInput',
+  updateDownloader: '#/components/schemas/DownloaderPatch',
   createBrowserDownload: '#/components/schemas/BrowserDownloadInput',
 }
 
@@ -529,7 +618,7 @@ function sessionRequestSchema(operationId: string) {
   return sessionRequestSchemaByOperation[operationId]
 }
 
-function sessionSuccessResponse(operationId: string, entityTagged: boolean) {
+function sessionSuccessResponse(operationId: string, entityTagged: boolean, created: boolean) {
   if (operationId === 'getSignedMusicContent') return musicContentResponse(false)
   if (operationId === 'headSignedMusicContent') return musicContentResponse(true)
   if (operationId === 'streamDownloadEvents') {
@@ -552,7 +641,10 @@ function sessionSuccessResponse(operationId: string, entityTagged: boolean) {
   if (['getResourceServer', 'getServiceHealth', 'getOpenApiDocument'].includes(operationId)) {
     return publicSuccess(ref)
   }
-  return entityTagged ? successWithEntityTag(ref) : success(ref)
+  const response = entityTagged ? successWithEntityTag(ref) : success(ref)
+  return created
+    ? { ...response, headers: { ...response.headers, Location: { $ref: '#/components/headers/Location' } } }
+    : response
 }
 
 function musicContentResponse(head: boolean) {
@@ -847,8 +939,12 @@ function schemas() {
           type: 'array',
           items: {
             type: 'object',
-            required: ['path', 'message'],
-            properties: { path: { type: 'string' }, message: { type: 'string' } },
+            required: ['pointer', 'detail'],
+            properties: {
+              pointer: { type: 'string', pattern: '^#(?:/.*)?$' },
+              detail: { type: 'string' },
+            },
+            additionalProperties: false,
           },
         },
       },
@@ -1318,13 +1414,10 @@ function schemas() {
         updatedAt: dateTime,
       },
     },
-    LibraryResourceInput: {
+    LibraryResourceStateInput: {
       type: 'object',
       additionalProperties: false,
-      required: ['mediaKey', 'kind'],
       properties: {
-        mediaKey: { type: 'string', minLength: 1 },
-        kind: { type: 'string', enum: ['movie', 'tv', 'music', 'book'] },
         status: { type: 'string', enum: ['saved', 'watched'], default: 'saved' },
       },
     },
@@ -1653,11 +1746,15 @@ function schemas() {
     },
     ConnectorCollection: items('#/components/schemas/Connector'),
     ConnectorEnvelope: envelope('Connector'),
-    DoubanConnectorInput: {
+    ConnectorInput: {
       type: 'object',
       additionalProperties: false,
-      required: ['profileId'],
-      properties: { profileId: { type: 'string', minLength: 1 }, enabled: { type: 'boolean', default: true } },
+      required: ['kind', 'profileId'],
+      properties: {
+        kind: { type: 'string', const: 'douban' },
+        profileId: { type: 'string', minLength: 1 },
+        enabled: { type: 'boolean', default: true },
+      },
     },
     ConnectorLoginStartInput: {
       type: 'object',
@@ -1853,12 +1950,8 @@ function schemas() {
       properties: { results: { type: 'array', items: { $ref: '#/components/schemas/ReleaseCandidate' } } },
     },
     Health: health,
-    HealthEnvelope: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['health'],
-      properties: { health: { $ref: '#/components/schemas/Health' } },
-    },
+    HealthEnvelope: envelope('Health'),
+    HealthCollection: items('#/components/schemas/Health'),
     Indexer: {
       type: 'object',
       additionalProperties: false,
@@ -1895,6 +1988,19 @@ function schemas() {
       type: 'object',
       additionalProperties: false,
       required: ['kind', 'endpoint', 'credentials', 'options', 'enabled'],
+      properties: {
+        description: { type: 'string' },
+        kind: { type: 'string', const: 'prowlarr' },
+        endpoint: { type: 'string', format: 'uri' },
+        credentials: stringMap,
+        options: stringMap,
+        enabled: { type: 'boolean' },
+      },
+    },
+    IndexerPatch: {
+      type: 'object',
+      additionalProperties: false,
+      minProperties: 1,
       properties: {
         description: { type: 'string' },
         kind: { type: 'string', const: 'prowlarr' },
@@ -1946,6 +2052,18 @@ function schemas() {
         enabled: { type: 'boolean' },
       },
     },
+    MediaSourcePatch: {
+      type: 'object',
+      additionalProperties: false,
+      minProperties: 1,
+      properties: {
+        description: { type: 'string' },
+        kind: { type: 'string', const: 'tmdb' },
+        credentials: stringMap,
+        options: stringMap,
+        enabled: { type: 'boolean' },
+      },
+    },
     Downloader: {
       type: 'object',
       additionalProperties: false,
@@ -1984,6 +2102,19 @@ function schemas() {
       type: 'object',
       additionalProperties: false,
       required: ['kind', 'endpoint', 'credentials', 'options', 'enabled'],
+      properties: {
+        description: { type: 'string' },
+        kind: { type: 'string', enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] },
+        endpoint: { type: 'string', format: 'uri' },
+        credentials: stringMap,
+        options: stringMap,
+        enabled: { type: 'boolean' },
+      },
+    },
+    DownloaderPatch: {
+      type: 'object',
+      additionalProperties: false,
+      minProperties: 1,
       properties: {
         description: { type: 'string' },
         kind: { type: 'string', enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] },

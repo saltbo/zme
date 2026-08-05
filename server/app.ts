@@ -23,7 +23,7 @@ const app = new Hono<AppEnv>()
 app.use('*', requestBoundaryMiddleware)
 app.use('*', normalizeProblemMiddleware)
 app.use('*', async (c, next) => {
-  c.set('deps', createDeps(c.env))
+  c.set('deps', createDeps(c.env, c.get('trace')))
   await next()
 })
 registerIdentityRoutes(app)

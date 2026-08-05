@@ -59,6 +59,14 @@ describe('http wiring', () => {
       const response = await request(path)
       expect(response.status, path).toBe(401)
     }
+
+    const agentSafe = await request('/api/media?query=dune')
+    expect(agentSafe.headers.get('www-authenticate')).toBe(
+      'DPoP algs="RS256 RS384 RS512 PS256 PS384 PS512 ES256 ES384 ES512 EdDSA"',
+    )
+
+    const browserOnly = await request('/api/library')
+    expect(browserOnly.headers.has('www-authenticate')).toBe(false)
   })
 
   it('rejects unauthenticated admin routes at the auth wall, not the admin wall', async () => {

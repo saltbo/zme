@@ -7,7 +7,7 @@ import type {
   DownloaderSummary,
 } from '@shared/types'
 import type { Deps } from './deps'
-import { type DownloaderRecord, StaleWriteError } from './ports'
+import { type DownloaderRecord, DownloadSubmissionRejectedError, StaleWriteError } from './ports'
 
 export async function listDownloaders(deps: Deps, userId: string): Promise<DownloaderSummary[]> {
   const records = await deps.downloadersRepo.list(userId)
@@ -34,11 +34,21 @@ export async function updateDownloader(
   deps: Deps,
   userId: string,
   id: string,
-  input: DownloaderInput,
+  input: Partial<DownloaderInput>,
   expectedUpdatedAt: string,
 ): Promise<DownloaderSummary | null> {
-  const record = await deps.downloadersRepo.update(userId, id, input, expectedUpdatedAt)
-  if (!record && (await deps.downloadersRepo.get(userId, id))) throw new StaleWriteError()
+  const current = await deps.downloadersRepo.get(userId, id)
+  if (!current) return null
+  const merged: DownloaderInput = {
+    description: input.description ?? current.description ?? undefined,
+    kind: input.kind ?? current.kind,
+    endpoint: input.endpoint ?? current.config.endpoint,
+    credentials: input.credentials ?? current.config.credentials,
+    options: input.options ?? current.config.options,
+    enabled: input.enabled ?? current.enabled,
+  }
+  const record = await deps.downloadersRepo.update(userId, id, merged, expectedUpdatedAt)
+  if (!record) throw new StaleWriteError()
   return record ? toSummary(deps, record) : null
 }
 
@@ -57,17 +67,20 @@ export async function submitDownload(
   deps: Deps,
   userId: string,
   input: CreateDownloadInput,
+  idempotencyKey?: string,
 ): Promise<CreateDownloadResult> {
   const downloader = await deps.downloadersRepo.getEnabled(userId, input.downloaderId)
-  if (!downloader) throw new Error('Downloader is not available.')
+  if (!downloader) throw new DownloadSubmissionRejectedError('Downloader is not available.')
   const gateway = deps.downloaderGateways[downloader.kind]
   const resolvedInput = await resolveDownloadInput(deps, input)
   if (!gateway.supportedSourceTypes.includes(resolvedInput.sourceType)) {
     const source = resolvedInput.sourceType === 'http' ? 'HTTP file' : resolvedInput.sourceType.replace('_', ' ')
-    throw new Error(`${downloader.kind} does not support ${source} downloads.`)
+    throw new DownloadSubmissionRejectedError(`${downloader.kind} does not support ${source} downloads.`)
   }
 
-  const submission = await gateway.submit(downloader.config, resolvedInput)
+  const submission = idempotencyKey
+    ? await gateway.submit(downloader.config, resolvedInput, idempotencyKey)
+    : await gateway.submit(downloader.config, resolvedInput)
 
   return {
     downloaderId: downloader.id,
@@ -90,7 +103,7 @@ async function resolveDownloadInput(deps: Deps, input: CreateDownloadInput): Pro
     if (resolved) return { ...input, ...resolved }
   }
 
-  throw new Error('Prowlarr download URL could not be resolved.')
+  throw new DownloadSubmissionRejectedError('Prowlarr download URL could not be resolved.')
 }
 
 export async function checkDownloaderHealth(deps: Deps, userId: string, id: string): Promise<DownloaderHealth | null> {

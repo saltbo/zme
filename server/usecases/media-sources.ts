@@ -25,11 +25,20 @@ export async function createMediaSource(deps: Deps, input: MediaSourceInput): Pr
 export async function updateMediaSource(
   deps: Deps,
   id: string,
-  input: MediaSourceInput,
+  input: Partial<MediaSourceInput>,
   expectedUpdatedAt: string,
 ): Promise<MediaSourceSummary | null> {
-  const record = await deps.mediaSourcesRepo.update(id, input, expectedUpdatedAt)
-  if (!record && (await deps.mediaSourcesRepo.get(id))) throw new StaleWriteError()
+  const current = await deps.mediaSourcesRepo.get(id)
+  if (!current) return null
+  const merged: MediaSourceInput = {
+    description: input.description ?? current.description ?? undefined,
+    kind: input.kind ?? current.kind,
+    credentials: input.credentials ?? current.credentials,
+    options: input.options ?? current.options,
+    enabled: input.enabled ?? current.enabled,
+  }
+  const record = await deps.mediaSourcesRepo.update(id, merged, expectedUpdatedAt)
+  if (!record) throw new StaleWriteError()
   return record ? toSummary(record) : null
 }
 

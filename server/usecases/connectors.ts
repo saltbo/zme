@@ -110,6 +110,8 @@ export interface ConnectorSyncMessage {
   userId: string
   connectorId: string
   jobId: string
+  traceparent?: string
+  tracestate?: string
 }
 
 export async function enqueueConnectorSync(

@@ -60,10 +60,18 @@ export interface ConnectorConfig {
 export interface DownloaderGateway {
   readonly supportedSourceTypes: ReadonlyArray<CreateDownloadInput['sourceType']>
   /** Submits a download to the remote downloader. Throws on rejection. */
-  submit(config: ConnectorConfig, input: CreateDownloadInput): Promise<{ externalTaskId: string | null }>
+  submit(
+    config: ConnectorConfig,
+    input: CreateDownloadInput,
+    idempotencyKey?: string,
+  ): Promise<{ externalTaskId: string | null }>
   /** Throws when the downloader is unreachable or misconfigured. */
   probe(config: ConnectorConfig): Promise<void>
 }
+
+export class DownloadSubmissionRejectedError extends Error {}
+export class DownloadSubmissionUnknownError extends Error {}
+export class IndexerSearchError extends Error {}
 
 export interface DownloadTaskOwner {
   downloaderId: string

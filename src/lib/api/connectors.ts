@@ -6,7 +6,7 @@ import type {
   DoubanConnectorInput,
   MusicCollectionSummary,
 } from '@shared/types'
-import { apiRequest } from './client'
+import { apiRequest, mergePatch } from './client'
 
 export async function listConnectors() {
   return apiRequest<{ items: ConnectorSummary[] }>('/api/connectors', 'Failed to load connectors.')
@@ -20,17 +20,16 @@ export async function listConnectorProviders() {
 }
 
 export async function saveDoubanConnector(input: DoubanConnectorInput) {
-  return apiRequest<{ item: ConnectorSummary }>('/api/connectors/douban', 'Failed to save Douban connector.', {
+  return apiRequest<{ item: ConnectorSummary }>('/api/connectors', 'Failed to save Douban connector.', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ kind: 'douban', ...input }),
   })
 }
 
 export async function updateConnector(id: string, input: { enabled: boolean }, expectedUpdatedAt: string) {
   return apiRequest<{ item: ConnectorSummary }>(`/api/connectors/${id}`, 'Failed to update connector.', {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
+    ...mergePatch(input),
+    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 

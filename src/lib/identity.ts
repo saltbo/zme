@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { z } from 'zod'
 
 export interface SessionUser {
   id: string
@@ -9,6 +10,24 @@ export interface SessionUser {
   image: string | null
   role: 'admin' | 'user'
 }
+
+const sessionSchema = z
+  .object({
+    user: z
+      .object({
+        id: z.string().min(1),
+        issuer: z.string().url(),
+        subject: z.string().min(1),
+        name: z.string(),
+        email: z.string().email().nullable(),
+        image: z.string().url().nullable(),
+        role: z.enum(['admin', 'user']),
+      })
+      .strict()
+      .nullable(),
+    expiresAt: z.string().datetime().optional(),
+  })
+  .strict()
 
 export function useSession() {
   return useQuery({
@@ -22,7 +41,7 @@ export function useSession() {
 export async function getSession(): Promise<{ user: SessionUser | null; expiresAt?: string }> {
   const response = await fetch('/auth/session', { credentials: 'include' })
   if (!response.ok) throw new Error('Failed to load the application session.')
-  return response.json() as Promise<{ user: SessionUser | null; expiresAt?: string }>
+  return sessionSchema.parse(await response.json())
 }
 
 export async function signOut(): Promise<string> {

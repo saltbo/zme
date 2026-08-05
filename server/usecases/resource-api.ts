@@ -1,5 +1,5 @@
 import { analyzeIndexerRelease } from '@shared/release-analysis'
-import type { DownloadTaskStatus, DownloadTaskSummary, MediaSearchItem } from '@shared/types'
+import type { DownloadTaskStatus, DownloadTaskSummary, IndexerSearchItem, MediaSearchItem } from '@shared/types'
 import type { Deps } from './deps'
 import { submitDownload } from './downloaders'
 import { hashSecret } from './identity'
@@ -11,6 +11,12 @@ import type {
   ReleaseSearchJobRecord,
   ReleaseSearchResultRecord,
 } from './ports'
+import {
+  DownloadSubmissionRejectedError,
+  DownloadSubmissionUnknownError,
+  IndexerNotConfiguredError,
+  IndexerSearchError,
+} from './ports'
 
 export interface ReleaseSearchJobInput {
   mediaKey: string
@@ -20,7 +26,6 @@ export interface ReleaseSearchJobInput {
   categories?: number[]
 }
 
-const STALE_SUBMISSION_MS = 5 * 60_000
 const RELEASE_SEARCH_LEASE_MS = 5 * 60_000
 
 export async function findMedia(deps: Deps, query: string, language?: string): Promise<MediaSearchItem[]> {
@@ -92,15 +97,14 @@ async function runReleaseSearchJob(deps: Deps, record: ReleaseSearchJobRecord) {
   if (!(await deps.resourceApiRepo.claimReleaseJob(record.id, leaseOwner, claimedAt.toISOString(), leaseExpiresAt))) {
     return (await deps.resourceApiRepo.getReleaseJob(record.userId, record.id)) ?? record
   }
+  const searchType = ['search', 'audiosearch', 'booksearch'].includes(record.searchType)
+    ? (record.searchType as 'search' | 'audiosearch' | 'booksearch')
+    : 'search'
+  let items: IndexerSearchItem[]
   try {
-    const searchType = ['search', 'audiosearch', 'booksearch'].includes(record.searchType)
-      ? (record.searchType as 'search' | 'audiosearch' | 'booksearch')
-      : 'search'
-    const items = (await searchIndexers(deps, { ...record, searchType })).slice(0, 200)
-    const completedAt = new Date().toISOString()
-    await deps.resourceApiRepo.completeReleaseJob(record.id, leaseOwner, items, completedAt)
-    return (await deps.resourceApiRepo.getReleaseJob(record.userId, record.id)) ?? record
+    items = (await searchIndexers(deps, { ...record, searchType })).slice(0, 200)
   } catch (error) {
+    if (!(error instanceof IndexerSearchError || error instanceof IndexerNotConfiguredError)) throw error
     const completedAt = new Date().toISOString()
     console.warn(
       JSON.stringify({
@@ -112,6 +116,9 @@ async function runReleaseSearchJob(deps: Deps, record: ReleaseSearchJobRecord) {
     await deps.resourceApiRepo.failReleaseJob(record.id, leaseOwner, message, completedAt)
     return (await deps.resourceApiRepo.getReleaseJob(record.userId, record.id)) ?? record
   }
+  const completedAt = new Date().toISOString()
+  await deps.resourceApiRepo.completeReleaseJob(record.id, leaseOwner, items, completedAt)
+  return (await deps.resourceApiRepo.getReleaseJob(record.userId, record.id)) ?? record
 }
 
 export async function createManualDownloadTask(
@@ -124,7 +131,7 @@ export async function createManualDownloadTask(
   const existing = await deps.resourceApiRepo.findDownloadTaskByIdempotency(userId, idempotencyKey)
   if (existing) {
     if (existing.requestHash !== requestHash) throw new IdempotencyConflictError()
-    return existing
+    return existing.status === 'submitting' ? submitPendingDownloadTask(deps, userId, existing) : existing
   }
   const result = await deps.resourceApiRepo.getReleaseResult(userId, input.releaseSearchResultId)
   if (!result) throw new ResourceNotFoundError('Release search result not found.')
@@ -161,20 +168,41 @@ export async function createManualDownloadTask(
   if (!(await deps.resourceApiRepo.createDownloadTask(record))) {
     const raced = await deps.resourceApiRepo.findDownloadTaskByIdempotency(userId, idempotencyKey)
     if (!raced || raced.requestHash !== requestHash) throw new IdempotencyConflictError()
-    return raced
+    return raced.status === 'submitting' ? submitPendingDownloadTask(deps, userId, raced) : raced
   }
+  return submitPendingDownloadTask(deps, userId, record)
+}
+
+async function submitPendingDownloadTask(
+  deps: Deps,
+  userId: string,
+  record: ManualDownloadTaskRecord,
+): Promise<ManualDownloadTaskRecord> {
+  const result = await deps.resourceApiRepo.getReleaseResult(userId, record.releaseSearchResultId)
+  if (!result) throw new ResourceNotFoundError('Release search result not found.')
+  const uri = result.item.magnetUrl ?? result.item.downloadUrl
+  if (!uri) throw new ResourceConflictError('The selected release has no downloadable source.')
   try {
-    const submission = await submitDownload(deps, userId, {
-      downloaderId: input.downloaderId,
-      uri,
-      sourceType: result.item.magnetUrl ? 'magnet' : 'torrent_url',
-      title: result.item.title,
-    })
+    const submission = await submitDownload(
+      deps,
+      userId,
+      {
+        downloaderId: record.downloaderId,
+        uri,
+        sourceType: result.item.magnetUrl ? 'magnet' : 'torrent_url',
+        title: result.item.title,
+      },
+      record.id,
+    )
     if (await deps.resourceApiRepo.markDownloadTaskSubmitted(record.id, submission)) {
       return { ...record, status: 'submitted', externalTaskId: submission.externalTaskId ?? null }
     }
     return (await deps.resourceApiRepo.getDownloadTask(userId, record.id)) ?? record
   } catch (error) {
+    if (error instanceof DownloadSubmissionUnknownError) {
+      throw new ResourceUpstreamError('Download submission outcome is unknown; retry with the same Idempotency-Key.')
+    }
+    if (!(error instanceof DownloadSubmissionRejectedError)) throw error
     const completedAt = new Date().toISOString()
     console.warn(
       JSON.stringify({
@@ -192,14 +220,6 @@ export async function createManualDownloadTask(
 
 export async function getManualDownloadTask(deps: Deps, userId: string, id: string) {
   const task = await deps.resourceApiRepo.getDownloadTask(userId, id)
-  if (task?.status === 'submitting' && Date.now() - Date.parse(task.createdAt) > STALE_SUBMISSION_MS) {
-    const completedAt = new Date().toISOString()
-    const error = 'Download submission was interrupted; verify the downloader before retrying.'
-    if (await deps.resourceApiRepo.failDownloadTask(task.id, error, completedAt)) {
-      return { ...task, status: 'failed' as const, error, completedAt }
-    }
-    return deps.resourceApiRepo.getDownloadTask(userId, id)
-  }
   if (!task?.externalTaskId || !['submitted', 'running'].includes(task.status)) return task
   const downloader = await deps.downloadersRepo.get(userId, task.downloaderId)
   if (!downloader) return task

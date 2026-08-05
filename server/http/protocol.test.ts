@@ -1,9 +1,16 @@
 import type { Env } from '@server/env'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, normalizeProblemMiddleware, problem } from './protocol'
+import {
+  entityTag,
+  ifMatchRevision,
+  normalizeProblemMiddleware,
+  problem,
+  requestBoundaryMiddleware,
+  setPageLinks,
+} from './protocol'
 
 const env = {
   PUBLIC_APP_ORIGIN: 'https://zme.test',
@@ -69,13 +76,13 @@ describe('HTTP protocol helpers', () => {
     const structured = await app.request('/validation/issues', undefined, env)
     expect(await structured.json()).toMatchObject({
       status: 422,
-      errors: [{ path: 'body.name', message: 'Name is required' }],
+      errors: [{ pointer: '#/body/name', detail: 'Name is required' }],
     })
     const serialized = await app.request('/validation/message', undefined, env)
-    expect(await serialized.json()).toMatchObject({ errors: [{ path: '', message: 'Invalid value' }] })
+    expect(await serialized.json()).toMatchObject({ errors: [{ pointer: '#', detail: 'Invalid value' }] })
     const unparseable = await app.request('/validation/unparseable', undefined, env)
     expect(await unparseable.json()).toMatchObject({
-      errors: [{ path: '', message: 'Request validation failed' }],
+      errors: [{ pointer: '#', detail: 'Request validation failed' }],
     })
   })
 
@@ -94,5 +101,42 @@ describe('HTTP protocol helpers', () => {
     expect(await (await app.request('/revision', { headers: { 'If-Match': '*' } }, env)).json()).toEqual({
       revision: null,
     })
+  })
+
+  it('correlates request logs with W3C trace and span identifiers', async () => {
+    const app = new Hono<AppEnv>()
+    app.use('*', requestBoundaryMiddleware)
+    app.get('/trace', (c) => c.json({ ok: true }))
+    app.get('/page', (c) => {
+      setPageLinks(c, { page: 2, pageSize: 20 }, 61)
+      return c.json({ items: [], pagination: { page: 2, pageSize: 20, totalItems: 61, totalPages: 4 } })
+    })
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+
+    const response = await app.request(
+      '/trace',
+      {
+        headers: {
+          traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+          tracestate: 'vendor=value',
+        },
+      },
+      env,
+    )
+
+    expect(response.status).toBe(200)
+    const entry = JSON.parse(String(log.mock.calls.at(-1)?.[0]))
+    expect(entry).toMatchObject({
+      requestId: expect.any(String),
+      traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+      spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
+    })
+    expect(entry.spanId).not.toBe('00f067aa0ba902b7')
+    expect(JSON.stringify(entry)).not.toContain('vendor=value')
+    const page = await app.request('/page?status=running', undefined, env)
+    expect(page.headers.get('link')).toContain('rel="service-desc"')
+    expect(page.headers.get('link')).toContain('status=running&page=3&pageSize=20>; rel="next"')
+    expect(page.headers.get('link')).toContain('status=running&page=1&pageSize=20>; rel="first"')
+    log.mockRestore()
   })
 })

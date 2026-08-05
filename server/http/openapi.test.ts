@@ -78,6 +78,8 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(document.components.securitySchemes.oidcDpop['x-dpop-required']).toBe(true)
     expect(document.components.parameters.ApiVersion.schema.const).toBe(API_VERSION)
     expect(document.components.parameters.IdempotencyKey.required).toBe(true)
+    expect(document.components.parameters.Traceparent.required).toBe(false)
+    expect(document.components.parameters.Tracestate.required).toBe(false)
     expect(document.components.schemas.Problem.required).toEqual(
       expect.arrayContaining(['type', 'title', 'status', 'detail', 'instance']),
     )
@@ -95,6 +97,11 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(document.components.schemas).not.toHaveProperty('SessionPayload')
     expect(document.components.responses.Unauthorized.headers).toHaveProperty('WWW-Authenticate')
     expect(document.components.responses.Forbidden.headers).toHaveProperty('WWW-Authenticate')
+    expect(document.components.responses.SessionUnauthorized.headers).not.toHaveProperty('WWW-Authenticate')
+    expect(document.components.responses.SessionForbidden.headers).not.toHaveProperty('WWW-Authenticate')
+    expect(paths['/library'].get.responses?.['401']).toEqual({
+      $ref: '#/components/responses/SessionUnauthorized',
+    })
     expect(
       openapiDocument({ ...config, oidc: { ...config.oidc, issuer: `${config.oidc.issuer}/` } }).components
         .securitySchemes.oidcDpop.openIdConnectUrl,
@@ -105,6 +112,12 @@ describe('DPoP resource OpenAPI contract', () => {
     for (const path of ['/', '/health', '/openapi.json']) {
       expect(paths[path].get.responses?.['200'].headers).not.toHaveProperty('API-Version')
       expect(paths[path].get.responses).not.toHaveProperty('401')
+      expect(paths[path].get.parameters).toEqual(
+        expect.arrayContaining([
+          { $ref: '#/components/parameters/Traceparent' },
+          { $ref: '#/components/parameters/Tracestate' },
+        ]),
+      )
     }
     expect(document.components.responses.PublicBadRequest.headers).not.toHaveProperty('API-Version')
     expect(document.components.responses.PublicInternalError.headers).not.toHaveProperty('API-Version')
@@ -145,6 +158,9 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(paths['/downloaders/{id}'].patch.parameters).toContainEqual({
       $ref: '#/components/parameters/IfMatch',
     })
+    expect(paths['/downloaders/{id}'].patch.requestBody?.content).toEqual({
+      'application/merge-patch+json': { schema: { $ref: '#/components/schemas/DownloaderPatch' } },
+    })
     expect(paths['/downloaders/{id}'].patch.responses).toHaveProperty('412')
     expect(paths['/downloaders/{id}'].patch.responses).toHaveProperty('428')
 
@@ -153,9 +169,9 @@ describe('DPoP resource OpenAPI contract', () => {
         const jsonSchema = response.content?.['application/json']?.schema
         expect(jsonSchema?.$ref).not.toBe('#/components/schemas/SessionPayload')
       }
-      expect(operation.requestBody?.content['application/json'].schema.$ref).not.toBe(
-        '#/components/schemas/SessionPayload',
-      )
+      for (const mediaType of Object.values(operation.requestBody?.content ?? {})) {
+        expect(mediaType.schema.$ref).not.toBe('#/components/schemas/SessionPayload')
+      }
     }
   })
 })

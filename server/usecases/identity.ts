@@ -86,6 +86,13 @@ export class IdentityDisabledError extends Error {
   }
 }
 
+export class OidcCallbackError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'OidcCallbackError'
+  }
+}
+
 export class DpopCredentialError extends Error {
   constructor(
     readonly kind: 'invalid_token' | 'invalid_dpop_proof',
@@ -128,7 +135,7 @@ export async function completeOidcLogin(
   now = new Date(),
 ): Promise<{ sessionToken: string; session: LocalSession; returnTo: string }> {
   const transaction = await repo.consumeLoginTransaction(await hashSecret(state), now.toISOString())
-  if (!transaction) throw new Error('The OIDC login transaction is missing, expired, or already used.')
+  if (!transaction) throw new OidcCallbackError('The OIDC login transaction is missing, expired, or already used.')
   const profile = await oidc.exchangeCallback(callbackUrl, state, transaction.nonce, transaction.codeVerifier)
   const key = principalKey(profile.issuer, profile.subject)
   const user = await repo.resolveUser(

@@ -47,18 +47,18 @@ describe('library resources', () => {
     const cookie = await setupAdmin()
     const resource = { mediaKey: 'tmdb:movie:550', kind: 'movie' }
 
-    const saved = await request('/api/library/resources', {
+    const saved = await request(`/api/library/resources/${encodeURIComponent(resource.mediaKey)}`, {
       method: 'PUT',
       cookie,
-      body: JSON.stringify({ ...resource, status: 'saved' }),
+      body: JSON.stringify({ status: 'saved' }),
     })
     expect(saved.status).toBe(200)
     expect(await saved.json()).toMatchObject({ item: { mediaKey: 'tmdb:movie:550', id: 550, kind: 'movie' } })
 
-    const watched = await request('/api/library/resources', {
+    const watched = await request(`/api/library/resources/${encodeURIComponent(resource.mediaKey)}`, {
       method: 'PUT',
       cookie,
-      body: JSON.stringify({ ...resource, status: 'watched' }),
+      body: JSON.stringify({ status: 'watched' }),
     })
     const watchedItem = ((await watched.json()) as { item: { watchedAt: string | null } }).item
     expect(watchedItem.watchedAt).not.toBeNull()
@@ -71,7 +71,6 @@ describe('library resources', () => {
     const deleted = await request(`/api/library/resources/${encodeURIComponent('tmdb:movie:550')}`, {
       method: 'DELETE',
       cookie,
-      body: JSON.stringify({ ...resource, status: 'saved' }),
     })
     expect(deleted.status).toBe(200)
 
@@ -79,14 +78,13 @@ describe('library resources', () => {
     expect(after.items).toEqual([])
   })
 
-  it('rejects a media key that does not match the body', async () => {
+  it('rejects a media key that is not a library resource identity', async () => {
     const cookie = await setupAdmin()
-    const response = await request('/api/library/resources/tmdb%3Amovie%3A1', {
+    const response = await request('/api/library/resources/not-a-media-key', {
       method: 'DELETE',
       cookie,
-      body: JSON.stringify({ mediaKey: 'tmdb:movie:2', kind: 'movie', status: 'saved' }),
     })
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(422)
   })
 
   it('serves the book/music library kinds without a TMDB source [spec: library/book-music-no-tmdb]', async () => {
@@ -216,15 +214,15 @@ describe('admin-managed connectors', () => {
     expect(details.headers.get('etag')).toBe(createdEtag)
     expect(await details.json()).toMatchObject({ item: { credentials: { apiKey: 'tmdb-key' } } })
 
-    const health = await request(`/api/media-sources/${item.id}/health`, { cookie })
+    const health = await request(`/api/media-sources/${item.id}/health-observations`, { cookie })
     expect(health.status).toBe(200)
-    expect(await health.json()).toEqual({ health: { status: 'unknown', message: null, checkedAt: null } })
+    expect(await health.json()).toEqual({ items: [] })
 
     const updated = await request(`/api/media-sources/${item.id}`, {
       method: 'PATCH',
       cookie,
-      headers: { 'If-Match': createdEtag as string },
-      body: JSON.stringify({ ...input, enabled: false }),
+      headers: { 'Content-Type': 'application/merge-patch+json', 'If-Match': createdEtag as string },
+      body: JSON.stringify({ enabled: false }),
     })
     expect(await updated.json()).toMatchObject({ item: { enabled: false } })
     const updatedEtag = updated.headers.get('etag')
@@ -234,8 +232,8 @@ describe('admin-managed connectors', () => {
     const stale = await request(`/api/media-sources/${item.id}`, {
       method: 'PATCH',
       cookie,
-      headers: { 'If-Match': createdEtag as string },
-      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/merge-patch+json', 'If-Match': createdEtag as string },
+      body: JSON.stringify({ enabled: true }),
     })
     expect(stale.status).toBe(412)
     expect(await stale.json()).toMatchObject({

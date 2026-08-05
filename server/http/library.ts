@@ -7,10 +7,12 @@ import {
   setWatchedState,
 } from '@server/usecases/library'
 import type { LibraryRecord } from '@server/usecases/ports'
+import { getMediaKeyLibraryKind } from '@shared/media-key'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import { mediaKeyParamsSchema } from './books'
 import type { AppEnv } from './context'
+import { setPageLinks } from './protocol'
 
 const libraryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -20,15 +22,14 @@ const libraryQuerySchema = z.object({
   status: z.enum(['all', 'unwatched', 'watched']).default('all'),
 })
 
-const libraryResourceSchema = z.object({
-  mediaKey: z.string().trim().min(1),
-  kind: z.enum(['movie', 'tv', 'music', 'book']),
+const libraryResourceStateSchema = z.object({
   status: z.enum(['saved', 'watched']).default('saved'),
 })
-
 export function registerLibraryRoutes(routes: Hono<AppEnv>) {
   routes.get('/library', zValidator('query', libraryQuerySchema), async (c) => {
-    return c.json(await listLibrary(c.get('deps'), c.get('user').id, c.req.valid('query')))
+    const page = await listLibrary(c.get('deps'), c.get('user').id, c.req.valid('query'))
+    setPageLinks(c, c.req.valid('query'), page.totalResults)
+    return c.json(page)
   })
 
   routes.get('/library/states', async (c) => {
@@ -36,34 +37,37 @@ export function registerLibraryRoutes(routes: Hono<AppEnv>) {
     return c.json({ items })
   })
 
-  routes.put('/library/resources', zValidator('json', libraryResourceSchema), async (c) => {
-    const input = c.req.valid('json')
-    const deps = c.get('deps')
-    const userId = c.get('user').id
-    const row =
-      input.status === 'watched'
-        ? await setWatchedState(deps, userId, input, true)
-        : ((await setWatchedState(deps, userId, input, false)) ?? (await saveLibraryState(deps, userId, input)))
-
-    if (!row) return c.json({ error: 'Library item not found.' }, 404)
-
-    return c.json({ item: toLibraryStateResponse(row) })
-  })
-
-  routes.delete(
+  routes.put(
     '/library/resources/:mediaKey',
     zValidator('param', mediaKeyParamsSchema),
-    zValidator('json', libraryResourceSchema),
+    zValidator('json', libraryResourceStateSchema),
     async (c) => {
       const mediaKey = decodeRouteMediaKey(c.req.valid('param').mediaKey)
-      const input = c.req.valid('json')
-      if (input.mediaKey !== mediaKey) return c.json({ error: 'Library route does not match request body.' }, 400)
+      const kind = getMediaKeyLibraryKind(mediaKey)
+      if (!kind) return c.json({ error: 'Library media key is invalid.' }, 422)
+      const input = { mediaKey, kind, ...c.req.valid('json') }
+      const deps = c.get('deps')
+      const userId = c.get('user').id
+      const row =
+        input.status === 'watched'
+          ? await setWatchedState(deps, userId, input, true)
+          : ((await setWatchedState(deps, userId, input, false)) ?? (await saveLibraryState(deps, userId, input)))
 
-      const deleted = await deleteLibraryState(c.get('deps'), c.get('user').id, input)
-      if (!deleted) return c.json({ error: 'Library item not found.' }, 404)
-      return c.json({ mediaKey, kind: input.kind })
+      if (!row) return c.json({ error: 'Library item not found.' }, 404)
+
+      return c.json({ item: toLibraryStateResponse(row) })
     },
   )
+
+  routes.delete('/library/resources/:mediaKey', zValidator('param', mediaKeyParamsSchema), async (c) => {
+    const mediaKey = decodeRouteMediaKey(c.req.valid('param').mediaKey)
+    const kind = getMediaKeyLibraryKind(mediaKey)
+    if (!kind) return c.json({ error: 'Library media key is invalid.' }, 422)
+
+    const deleted = await deleteLibraryState(c.get('deps'), c.get('user').id, { mediaKey, kind })
+    if (!deleted) return c.json({ error: 'Library item not found.' }, 404)
+    return c.json({ mediaKey, kind })
+  })
 }
 
 function decodeRouteMediaKey(value: string): string {

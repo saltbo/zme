@@ -106,13 +106,12 @@ export function createIdentityRepo(db: Db): IdentityRepo {
 
     async recordDpopProof(issuer, proofJti, keyThumbprint, expiresAt, now) {
       await db.delete(dpopReplays).where(lt(dpopReplays.expiresAt, now))
-      try {
-        await db.insert(dpopReplays).values({ issuer, proofJti, keyThumbprint, expiresAt, createdAt: now })
-        return true
-      } catch (error) {
-        if (isUniqueConstraint(error)) return false
-        throw error
-      }
+      const inserted = await db
+        .insert(dpopReplays)
+        .values({ issuer, proofJti, keyThumbprint, expiresAt, createdAt: now })
+        .onConflictDoNothing()
+        .returning({ proofJti: dpopReplays.proofJti })
+      return inserted.length === 1
     },
   }
 }
@@ -128,8 +127,4 @@ function mapUser(row: typeof user.$inferSelect): AuthenticatedUser {
     image: row.image,
     role: row.role === 'admin' ? 'admin' : 'user',
   }
-}
-
-function isUniqueConstraint(error: unknown): boolean {
-  return error instanceof Error && /unique constraint/i.test(error.message)
 }

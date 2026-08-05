@@ -1,10 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
 import { type DownloadTaskEvent, listDownloadTasks, streamDownloadTaskEvents } from '@server/usecases/download-tasks'
 import { submitDownload } from '@server/usecases/downloaders'
+import { DownloadSubmissionRejectedError, DownloadSubmissionUnknownError } from '@server/usecases/ports'
 import { isValidDownloadSubdirectory } from '@shared/download-metadata'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
+import { setPageLinks } from './protocol'
 
 const createDownloadSchema = z.object({
   downloaderId: z.string().trim().min(1),
@@ -39,6 +41,7 @@ const downloadsQuerySchema = z.object({
 export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloads', zValidator('query', downloadsQuerySchema), async (c) => {
     const result = await listDownloadTasks(c.get('deps'), c.get('user').id, c.req.valid('query'), c.req.raw.signal)
+    setPageLinks(c, c.req.valid('query'), result.total)
     return c.json(result)
   })
 
@@ -89,11 +92,19 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.post('/downloads', zValidator('json', createDownloadSchema), async (c) => {
+    const idempotencyKey = c.req.header('Idempotency-Key')?.trim()
+    if (!idempotencyKey || idempotencyKey.length > 200) {
+      return c.json({ error: 'Idempotency-Key is required.' }, 400)
+    }
     try {
-      const item = await submitDownload(c.get('deps'), c.get('user').id, c.req.valid('json'))
-      return c.json({ item }, 201)
+      const item = await submitDownload(c.get('deps'), c.get('user').id, c.req.valid('json'), idempotencyKey)
+      return c.json({ item }, 202)
     } catch (error) {
-      return c.json({ error: error instanceof Error ? error.message : 'Download submission failed.' }, 502)
+      if (error instanceof DownloadSubmissionRejectedError) return c.json({ error: error.message }, 422)
+      if (error instanceof DownloadSubmissionUnknownError) {
+        return c.json({ error: 'Download submission outcome is unknown; retry with the same Idempotency-Key.' }, 502)
+      }
+      throw error
     }
   })
 }

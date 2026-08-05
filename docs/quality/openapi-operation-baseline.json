@@ -53,7 +53,14 @@
           "system"
         ],
         "security": [],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response",
@@ -90,7 +97,14 @@
           "system"
         ],
         "security": [],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response",
@@ -127,7 +141,14 @@
           "system"
         ],
         "security": [],
-        "parameters": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful response",
@@ -171,6 +192,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -254,16 +281,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -296,6 +326,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -345,16 +381,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -389,6 +428,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "language",
@@ -426,16 +471,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -470,6 +518,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "kind",
@@ -519,16 +573,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -563,6 +620,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "kind",
@@ -675,16 +738,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -719,6 +785,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "kind",
@@ -768,16 +840,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -812,6 +887,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -858,16 +939,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -904,6 +988,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -958,16 +1048,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1004,6 +1097,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -1058,16 +1157,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1102,6 +1204,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -1158,16 +1266,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1202,6 +1313,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -1257,16 +1374,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1301,6 +1421,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -1357,16 +1483,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1401,6 +1530,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "q",
@@ -1459,16 +1594,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1503,6 +1641,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "mode",
@@ -1589,16 +1733,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1633,6 +1780,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "mediaKey",
@@ -1670,16 +1823,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1714,6 +1870,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "q",
@@ -1790,16 +1952,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -1842,6 +2007,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "mode",
@@ -1972,16 +2143,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2016,6 +2190,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "mediaKey",
@@ -2053,16 +2233,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2097,6 +2280,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -2125,16 +2314,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2179,6 +2371,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "page",
@@ -2267,16 +2465,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2311,6 +2512,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -2339,16 +2546,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2368,7 +2578,7 @@
         }
       }
     },
-    "/library/resources": {
+    "/library/resources/{mediaKey}": {
       "put": {
         "operationId": "putLibraryResource",
         "summary": "Create or replace a library resource",
@@ -2383,6 +2593,21 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "mediaKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         ],
         "responses": {
@@ -2411,16 +2636,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2443,14 +2671,12 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/LibraryResourceInput"
+                "$ref": "#/components/schemas/LibraryResourceStateInput"
               }
             }
           }
         }
-      }
-    },
-    "/library/resources/{mediaKey}": {
+      },
       "delete": {
         "operationId": "deleteLibraryResource",
         "summary": "Delete a library resource",
@@ -2465,6 +2691,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "mediaKey",
@@ -2502,16 +2734,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2527,16 +2762,6 @@
           },
           "503": {
             "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LibraryResourceInput"
-              }
-            }
           }
         }
       }
@@ -2556,6 +2781,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "kind",
@@ -2596,16 +2827,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2640,6 +2874,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -2677,16 +2917,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2719,6 +2962,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -2756,16 +3005,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2800,6 +3052,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -2837,16 +3095,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2891,6 +3152,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -2926,16 +3193,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -2970,6 +3240,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -2984,6 +3260,9 @@
               },
               "API-Version": {
                 "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               }
             },
             "content": {
@@ -2998,16 +3277,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3052,6 +3334,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -3080,16 +3368,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3122,6 +3413,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -3150,16 +3447,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3204,6 +3504,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -3232,16 +3538,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3276,6 +3585,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -3304,16 +3619,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3331,12 +3649,10 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
-      }
-    },
-    "/connectors/douban": {
+      },
       "post": {
-        "operationId": "createDoubanConnector",
-        "summary": "Create a Douban connector",
+        "operationId": "createConnector",
+        "summary": "Create a connector",
         "tags": [
           "connectors"
         ],
@@ -3348,10 +3664,16 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful response",
             "headers": {
               "Request-Id": {
@@ -3362,6 +3684,9 @@
               },
               "API-Version": {
                 "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               }
             },
             "content": {
@@ -3376,16 +3701,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3408,7 +3736,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/DoubanConnectorInput"
+                "$ref": "#/components/schemas/ConnectorInput"
               }
             }
           }
@@ -3430,6 +3758,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -3444,6 +3778,9 @@
               },
               "API-Version": {
                 "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               }
             },
             "content": {
@@ -3458,16 +3795,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3514,6 +3854,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -3549,16 +3895,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3595,6 +3944,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -3630,16 +3985,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3686,6 +4044,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -3727,10 +4091,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -3740,6 +4104,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3763,7 +4130,7 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "application/merge-patch+json": {
               "schema": {
                 "$ref": "#/components/schemas/ConnectorPatch"
               }
@@ -3785,6 +4152,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -3818,10 +4191,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -3831,6 +4204,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3870,6 +4246,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
@@ -3902,16 +4284,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -3958,6 +4343,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -3993,16 +4384,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4037,6 +4431,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -4074,16 +4474,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4116,6 +4519,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -4153,16 +4562,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4207,6 +4619,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "q",
@@ -4266,16 +4684,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4311,6 +4732,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -4339,16 +4766,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4382,6 +4812,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -4399,6 +4835,9 @@
               },
               "ETag": {
                 "$ref": "#/components/headers/ETag"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               }
             },
             "content": {
@@ -4413,16 +4852,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4470,6 +4912,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -4508,16 +4956,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4553,6 +5004,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -4594,10 +5051,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4607,6 +5064,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4631,9 +5091,9 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "application/merge-patch+json": {
               "schema": {
-                "$ref": "#/components/schemas/IndexerInput"
+                "$ref": "#/components/schemas/IndexerPatch"
               }
             }
           }
@@ -4653,6 +5113,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -4686,10 +5152,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4699,6 +5165,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4722,10 +5191,10 @@
         "x-zme-local-role": "admin"
       }
     },
-    "/indexers/{id}/health": {
+    "/indexers/{id}/health-observations": {
       "get": {
-        "operationId": "getIndexerHealth",
-        "summary": "Get the latest indexer health",
+        "operationId": "listIndexerHealthObservations",
+        "summary": "List indexer health observations",
         "tags": [
           "configuration"
         ],
@@ -4737,6 +5206,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -4765,7 +5240,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthEnvelope"
+                  "$ref": "#/components/schemas/HealthCollection"
                 }
               }
             }
@@ -4774,16 +5249,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4803,9 +5281,9 @@
         },
         "x-zme-local-role": "admin"
       },
-      "put": {
-        "operationId": "putIndexerHealth",
-        "summary": "Refresh the latest indexer health",
+      "post": {
+        "operationId": "createIndexerHealthObservation",
+        "summary": "Create an indexer health observation",
         "tags": [
           "configuration"
         ],
@@ -4819,7 +5297,116 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-zme-local-role": "admin"
+      }
+    },
+    "/indexers/{id}/health-observations/{checkedAt}": {
+      "get": {
+        "operationId": "getIndexerHealthObservation",
+        "summary": "Get an indexer health observation",
+        "tags": [
+          "configuration"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "checkedAt",
             "in": "path",
             "required": true,
             "schema": {
@@ -4854,16 +5441,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4899,6 +5489,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -4927,16 +5523,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -4970,6 +5569,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -4987,6 +5592,9 @@
               },
               "ETag": {
                 "$ref": "#/components/headers/ETag"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               }
             },
             "content": {
@@ -5001,16 +5609,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5058,6 +5669,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -5096,16 +5713,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5141,6 +5761,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -5182,10 +5808,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5195,6 +5821,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5219,9 +5848,9 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "application/merge-patch+json": {
               "schema": {
-                "$ref": "#/components/schemas/MediaSourceInput"
+                "$ref": "#/components/schemas/MediaSourcePatch"
               }
             }
           }
@@ -5241,6 +5870,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -5274,10 +5909,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5287,6 +5922,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5310,10 +5948,10 @@
         "x-zme-local-role": "admin"
       }
     },
-    "/media-sources/{id}/health": {
+    "/media-sources/{id}/health-observations": {
       "get": {
-        "operationId": "getMediaSourceHealth",
-        "summary": "Get the latest media-source health",
+        "operationId": "listMediaSourceHealthObservations",
+        "summary": "List media-source health observations",
         "tags": [
           "configuration"
         ],
@@ -5325,6 +5963,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -5353,7 +5997,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthEnvelope"
+                  "$ref": "#/components/schemas/HealthCollection"
                 }
               }
             }
@@ -5362,16 +6006,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5391,9 +6038,9 @@
         },
         "x-zme-local-role": "admin"
       },
-      "put": {
-        "operationId": "putMediaSourceHealth",
-        "summary": "Refresh the latest media-source health",
+      "post": {
+        "operationId": "createMediaSourceHealthObservation",
+        "summary": "Create a media-source health observation",
         "tags": [
           "configuration"
         ],
@@ -5407,7 +6054,116 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "x-zme-local-role": "admin"
+      }
+    },
+    "/media-sources/{id}/health-observations/{checkedAt}": {
+      "get": {
+        "operationId": "getMediaSourceHealthObservation",
+        "summary": "Get a media-source health observation",
+        "tags": [
+          "configuration"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "checkedAt",
             "in": "path",
             "required": true,
             "schema": {
@@ -5442,16 +6198,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5487,6 +6246,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -5515,16 +6280,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5557,6 +6325,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -5574,6 +6348,9 @@
               },
               "ETag": {
                 "$ref": "#/components/headers/ETag"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
               }
             },
             "content": {
@@ -5588,16 +6365,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5644,6 +6424,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -5682,16 +6468,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5726,6 +6515,12 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
             "in": "path",
             "required": true,
@@ -5767,10 +6562,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5780,6 +6575,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5803,9 +6601,9 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "application/merge-patch+json": {
               "schema": {
-                "$ref": "#/components/schemas/DownloaderInput"
+                "$ref": "#/components/schemas/DownloaderPatch"
               }
             }
           }
@@ -5825,6 +6623,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -5858,10 +6662,10 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -5871,6 +6675,9 @@
           },
           "412": {
             "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5893,10 +6700,10 @@
         }
       }
     },
-    "/downloaders/{id}/health": {
+    "/downloaders/{id}/health-observations": {
       "get": {
-        "operationId": "getDownloaderHealth",
-        "summary": "Get the latest downloader health",
+        "operationId": "listDownloaderHealthObservations",
+        "summary": "List downloader health observations",
         "tags": [
           "configuration"
         ],
@@ -5908,6 +6715,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "id",
@@ -5936,7 +6749,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HealthEnvelope"
+                  "$ref": "#/components/schemas/HealthCollection"
                 }
               }
             }
@@ -5945,16 +6758,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -5973,9 +6789,9 @@
           }
         }
       },
-      "put": {
-        "operationId": "putDownloaderHealth",
-        "summary": "Refresh the latest downloader health",
+      "post": {
+        "operationId": "createDownloaderHealthObservation",
+        "summary": "Create a downloader health observation",
         "tags": [
           "configuration"
         ],
@@ -5989,7 +6805,115 @@
             "$ref": "#/components/parameters/ApiVersion"
           },
           {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "API-Version": {
+                "$ref": "#/components/headers/ApiVersion"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/SessionUnauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/SessionForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/downloaders/{id}/health-observations/{checkedAt}": {
+      "get": {
+        "operationId": "getDownloaderHealthObservation",
+        "summary": "Get a downloader health observation",
+        "tags": [
+          "configuration"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "checkedAt",
             "in": "path",
             "required": true,
             "schema": {
@@ -6024,16 +6948,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -6068,6 +6995,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "status",
@@ -6125,16 +7058,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -6167,10 +7103,19 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
         "responses": {
-          "201": {
+          "202": {
             "description": "Successful response",
             "headers": {
               "Request-Id": {
@@ -6195,16 +7140,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -6249,6 +7197,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -6277,16 +7231,19 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "#/components/responses/SessionUnauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/SessionForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -6326,6 +7283,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "query",
@@ -6392,6 +7355,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6430,6 +7396,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "$ref": "#/components/parameters/Page"
@@ -6475,6 +7447,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6511,6 +7486,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -6566,6 +7547,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6604,6 +7588,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "releaseSearchJobId",
@@ -6652,6 +7642,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6690,6 +7683,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "releaseSearchJobId",
@@ -6744,6 +7743,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6782,6 +7784,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "releaseSearchResultId",
@@ -6830,6 +7838,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6868,6 +7879,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "$ref": "#/components/parameters/Page"
@@ -6913,6 +7930,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -6949,6 +7969,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "$ref": "#/components/parameters/IdempotencyKey"
@@ -7004,6 +8030,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -7042,6 +8071,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           },
           {
             "name": "downloadTaskId",
@@ -7090,6 +8125,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           },
@@ -7128,6 +8166,12 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ApiVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
           }
         ],
         "responses": {
@@ -7166,6 +8210,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -7246,6 +8293,27 @@
           "pattern": "^\".+\"$"
         }
       },
+      "Traceparent": {
+        "name": "traceparent",
+        "in": "header",
+        "required": false,
+        "description": "Optional W3C Trace Context parent. Invalid values are ignored and replaced at the boundary.",
+        "schema": {
+          "type": "string",
+          "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+        }
+      },
+      "Tracestate": {
+        "name": "tracestate",
+        "in": "header",
+        "required": false,
+        "description": "Optional W3C vendor trace state propagated only with valid trace context.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
       "Page": {
         "name": "page",
         "in": "query",
@@ -7297,11 +8365,12 @@
         }
       },
       "WwwAuthenticate": {
-        "description": "DPoP challenge or error for token/proof/scope failures.",
+        "description": "DPoP challenge with supported proof algorithms and, when applicable, a token, proof, or scope error.",
         "schema": {
           "type": "string",
           "pattern": "^DPoP(?: |$)"
-        }
+        },
+        "example": "DPoP algs=\"ES256\", error=\"invalid_token\""
       }
     },
     "responses": {
@@ -7374,6 +8443,48 @@
           }
         }
       },
+      "SessionUnauthorized": {
+        "description": "Browser session authentication required",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Link": {
+            "$ref": "#/components/headers/Link"
+          },
+          "API-Version": {
+            "$ref": "#/components/headers/ApiVersion"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "SessionForbidden": {
+        "description": "Browser session authorization denied",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Link": {
+            "$ref": "#/components/headers/Link"
+          },
+          "API-Version": {
+            "$ref": "#/components/headers/ApiVersion"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
       "NotFound": {
         "description": "Resource not found",
         "headers": {
@@ -7397,6 +8508,27 @@
       },
       "Conflict": {
         "description": "Resource conflict",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Link": {
+            "$ref": "#/components/headers/Link"
+          },
+          "API-Version": {
+            "$ref": "#/components/headers/ApiVersion"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Request media type is not supported",
         "headers": {
           "Request-Id": {
             "$ref": "#/components/headers/RequestId"
@@ -7632,17 +8764,19 @@
             "items": {
               "type": "object",
               "required": [
-                "path",
-                "message"
+                "pointer",
+                "detail"
               ],
               "properties": {
-                "path": {
-                  "type": "string"
+                "pointer": {
+                  "type": "string",
+                  "pattern": "^#(?:/.*)?$"
                 },
-                "message": {
+                "detail": {
                   "type": "string"
                 }
-              }
+              },
+              "additionalProperties": false
             }
           }
         }
@@ -9041,27 +10175,10 @@
           }
         }
       },
-      "LibraryResourceInput": {
+      "LibraryResourceStateInput": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "mediaKey",
-          "kind"
-        ],
         "properties": {
-          "mediaKey": {
-            "type": "string",
-            "minLength": 1
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "movie",
-              "tv",
-              "music",
-              "book"
-            ]
-          },
           "status": {
             "type": "string",
             "enum": [
@@ -10010,13 +11127,18 @@
           }
         }
       },
-      "DoubanConnectorInput": {
+      "ConnectorInput": {
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "kind",
           "profileId"
         ],
         "properties": {
+          "kind": {
+            "type": "string",
+            "const": "douban"
+          },
           "profileId": {
             "type": "string",
             "minLength": 1
@@ -10597,11 +11719,26 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "health"
+          "item"
         ],
         "properties": {
-          "health": {
+          "item": {
             "$ref": "#/components/schemas/Health"
+          }
+        }
+      },
+      "HealthCollection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Health"
+            }
           }
         }
       },
@@ -10721,6 +11858,39 @@
           "options",
           "enabled"
         ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "const": "prowlarr"
+          },
+          "endpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "credentials": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IndexerPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
         "properties": {
           "description": {
             "type": "string"
@@ -10885,6 +12055,35 @@
           }
         }
       },
+      "MediaSourcePatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "const": "tmdb"
+          },
+          "credentials": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "Downloader": {
         "type": "object",
         "additionalProperties": false,
@@ -11018,6 +12217,44 @@
           "options",
           "enabled"
         ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "zpan",
+              "qbittorrent",
+              "transmission",
+              "aria2"
+            ]
+          },
+          "endpoint": {
+            "type": "string",
+            "format": "uri"
+          },
+          "credentials": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DownloaderPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
         "properties": {
           "description": {
             "type": "string"

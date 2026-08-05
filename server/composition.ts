@@ -25,10 +25,11 @@ import { createResourceApiRepo } from './adapters/repos/resource-api'
 import { readConfig } from './config'
 import { createDb } from './db/client'
 import type { Env } from './env'
+import { type TraceContext, traceCarrier } from './observability/trace'
 import type { ConnectorSyncMessage } from './usecases/connectors'
 import type { Deps } from './usecases/deps'
 
-export function createDeps(env: Env): Deps {
+export function createDeps(env: Env, trace?: TraceContext): Deps {
   const db = createDb(env)
   const config = readConfig(env)
   return {
@@ -42,7 +43,7 @@ export function createDeps(env: Env): Deps {
     connectorSyncJobsRepo: createConnectorSyncJobsRepo(db),
     connectorSyncQueue: {
       async enqueue(input) {
-        const message: ConnectorSyncMessage = { type: 'connector_sync', ...input }
+        const message: ConnectorSyncMessage = { type: 'connector_sync', ...input, ...traceCarrier(trace) }
         await env.MEDIA_DOWNLOAD_DISPATCH.send(message)
       },
     },
@@ -53,7 +54,10 @@ export function createDeps(env: Env): Deps {
     dispatchLanesRepo: createDispatchLanesRepo(db),
     downloadDispatchQueue: {
       async wake(laneKey, delaySeconds) {
-        await env.MEDIA_DOWNLOAD_DISPATCH.send({ laneKey }, delaySeconds ? { delaySeconds } : undefined)
+        await env.MEDIA_DOWNLOAD_DISPATCH.send(
+          { laneKey, ...traceCarrier(trace) },
+          delaySeconds ? { delaySeconds } : undefined,
+        )
       },
     },
     downloadersRepo: createDownloadersRepo(db),

@@ -1,4 +1,4 @@
-import type { IndexerGateway, IndexerSearchInput } from '@server/usecases/ports'
+import { type IndexerGateway, IndexerSearchError, type IndexerSearchInput } from '@server/usecases/ports'
 import type { IndexerSearchItem } from '@shared/types'
 import {
   applyProwlarrBaseUrl,
@@ -33,7 +33,7 @@ interface ProwlarrSearchItem {
 export const prowlarrIndexerGateway: IndexerGateway = {
   async search(config, input) {
     const apiKey = config.credentials.apiKey
-    if (!apiKey) throw new Error('Prowlarr API key is missing.')
+    if (!apiKey) throw new IndexerSearchError('Prowlarr API key is missing.')
     return searchProwlarr(config.endpoint, apiKey, input)
   },
 
@@ -83,20 +83,33 @@ export async function searchProwlarr(
     url.searchParams.append('categories', String(category))
   }
 
-  const response = await fetch(url, {
-    headers: {
-      'X-Api-Key': apiKey,
-      Accept: 'application/json',
-    },
-    signal: AbortSignal.timeout(10_000),
-  })
-
-  if (!response.ok) {
-    throw new Error(`Prowlarr search failed: ${response.status}`)
+  let response: Response
+  try {
+    response = await fetch(url, {
+      headers: {
+        'X-Api-Key': apiKey,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch (error) {
+    throw new IndexerSearchError('Prowlarr search request failed.', { cause: error })
   }
 
-  const payload = (await response.json()) as ProwlarrSearchItem[]
-  return payload.map((item) => toIndexerSearchItem(item, normalizeBaseUrl(baseUrl)))
+  if (!response.ok) {
+    throw new IndexerSearchError(`Prowlarr search failed: ${response.status}`)
+  }
+
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch (error) {
+    throw new IndexerSearchError('Prowlarr search returned invalid JSON.', { cause: error })
+  }
+  if (!Array.isArray(payload) || !payload.every((item) => typeof item === 'object' && item !== null)) {
+    throw new IndexerSearchError('Prowlarr search returned an invalid payload.')
+  }
+  return (payload as ProwlarrSearchItem[]).map((item) => toIndexerSearchItem(item, normalizeBaseUrl(baseUrl)))
 }
 
 function toIndexerSearchItem(item: ProwlarrSearchItem, baseUrl: string): IndexerSearchItem {

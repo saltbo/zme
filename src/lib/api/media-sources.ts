@@ -1,5 +1,5 @@
 import type { MediaSourceDetails, MediaSourceHealth, MediaSourceInput, MediaSourceSummary } from '@shared/types'
-import { apiRequest, jsonBody } from './client'
+import { apiRequest, jsonBody, mergePatch } from './client'
 
 export async function listMediaSources() {
   return apiRequest<{ items: MediaSourceSummary[] }>('/api/media-sources', 'Failed to load media sources.')
@@ -19,9 +19,8 @@ export async function getMediaSource(id: string) {
 
 export async function updateMediaSource(id: string, input: MediaSourceInput, expectedUpdatedAt: string) {
   return apiRequest<{ item: MediaSourceSummary }>(`/api/media-sources/${id}`, 'Failed to update media source.', {
-    method: 'PATCH',
-    body: JSON.stringify(input),
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
+    ...mergePatch(input),
+    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
@@ -33,9 +32,9 @@ export async function deleteMediaSource(id: string, expectedUpdatedAt: string) {
 }
 
 export async function checkMediaSourceHealth(id: string) {
-  return apiRequest<{ health: MediaSourceHealth }>(
-    `/api/media-sources/${id}/health`,
+  return apiRequest<{ item: MediaSourceHealth }>(
+    `/api/media-sources/${id}/health-observations`,
     'Failed to check media source health.',
-    { method: 'PUT' },
+    { method: 'POST' },
   )
 }

@@ -52,3 +52,11 @@ export function jsonBody(input: unknown): RequestInit {
     body: JSON.stringify(input),
   }
 }
+
+export function mergePatch(input: unknown): RequestInit {
+  return {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+    headers: { 'content-type': 'application/merge-patch+json' },
+  }
+}

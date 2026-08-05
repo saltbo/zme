@@ -7,6 +7,7 @@ import type {
   ReleaseSearchResultRecord,
   ResourceApiRepo,
 } from './ports'
+import { DownloadSubmissionRejectedError, DownloadSubmissionUnknownError, IndexerSearchError } from './ports'
 import {
   createManualDownloadTask,
   createReleaseSearchJob,
@@ -133,7 +134,7 @@ describe('resource lifecycle use cases', () => {
   })
 
   it('persists a failed release-search lifecycle instead of losing the job', async () => {
-    indexerFailure = new Error('Indexer unavailable')
+    indexerFailure = new IndexerSearchError('Indexer unavailable')
     const job = await createReleaseSearchJob(deps, 'user-1', 'failed-key', {
       mediaKey: 'movie-1',
       mediaTitle: 'Film',
@@ -141,6 +142,18 @@ describe('resource lifecycle use cases', () => {
     })
     expect(job).toMatchObject({ status: 'failed', error: 'Release search failed.' })
     expect(jobs[0]).toMatchObject({ status: 'failed', error: 'Release search failed.' })
+  })
+
+  it('does not turn an unexpected release-search programming error into business state', async () => {
+    indexerFailure = new TypeError('unexpected mapper failure')
+    await expect(
+      createReleaseSearchJob(deps, 'user-1', 'unexpected-key', {
+        mediaKey: 'movie-1',
+        mediaTitle: 'Film',
+        query: 'Film',
+      }),
+    ).rejects.toThrow('unexpected mapper failure')
+    expect(jobs[0]).toMatchObject({ status: 'running', error: null })
   })
 
   it('recovers an interrupted running release-search job on read', async () => {
@@ -199,6 +212,7 @@ describe('resource lifecycle use cases', () => {
     expect(created).toMatchObject({ status: 'submitted', externalTaskId: 'external-1' })
     expect(replay.id).toBe(created.id)
     expect(tasks).toHaveLength(1)
+    expect(deps.downloaderGateways.zpan.submit).toHaveBeenCalledWith(expect.anything(), expect.anything(), created.id)
   })
 
   it('persists downloader rejection as a failed task', async () => {
@@ -207,7 +221,7 @@ describe('resource lifecycle use cases', () => {
       mediaTitle: 'Film',
       query: 'Film',
     })
-    downloaderFailure = new Error('Downloader rejected task')
+    downloaderFailure = new DownloadSubmissionRejectedError('Downloader rejected task')
     const task = await createManualDownloadTask(deps, 'user-1', 'download-key', {
       releaseSearchResultId: results[0].id,
       downloaderId: 'downloader-1',
@@ -228,7 +242,7 @@ describe('resource lifecycle use cases', () => {
     })
     expect(interrupted.status).toBe('submitting')
 
-    downloaderFailure = new Error('late rejection')
+    downloaderFailure = new DownloadSubmissionRejectedError('late rejection')
     deps.resourceApiRepo.failDownloadTask = async () => false
     const rejected = await createManualDownloadTask(deps, 'user-1', 'failure-race', {
       releaseSearchResultId: results[0].id,
@@ -310,7 +324,7 @@ describe('resource lifecycle use cases', () => {
     expect(await getManualDownloadTask(deps, 'user-1', task.id)).toEqual(tasks[0])
   })
 
-  it('fails a stale interrupted submission without risking a duplicate downstream mutation', async () => {
+  it('keeps an interrupted submission pending until a same-key retry resolves the unknown outcome', async () => {
     await createReleaseSearchJob(deps, 'user-1', 'job-key', {
       mediaKey: 'movie-1',
       mediaTitle: 'Film',
@@ -326,11 +340,15 @@ describe('resource lifecycle use cases', () => {
       createdAt: new Date(Date.now() - 10 * 60_000).toISOString(),
     })
 
-    await expect(getManualDownloadTask(deps, 'user-1', task.id)).resolves.toMatchObject({
-      status: 'failed',
-      error: 'Download submission was interrupted; verify the downloader before retrying.',
-      completedAt: expect.any(String),
-    })
+    await expect(getManualDownloadTask(deps, 'user-1', task.id)).resolves.toMatchObject({ status: 'submitting' })
+    downloaderFailure = new DownloadSubmissionUnknownError('network timeout')
+    await expect(
+      createManualDownloadTask(deps, 'user-1', 'download-key', {
+        releaseSearchResultId: results[0].id,
+        downloaderId: 'downloader-1',
+      }),
+    ).rejects.toBeInstanceOf(ResourceUpstreamError)
+    expect(tasks[0]).toMatchObject({ status: 'submitting', error: null, completedAt: null })
   })
 
   it('uses exact downstream lookup and maps failed lifecycle state', async () => {

@@ -4,6 +4,7 @@ import {
   completeOidcLogin,
   endLocalSession,
   getLocalSession,
+  OidcCallbackError,
   safeReturnTo,
 } from '@server/usecases/identity'
 import type { Context, Hono } from 'hono'
@@ -42,6 +43,7 @@ export function registerIdentityRoutes(app: Hono<AppEnv>) {
       setCookie(c, SESSION_COOKIE, result.sessionToken, sessionCookie(result.session.expiresAt))
       return c.redirect(result.returnTo, 302)
     } catch (error) {
+      if (!(error instanceof OidcCallbackError)) throw error
       console.error(
         JSON.stringify({
           event: 'identity.oidc_callback.failed',

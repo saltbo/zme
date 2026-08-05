@@ -1,19 +1,24 @@
 import { API_VERSION, readConfig } from '@server/config'
+import { startTrace } from '@server/observability/trace'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AppEnv } from './context'
 
 export const requestBoundaryMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const requestId = crypto.randomUUID()
+  const trace = startTrace(c.req.raw.headers)
   c.set('requestId', requestId)
+  c.set('trace', trace)
   const started = Date.now()
   try {
     await next()
   } finally {
     const principal = c.get('principal')
+    const actorFingerprint =
+      principal?.kind === 'agent' && principal.actor ? await claimFingerprint(principal.actor.sub) : undefined
     c.header('Request-Id', requestId)
-    c.header(
-      'Link',
+    appendLink(
+      c,
       `<${readConfig(c.env).resourceUrl}/openapi.json>; rel="service-desc"; type="application/openapi+json"`,
     )
     console.info(
@@ -24,12 +29,22 @@ export const requestBoundaryMiddleware: MiddlewareHandler<AppEnv> = async (c, ne
         path: c.req.path,
         status: c.res.status,
         durationMs: Date.now() - started,
+        traceId: trace.traceId,
+        spanId: trace.spanId,
         principalKind: principal?.kind,
         principalUserId: principal?.userId,
-        actorSubject: principal?.kind === 'agent' ? principal.actor?.sub : undefined,
+        actorFingerprint,
       }),
     )
   }
+}
+
+async function claimFingerprint(value: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
+  return btoa(String.fromCharCode(...digest))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
 }
 
 export const normalizeProblemMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
@@ -62,7 +77,11 @@ export const normalizeProblemMiddleware: MiddlewareHandler<AppEnv> = async (c, n
       detail,
       instance: `urn:request:${requestId}`,
       ...(validationFailure
-        ? { errors: validationIssues.length ? validationIssues : [{ path: '', message: 'Request validation failed' }] }
+        ? {
+            errors: validationIssues.length
+              ? validationIssues
+              : [{ pointer: '#', detail: 'Request validation failed' }],
+          }
         : {}),
     }),
     { status, headers },
@@ -114,6 +133,34 @@ export function ifMatchRevision(c: Context<AppEnv>) {
   return match?.[1] ?? null
 }
 
+export function requireMergePatch(c: Context<AppEnv>) {
+  if (c.req.header('Content-Type')?.split(';', 1)[0].trim().toLowerCase() === 'application/merge-patch+json') {
+    return null
+  }
+  return problem(c, 415, 'unsupported-media-type', 'PATCH requires application/merge-patch+json')
+}
+
+export function setPageLinks(c: Context<AppEnv>, page: { page: number; pageSize: number }, totalItems: number): void {
+  const totalPages = Math.ceil(totalItems / page.pageSize)
+  const links: string[] = []
+  const add = (targetPage: number, relation: string) => {
+    const url = new URL(c.req.url)
+    url.searchParams.set('page', String(targetPage))
+    url.searchParams.set('pageSize', String(page.pageSize))
+    links.push(`<${url.toString()}>; rel="${relation}"`)
+  }
+  add(1, 'first')
+  if (page.page > 1) add(page.page - 1, 'prev')
+  if (page.page < totalPages) add(page.page + 1, 'next')
+  if (totalPages > 0) add(totalPages, 'last')
+  for (const link of links) appendLink(c, link)
+}
+
+function appendLink(c: Context<AppEnv>, value: string): void {
+  const existing = c.res.headers.get('Link')
+  c.header('Link', existing ? `${existing}, ${value}` : value)
+}
+
 function extractValidationIssues(payload: Record<string, unknown>) {
   const error = payload.error
   if (!error || typeof error !== 'object') return []
@@ -132,11 +179,16 @@ function extractValidationIssues(payload: Record<string, unknown>) {
     const record = issue as Record<string, unknown>
     return [
       {
-        path: Array.isArray(record.path) ? record.path.map(String).join('.') : '',
-        message: typeof record.message === 'string' ? record.message : 'Invalid value',
+        pointer: Array.isArray(record.path) ? requestPointer(record.path) : '#',
+        detail: typeof record.message === 'string' ? record.message : 'Invalid value',
       },
     ]
   })
+}
+
+function requestPointer(path: unknown[]): string {
+  if (path.length === 0) return '#'
+  return `#/${path.map((segment) => String(segment).replaceAll('~', '~0').replaceAll('/', '~1')).join('/')}`
 }
 
 function problemTitle(status: number) {
@@ -145,6 +197,7 @@ function problemTitle(status: number) {
   if (status === 404) return 'Resource not found'
   if (status === 409) return 'Resource conflict'
   if (status === 412) return 'Precondition failed'
+  if (status === 415) return 'Unsupported media type'
   if (status === 428) return 'Precondition required'
   if (status === 422) return 'Request validation failed'
   if (status >= 500) return 'The request could not be completed'

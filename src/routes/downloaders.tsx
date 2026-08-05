@@ -139,9 +139,9 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
           item.id === id
             ? {
                 ...item,
-                healthStatus: payload.health.status,
-                healthMessage: payload.health.message,
-                healthCheckedAt: payload.health.checkedAt,
+                healthStatus: payload.item.status,
+                healthMessage: payload.item.message,
+                healthCheckedAt: payload.item.checkedAt,
               }
             : item,
         ),

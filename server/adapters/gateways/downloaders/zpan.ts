@@ -23,14 +23,17 @@ const upstreamScanTimeoutMs = 10_000
 
 export const zpanDownloaderGateway: DownloaderGateway = {
   supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
-  async submit(config, input) {
-    const task = await getClient(config).createDownloadTask({
-      source: { type: input.sourceType, uri: input.uri },
-      targetFolder: getTypedDownloadDirectory(config.options.targetFolder, input.category, input.targetSubdirectory),
-      name: input.title,
-      category: normalizeZmeDownloadCategory(input.category),
-      tags: input.tags,
-    })
+  async submit(config, input, idempotencyKey) {
+    const task = await getClient(config).createDownloadTask(
+      {
+        source: { type: input.sourceType, uri: input.uri },
+        targetFolder: getTypedDownloadDirectory(config.options.targetFolder, input.category, input.targetSubdirectory),
+        name: input.title,
+        category: normalizeZmeDownloadCategory(input.category),
+        tags: input.tags,
+      },
+      idempotencyKey,
+    )
     return { externalTaskId: task.id }
   },
 

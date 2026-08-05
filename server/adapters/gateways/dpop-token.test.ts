@@ -29,21 +29,52 @@ describe('Standard OIDC DPoP resource token validation', () => {
     )
   })
 
+  it('accepts the case-insensitive DPoP authentication scheme', async () => {
+    const fixture = await dpopFixture({ authorizationScheme: 'dpop' })
+    vi.stubGlobal('fetch', fixture.fetch)
+    await expect(validateDpopRequest(fixture.config, fixture.request)).resolves.toMatchObject({
+      subject: 'human-123',
+    })
+  })
+
   it.each([
     ['method', { proofMethod: 'POST' }],
     ['URL', { proofUrl: 'https://zme.test/api/download-tasks' }],
     ['access-token hash', { wrongAth: true }],
-    ['key binding', { wrongBinding: true }],
   ] as const)('rejects a proof with an invalid %s', async (_name, override) => {
     const fixture = await dpopFixture(override)
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toThrow()
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+      kind: 'invalid_dpop_proof',
+    })
+  })
+
+  it('classifies a failed access-token key binding as an invalid token', async () => {
+    const fixture = await dpopFixture({ wrongBinding: true })
+    vi.stubGlobal('fetch', fixture.fetch)
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+      kind: 'invalid_token',
+    })
+  })
+
+  it.each([
+    ['missing jkt', {}],
+    ['non-string jkt', { jkt: 42 }],
+    ['ambiguous confirmation methods', { jkt: 'thumbprint', other: 'value' }],
+  ] as const)('classifies an access token with %s as invalid', async (_name, confirmation) => {
+    const fixture = await dpopFixture({ confirmation })
+    vi.stubGlobal('fetch', fixture.fetch)
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+      kind: 'invalid_token',
+    })
   })
 
   it('rejects a token for a different resource audience', async () => {
     const fixture = await dpopFixture({ audience: 'https://other-resource.test/api' })
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toThrow()
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+      kind: 'invalid_token',
+    })
   })
 
   it.each([
@@ -59,7 +90,9 @@ describe('Standard OIDC DPoP resource token validation', () => {
   ] as const)('rejects an %s', async (_name, override) => {
     const fixture = await dpopFixture(override)
     vi.stubGlobal('fetch', fixture.fetch)
-    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toThrow()
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+      kind: 'invalid_token',
+    })
   })
 
   it.each([
@@ -95,6 +128,8 @@ async function dpopFixture(
     omitActor?: boolean
     omitProofJti?: boolean
     omitProofIat?: boolean
+    authorizationScheme?: string
+    confirmation?: Record<string, unknown>
   } = {},
 ) {
   const issuer = `https://dpop-${crypto.randomUUID()}.test`
@@ -108,7 +143,7 @@ async function dpopFixture(
   const now = Math.floor(Date.now() / 1000)
   const accessToken = await new SignJWT({
     scope: 'media:read release-search-jobs:write media:read',
-    cnf: { jkt: boundThumbprint },
+    cnf: override.confirmation ?? { jkt: boundThumbprint },
     ...(override.omitActor ? {} : { act: { sub: 'agent-456' } }),
     client_id: 'dpop-agent',
   })
@@ -130,7 +165,7 @@ async function dpopFixture(
   if (!override.omitProofIat) proofBuilder = proofBuilder.setIssuedAt(now)
   const proof = await proofBuilder.sign(proofKey.privateKey)
   const request = new Request(requestUrl, {
-    headers: { authorization: `DPoP ${accessToken}`, dpop: proof },
+    headers: { authorization: `${override.authorizationScheme ?? 'DPoP'} ${accessToken}`, dpop: proof },
   })
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(input instanceof Request ? input.url : input).pathname

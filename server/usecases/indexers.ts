@@ -26,11 +26,21 @@ export async function createIndexer(deps: Deps, input: IndexerInput): Promise<In
 export async function updateIndexer(
   deps: Deps,
   id: string,
-  input: IndexerInput,
+  input: Partial<IndexerInput>,
   expectedUpdatedAt: string,
 ): Promise<IndexerSummary | null> {
-  const record = await deps.indexersRepo.update(id, input, expectedUpdatedAt)
-  if (!record && (await deps.indexersRepo.get(id))) throw new StaleWriteError()
+  const current = await deps.indexersRepo.get(id)
+  if (!current) return null
+  const merged: IndexerInput = {
+    description: input.description ?? current.description ?? undefined,
+    kind: input.kind ?? current.kind,
+    endpoint: input.endpoint ?? current.config.endpoint,
+    credentials: input.credentials ?? current.config.credentials,
+    options: input.options ?? current.config.options,
+    enabled: input.enabled ?? current.enabled,
+  }
+  const record = await deps.indexersRepo.update(id, merged, expectedUpdatedAt)
+  if (!record) throw new StaleWriteError()
   return record ? toSummary(record) : null
 }
 

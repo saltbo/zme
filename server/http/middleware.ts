@@ -1,5 +1,11 @@
 import { principalKey, readConfig } from '@server/config'
-import { DpopCredentialError, getLocalSession, IdentityDisabledError } from '@server/usecases/identity'
+import {
+  type AuthenticatedUser,
+  DpopCredentialError,
+  type DpopTokenPrincipal,
+  getLocalSession,
+  IdentityDisabledError,
+} from '@server/usecases/identity'
 import type { MiddlewareHandler } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { AppEnv, Principal } from './context'
@@ -12,7 +18,12 @@ export const requireAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, next) 
 
   const token = getCookie(c, SESSION_COOKIE)
   const session = token ? await getLocalSession(c.get('deps').identityRepo, token) : null
-  if (!session) return problem(c, 401, 'authentication-required', 'Authentication required')
+  if (!session) {
+    if (agentScope(c.req.method, apiPath(c.req.path))) {
+      c.header('WWW-Authenticate', dpopChallenge(readConfig(c.env)))
+    }
+    return problem(c, 401, 'authentication-required', 'Authentication required')
+  }
   c.set('principal', {
     kind: 'human',
     userId: session.user.id,
@@ -34,25 +45,30 @@ export const requireAdminMiddleware: MiddlewareHandler<AppEnv> = async (c, next)
 }
 
 async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], next: () => Promise<unknown>) {
-  const authorization = c.req.header('Authorization')
-  if (!authorization?.startsWith('DPoP ')) {
-    c.header('WWW-Authenticate', 'DPoP error="invalid_token"')
-    return problem(c, 401, 'dpop-token-required', 'A DPoP-bound access token is required')
-  }
-  if (!c.req.header('DPoP')) {
-    c.header('WWW-Authenticate', 'DPoP error="invalid_dpop_proof"')
-    return problem(c, 401, 'dpop-proof-required', 'A DPoP proof is required')
-  }
   const config = readConfig(c.env)
+  let token: DpopTokenPrincipal
   try {
-    const token = await c.get('deps').dpopTokenValidator.validate(c.req.raw)
-    const key = principalKey(token.issuer, token.subject)
-    const now = new Date().toISOString()
-    const accepted = await c
-      .get('deps')
-      .identityRepo.recordDpopProof(token.issuer, token.proofJti, token.keyThumbprint, token.replayExpiresAt, now)
-    if (!accepted) throw new Error('The DPoP proof was already used.')
-    const user = await c
+    token = await c.get('deps').dpopTokenValidator.validate(c.req.raw)
+  } catch (error) {
+    if (error instanceof DpopCredentialError) {
+      c.header('WWW-Authenticate', dpopChallenge(config, error.kind))
+      return problem(c, 401, error.kind.replaceAll('_', '-'), 'The DPoP credential is invalid')
+    }
+    throw error
+  }
+
+  const key = principalKey(token.issuer, token.subject)
+  const now = new Date().toISOString()
+  const accepted = await c
+    .get('deps')
+    .identityRepo.recordDpopProof(token.issuer, token.proofJti, token.keyThumbprint, token.replayExpiresAt, now)
+  if (!accepted) {
+    c.header('WWW-Authenticate', dpopChallenge(config, 'invalid_dpop_proof'))
+    return problem(c, 401, 'invalid-dpop-proof', 'The DPoP credential is invalid')
+  }
+  let user: AuthenticatedUser
+  try {
+    user = await c
       .get('deps')
       .identityRepo.resolveUser(
         { issuer: token.issuer, subject: token.subject, name: token.subject, email: null, image: null },
@@ -61,41 +77,30 @@ async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], ne
         false,
         now,
       )
-    const principal: Principal = {
-      kind: 'agent',
-      userId: user.id,
-      issuer: token.issuer,
-      subject: token.subject,
-      role: user.role,
-      scopes: token.scopes,
-      actor: token.actor,
-    }
-    c.set('principal', principal)
-    c.set('user', user)
-    const requiredScope = agentScope(c.req.method, apiPath(c.req.path))
-    if (!requiredScope) return problem(c, 403, 'agent-operation-forbidden', 'This operation is not available to Agents')
-    if (!principal.scopes.includes(requiredScope)) {
-      c.header('WWW-Authenticate', `DPoP error="insufficient_scope", scope="${requiredScope}"`)
-      return problem(c, 403, 'insufficient-scope', 'The access token lacks the required scope')
-    }
-    await next()
   } catch (error) {
     if (error instanceof IdentityDisabledError) {
       return problem(c, 403, 'identity-disabled', 'The local identity projection is disabled')
     }
-    if (error instanceof DpopCredentialError) {
-      c.header('WWW-Authenticate', `DPoP error="${error.kind}"`)
-      return problem(c, 401, error.kind.replaceAll('_', '-'), 'The DPoP credential is invalid')
-    }
-    console.warn(
-      JSON.stringify({
-        event: 'identity.dpop.failed',
-        errorClass: error instanceof Error ? error.name : 'UnknownError',
-      }),
-    )
-    c.header('WWW-Authenticate', 'DPoP error="invalid_dpop_proof"')
-    return problem(c, 401, 'invalid-dpop-proof', 'The DPoP credential is invalid')
+    throw error
   }
+  const principal: Principal = {
+    kind: 'agent',
+    userId: user.id,
+    issuer: token.issuer,
+    subject: token.subject,
+    role: user.role,
+    scopes: token.scopes,
+    actor: token.actor,
+  }
+  c.set('principal', principal)
+  c.set('user', user)
+  const requiredScope = agentScope(c.req.method, apiPath(c.req.path))
+  if (!requiredScope) return problem(c, 403, 'agent-operation-forbidden', 'This operation is not available to Agents')
+  if (!principal.scopes.includes(requiredScope)) {
+    c.header('WWW-Authenticate', dpopChallenge(config, 'insufficient_scope', requiredScope))
+    return problem(c, 403, 'insufficient-scope', 'The access token lacks the required scope')
+  }
+  await next()
 }
 
 function apiPath(path: string): string {
@@ -119,9 +124,20 @@ export function requireScope(scope: string): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const principal = c.get('principal')
     if (principal.kind === 'agent' && !principal.scopes.includes(scope)) {
-      c.header('WWW-Authenticate', `DPoP error="insufficient_scope", scope="${scope}"`)
+      c.header('WWW-Authenticate', dpopChallenge(readConfig(c.env), 'insufficient_scope', scope))
       return problem(c, 403, 'insufficient-scope', 'The access token lacks the required scope')
     }
     await next()
   }
+}
+
+function dpopChallenge(
+  config: ReturnType<typeof readConfig>,
+  error?: DpopCredentialError['kind'] | 'insufficient_scope',
+  scope?: string,
+): string {
+  const parameters = [`algs="${config.oidc.allowedAlgorithms.join(' ')}"`]
+  if (error) parameters.push(`error="${error}"`)
+  if (scope) parameters.push(`scope="${scope}"`)
+  return `DPoP ${parameters.join(', ')}`
 }

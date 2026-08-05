@@ -21,7 +21,7 @@ import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
 import { openapiDocument } from './openapi'
-import { problem } from './protocol'
+import { problem, setPageLinks } from './protocol'
 
 const pageSchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -88,6 +88,7 @@ export function registerResourceApiRoutes(routes: Hono<AppEnv>) {
     const result = await c
       .get('deps')
       .resourceApiRepo.listReleaseJobs(c.get('principal').userId, page.data.page, page.data.pageSize)
+    setPageLinks(c, page.data, result.total)
     return c.json(
       pageRepresentation(
         result.items.map((item) => releaseJobRepresentation(c, item)),
@@ -114,6 +115,7 @@ export function registerResourceApiRoutes(routes: Hono<AppEnv>) {
         page.data.page,
         page.data.pageSize,
       )
+    setPageLinks(c, page.data, result.total)
     return c.json(
       pageRepresentation(
         result.items.map((item) => releaseResultRepresentation(c, item)),
@@ -143,6 +145,7 @@ export function registerResourceApiRoutes(routes: Hono<AppEnv>) {
         return problem(c, 409, 'idempotency-conflict', 'Idempotency-Key was reused with different content')
       if (error instanceof ResourceNotFoundError) return problem(c, 404, 'not-found', error.message)
       if (error instanceof ResourceConflictError) return problem(c, 409, 'resource-conflict', error.message)
+      if (error instanceof ResourceUpstreamError) return problem(c, 502, 'downloader-unavailable', error.message)
       throw error
     }
   })
@@ -153,6 +156,7 @@ export function registerResourceApiRoutes(routes: Hono<AppEnv>) {
     const result = await c
       .get('deps')
       .resourceApiRepo.listDownloadTasks(c.get('principal').userId, page.data.page, page.data.pageSize)
+    setPageLinks(c, page.data, result.total)
     return c.json(
       pageRepresentation(
         result.items.map((item) => downloadTaskRepresentation(c, item)),

@@ -64,4 +64,39 @@ describe('searchProwlarr', () => {
     expect(results[0].magnetUrl).toBeNull()
     expect(JSON.stringify(results)).not.toContain('apikey=secret')
   })
+
+  it('classifies network failures as predictable indexer search errors', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unavailable')))
+
+    await expect(searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })).rejects.toThrow(
+      'Prowlarr search request failed.',
+    )
+  })
+
+  it('classifies unsuccessful search responses without parsing them', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 503 })))
+
+    await expect(searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })).rejects.toThrow(
+      'Prowlarr search failed: 503',
+    )
+  })
+
+  it('rejects invalid JSON search responses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('{', { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    )
+
+    await expect(searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })).rejects.toThrow(
+      'Prowlarr search returned invalid JSON.',
+    )
+  })
+
+  it('rejects valid JSON that is not a search-result collection', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [] }), { status: 200 })))
+
+    await expect(searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })).rejects.toThrow(
+      'Prowlarr search returned an invalid payload.',
+    )
+  })
 })

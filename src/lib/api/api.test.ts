@@ -115,9 +115,9 @@ describe('resource api client', () => {
 
     expect(fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/library/resources',
+      '/api/library/resources/isbn%3Abook%3A9780140328721',
       expect.objectContaining({
-        body: JSON.stringify(input),
+        body: JSON.stringify({}),
         credentials: 'include',
         headers: expect.objectContaining({ 'content-type': 'application/json' }),
         method: 'PUT',
@@ -127,9 +127,7 @@ describe('resource api client', () => {
       2,
       '/api/library/resources/isbn%3Abook%3A9780140328721',
       expect.objectContaining({
-        body: JSON.stringify(input),
         credentials: 'include',
-        headers: expect.objectContaining({ 'content-type': 'application/json' }),
         method: 'DELETE',
       }),
     )
@@ -146,9 +144,9 @@ describe('resource api client', () => {
     await saveLibraryResource(input)
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/library/resources',
+      '/api/library/resources/musicbrainz%3Arelease-group%3Ab1392450-e666-3926-a536-22c65f834433',
       expect.objectContaining({
-        body: JSON.stringify(input),
+        body: JSON.stringify({ status: 'watched' }),
         credentials: 'include',
         headers: expect.objectContaining({ 'content-type': 'application/json' }),
         method: 'PUT',
@@ -199,18 +197,18 @@ describe('resource api client', () => {
     )
     expect(fetch).toHaveBeenNthCalledWith(
       3,
-      '/api/indexers/indexer-1/health',
-      expect.objectContaining({ method: 'PUT' }),
+      '/api/indexers/indexer-1/health-observations',
+      expect.objectContaining({ method: 'POST' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
       4,
-      '/api/media-sources/source-1/health',
-      expect.objectContaining({ method: 'PUT' }),
+      '/api/media-sources/source-1/health-observations',
+      expect.objectContaining({ method: 'POST' }),
     )
     expect(fetch).toHaveBeenNthCalledWith(
       5,
-      '/api/downloaders/downloader-1/health',
-      expect.objectContaining({ method: 'PUT' }),
+      '/api/downloaders/downloader-1/health-observations',
+      expect.objectContaining({ method: 'POST' }),
     )
   })
 })

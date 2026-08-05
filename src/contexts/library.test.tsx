@@ -23,15 +23,16 @@ function mockLibraryBackend(initial: LibraryStateItem[] = []) {
   const now = '2026-06-01T00:00:00.000Z'
   server.use(
     http.get('/api/library/states', () => HttpResponse.json({ items: [...store.values()] })),
-    http.put('/api/library/resources', async ({ request }) => {
-      const body = (await request.json()) as { mediaKey: string; kind: 'movie'; status: 'saved' | 'watched' }
-      const existing = store.get(body.mediaKey)
+    http.put('/api/library/resources/:mediaKey', async ({ params, request }) => {
+      const mediaKey = decodeURIComponent(params.mediaKey as string)
+      const body = (await request.json()) as { status: 'saved' | 'watched' }
+      const existing = store.get(mediaKey)
       const item = libraryItem(
-        Number(body.mediaKey.split(':')[2]),
+        Number(mediaKey.split(':')[2]),
         existing?.savedAt ?? now,
         body.status === 'watched' ? now : (existing?.watchedAt ?? null),
       )
-      store.set(body.mediaKey, item)
+      store.set(mediaKey, item)
       return HttpResponse.json({ item })
     }),
     http.delete('/api/library/resources/:mediaKey', ({ params }) => {

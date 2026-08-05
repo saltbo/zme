@@ -21,17 +21,18 @@ import {
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem } from './protocol'
+import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
-const doubanSchema = z.object({
+const connectorCreateSchema = z.object({
+  kind: z.literal('douban'),
   profileId: z.string().trim().min(1),
   enabled: z.boolean().default(true),
 })
 
-const connectorPatchSchema = z.object({
-  enabled: z.boolean(),
-})
+const connectorPatchSchema = z
+  .object({ enabled: z.boolean().optional() })
+  .refine((value) => value.enabled !== undefined)
 
 const connectorAuthInputSchema = z.record(z.string(), z.string()).default({})
 
@@ -53,7 +54,6 @@ const connectorSyncJobSchema = z.object({
 const playlistSelectionSchema = z.object({
   selectedPlaylistIds: z.array(z.string().uuid()).max(1000),
 })
-
 export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   routes.get('/connectors/providers', (c) => {
     return c.json({ items: listConnectorProviders(c.get('deps')) })
@@ -64,13 +64,15 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
     return c.json({ items })
   })
 
-  routes.post('/connectors/douban', zValidator('json', doubanSchema), async (c) => {
+  routes.post('/connectors', zValidator('json', connectorCreateSchema), async (c) => {
     const item = await saveDoubanConnector(c.get('deps'), c.get('user').id, c.req.valid('json'))
-    return c.json({ item })
+    c.header('Location', `/api/connectors/${item.id}`)
+    return c.json({ item }, 201)
   })
 
   routes.post('/connector-login-attempts', zValidator('json', connectorLoginStartSchema), async (c) => {
     const result = await startConnectorLogin(c.get('deps'), c.env, c.get('user').id, c.req.valid('json'))
+    c.header('Location', `/api/connector-login-attempts/${result.attempt.id}`)
     return c.json(result, 201)
   })
 
@@ -97,6 +99,8 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
     zValidator('param', idParamsSchema),
     zValidator('json', connectorPatchSchema),
     async (c) => {
+      const unsupported = requireMergePatch(c)
+      if (unsupported) return unsupported
       const expectedUpdatedAt = ifMatchRevision(c)
       if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
       const item = await updateConnector(

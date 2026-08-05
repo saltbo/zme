@@ -9,11 +9,11 @@ import {
   searchIndexers,
   updateIndexer,
 } from '@server/usecases/indexers'
-import { IndexerNotConfiguredError } from '@server/usecases/ports'
+import { IndexerNotConfiguredError, IndexerSearchError } from '@server/usecases/ports'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem } from './protocol'
+import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
 const indexerSearchQuerySchema = z.object({
@@ -30,7 +30,7 @@ const indexerSchema = z.object({
   options: z.record(z.string(), z.string()),
   enabled: z.boolean(),
 })
-
+const indexerPatchSchema = indexerSchema.partial().refine((value) => Object.keys(value).length > 0)
 export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   routes.get('/release-candidates', zValidator('query', indexerSearchQuerySchema), async (c) => {
     const { q, searchType, categories } = c.req.valid('query')
@@ -46,13 +46,10 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
       if (error instanceof IndexerNotConfiguredError) {
         return c.json({ code: 'INDEXER_NOT_CONFIGURED', error: error.message }, 503)
       }
-      return c.json(
-        {
-          code: 'INDEXER_SEARCH_FAILED',
-          error: error instanceof Error ? error.message : 'Indexer search failed.',
-        },
-        502,
-      )
+      if (error instanceof IndexerSearchError) {
+        return c.json({ code: 'INDEXER_SEARCH_FAILED', error: error.message }, 502)
+      }
+      throw error
     }
   })
 
@@ -71,19 +68,27 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
 
   routes.post('/indexers', zValidator('json', indexerSchema), async (c) => {
     const item = await createIndexer(c.get('deps'), c.req.valid('json'))
+    c.header('Location', `/api/indexers/${item.id}`)
     c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item }, 201)
   })
 
-  routes.patch('/indexers/:id', zValidator('param', idParamsSchema), zValidator('json', indexerSchema), async (c) => {
-    const { id } = c.req.valid('param')
-    const expectedUpdatedAt = ifMatchRevision(c)
-    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-    const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'), expectedUpdatedAt)
-    if (!item) return c.json({ error: 'Indexer not found.' }, 404)
-    c.header('ETag', entityTag(item.updatedAt))
-    return c.json({ item })
-  })
+  routes.patch(
+    '/indexers/:id',
+    zValidator('param', idParamsSchema),
+    zValidator('json', indexerPatchSchema),
+    async (c) => {
+      const unsupported = requireMergePatch(c)
+      if (unsupported) return unsupported
+      const { id } = c.req.valid('param')
+      const expectedUpdatedAt = ifMatchRevision(c)
+      if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
+      const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'), expectedUpdatedAt)
+      if (!item) return c.json({ error: 'Indexer not found.' }, 404)
+      c.header('ETag', entityTag(item.updatedAt))
+      return c.json({ item })
+    },
+  )
 
   routes.delete('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
@@ -94,17 +99,25 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
     return c.body(null, 204)
   })
 
-  routes.put('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
+  routes.post('/indexers/:id/health-observations', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
     const health = await checkIndexerHealth(c.get('deps'), id)
     if (!health) return c.json({ error: 'Indexer not found.' }, 404)
-    return c.json({ health })
+    c.header('Location', `/api/indexers/${id}/health-observations/${encodeURIComponent(health.checkedAt as string)}`)
+    return c.json({ item: health }, 201)
   })
 
-  routes.get('/indexers/:id/health', zValidator('param', idParamsSchema), async (c) => {
+  routes.get('/indexers/:id/health-observations', zValidator('param', idParamsSchema), async (c) => {
     const health = await getIndexerHealth(c.get('deps'), c.req.valid('param').id)
     if (!health) return c.json({ error: 'Indexer not found.' }, 404)
-    return c.json({ health })
+    return c.json({ items: health.checkedAt ? [health] : [] })
+  })
+
+  routes.get('/indexers/:id/health-observations/:checkedAt', zValidator('param', idParamsSchema), async (c) => {
+    const health = await getIndexerHealth(c.get('deps'), c.req.param('id'))
+    if (!health || health.checkedAt !== c.req.param('checkedAt'))
+      return c.json({ error: 'Health observation not found.' }, 404)
+    return c.json({ item: health })
   })
 }
 
