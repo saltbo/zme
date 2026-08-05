@@ -27,6 +27,12 @@ it('backfills both legacy download stores before removing ephemeral release tabl
     db.prepare(
       `INSERT INTO download_records (id, user_id, resource_kind, resource_key, lane_key, downloader_id, config_json, status, external_task_id, created_at, updated_at) VALUES ('music-1', 'user-1', 'music_track', 'netease:track:123', 'music:connector-1', 'downloader-1', '{}', 'accepted', 'zpan-music-1', '2026-08-05', '2026-08-05')`,
     ),
+    db.prepare(
+      `INSERT INTO media_subscriptions (id, user_id, subject_type, subject_key, downloader_id, enabled, created_at, updated_at) VALUES ('subscription-1', 'user-1', 'music_collection', 'collection-1', 'downloader-1', 1, '2026-08-05', '2026-08-05')`,
+    ),
+    db.prepare(
+      `INSERT INTO subscription_download_records (subscription_id, download_record_id, created_at) VALUES ('subscription-1', 'music-1', '2026-08-05')`,
+    ),
   ])
 
   await applyD1Migrations(db, migrations.slice(first))
@@ -53,4 +59,8 @@ it('backfills both legacy download stores before removing ephemeral release tabl
     ]),
   )
   expect(tables.results.map((row) => row.name)).toContain('download_dispatch_records')
+  const subscriptionLinks = await db
+    .prepare('SELECT subscription_id, download_record_id FROM subscription_download_records')
+    .all()
+  expect(subscriptionLinks.results).toEqual([{ subscription_id: 'subscription-1', download_record_id: 'music-1' }])
 })

@@ -156,23 +156,11 @@ export function openapiDocument(config: AppConfig) {
           description: 'OIDC-issued DPoP-bound resource token. Bearer tokens are rejected.',
           'x-dpop-required': true,
         },
-        musicDownloadKey: {
-          type: 'apiKey',
-          in: 'query',
-          name: 'key',
-          description: 'Short-lived, single-purpose signed music content key.',
-        },
       },
       parameters: {
         ApiVersion: {
           name: 'API-Version',
           in: 'header',
-          required: true,
-          schema: { type: 'string', const: API_VERSION },
-        },
-        ApiVersionQuery: {
-          name: 'apiVersion',
-          in: 'query',
           required: true,
           schema: { type: 'string', const: API_VERSION },
         },
@@ -249,29 +237,13 @@ type SessionOperation = readonly [
   operationId: string,
   summary: string,
   tag: 'media-catalog' | 'library' | 'connectors' | 'configuration' | 'downloads' | 'system',
-  policy?: 'admin' | 'signed-key' | 'public',
+  policy?: 'admin' | 'public',
 ]
 
 const sessionOperations: SessionOperation[] = [
   ['get', '/', 'getResourceServer', 'Get Resource Server discovery metadata', 'system', 'public'],
   ['get', '/health', 'getServiceHealth', 'Get service health', 'system', 'public'],
   ['get', '/openapi.json', 'getOpenApiDocument', 'Get the complete OpenAPI document', 'system', 'public'],
-  [
-    'get',
-    '/music/tracks/{id}/content',
-    'getSignedMusicContent',
-    'Read signed music track content',
-    'downloads',
-    'signed-key',
-  ],
-  [
-    'head',
-    '/music/tracks/{id}/content',
-    'headSignedMusicContent',
-    'Inspect signed music track content',
-    'downloads',
-    'signed-key',
-  ],
   ['get', '/media-trends', 'listMediaTrends', 'List trending media', 'media-catalog'],
   ['get', '/popular-media', 'listPopularMedia', 'List popular media', 'media-catalog'],
   ['get', '/media-recommendations', 'listMediaRecommendations', 'List media recommendations', 'media-catalog'],
@@ -428,8 +400,7 @@ function sessionApiPaths() {
     const pathParameters = [...path.matchAll(/\{([^}]+)\}/g)].map((match) =>
       sessionPathParameter(operationId, match[1] as string),
     )
-    const security =
-      policy === 'public' ? [] : policy === 'signed-key' ? [{ musicDownloadKey: [] }] : [{ oidcSession: [] }]
+    const security = policy === 'public' ? [] : [{ oidcSession: [] }]
     const successStatus = sessionSuccessStatus(operationId, method)
     const noContent = successStatus === '204'
     const optimisticResource = /^\/(connectors|downloaders|indexers|media-sources)\/\{id\}$/.test(path)
@@ -440,13 +411,7 @@ function sessionApiPaths() {
       tags: [tag],
       security,
       parameters: [
-        ...(policy === 'public'
-          ? traceParameters
-          : policy === 'signed-key'
-            ? [{ $ref: '#/components/parameters/ApiVersionQuery' }, ...traceParameters]
-            : operationId === 'streamDownloadEvents'
-              ? [{ $ref: '#/components/parameters/ApiVersionQuery' }, ...traceParameters]
-              : parameters),
+        ...(policy === 'public' ? traceParameters : parameters),
         ...pathParameters,
         ...sessionQueryParameters(operationId),
         ...(operationId === 'createConnectorSyncJob' ? [{ $ref: '#/components/parameters/IdempotencyKey' }] : []),
@@ -473,9 +438,6 @@ function sessionApiPaths() {
     if (operationId === 'listMusic') {
       operation.description = 'At least one of q, artist, or title is required.'
       operation['x-zme-query-constraint'] = { atLeastOne: ['q', 'artist', 'title'] }
-    }
-    if (operationId === 'getSignedMusicContent') {
-      ;(operation.responses as Record<string, object>)['307'] = musicRedirectResponse()
     }
     const requestSchema = sessionRequestSchema(operationId)
     if (requestSchema) {
@@ -595,15 +557,6 @@ function sessionRequestSchema(operationId: string) {
 }
 
 function sessionSuccessResponse(operationId: string, entityTagged: boolean, created: boolean) {
-  if (operationId === 'getSignedMusicContent') return musicContentResponse(false)
-  if (operationId === 'headSignedMusicContent') return musicContentResponse(true)
-  if (operationId === 'streamDownloadEvents') {
-    return {
-      description: 'Server-sent download task events',
-      headers: headers(),
-      content: { 'text/event-stream': { schema: { type: 'string' } } },
-    }
-  }
   const name = sessionResponseSchemaByOperation[operationId]
   if (!name) throw new Error(`Missing OpenAPI response schema for ${operationId}`)
   const ref = `#/components/schemas/${name}`
@@ -621,45 +574,6 @@ function sessionSuccessResponse(operationId: string, entityTagged: boolean, crea
   return created
     ? { ...response, headers: { ...response.headers, Location: { $ref: '#/components/headers/Location' } } }
     : response
-}
-
-function musicContentResponse(head: boolean) {
-  if (head) {
-    return {
-      description: 'Resolved track metadata without a response body',
-      headers: {
-        ...headers(),
-        Location: { $ref: '#/components/headers/Location' },
-        'Content-Disposition': { schema: { type: 'string' } },
-        'Content-Type': { schema: { type: 'string' } },
-        'Content-Length': { schema: { type: 'integer', minimum: 0 } },
-      },
-    }
-  }
-  return {
-    description: 'Tagged audio content',
-    headers: {
-      ...headers(),
-      'Content-Disposition': { schema: { type: 'string' } },
-    },
-    content: {
-      'audio/mpeg': { schema: { type: 'string', format: 'binary' } },
-      'audio/flac': { schema: { type: 'string', format: 'binary' } },
-      'audio/mp4': { schema: { type: 'string', format: 'binary' } },
-      'audio/ogg': { schema: { type: 'string', format: 'binary' } },
-    },
-  }
-}
-
-function musicRedirectResponse() {
-  return {
-    description: 'Temporary redirect to the resolved track source',
-    headers: {
-      ...headers(),
-      Location: { $ref: '#/components/headers/Location' },
-      'Content-Disposition': { schema: { type: 'string' } },
-    },
-  }
 }
 
 function sessionPathParameter(operationId: string, name: string) {

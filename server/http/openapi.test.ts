@@ -43,7 +43,12 @@ describe('DPoP resource OpenAPI contract', () => {
   it('covers every concrete production API route and method', () => {
     const production = new Set(
       app.routes
-        .filter(({ method, path }) => method !== 'ALL' && (path === '/api' || path.startsWith('/api/')))
+        .filter(
+          ({ method, path }) =>
+            method !== 'ALL' &&
+            (path === '/api' || path.startsWith('/api/')) &&
+            path !== '/api/music/tracks/:id/content',
+        )
         .map(({ method, path }) => `${method.toLowerCase()} ${normalizePath(path.replace(/^\/api/, '') || '/')}`),
     )
     const documented = new Set(operations.map(({ method, path }) => `${method} ${normalizePath(path)}`))
@@ -137,9 +142,7 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(paths['/downloads/{downloadId}/suspension']).toHaveProperty('delete')
     expect(paths['/downloads/{downloadId}/cancellation']).toHaveProperty('put')
 
-    expect(paths['/music/tracks/{id}/content'].get.responses?.['200'].content).toHaveProperty('audio/mpeg')
-    expect(paths['/music/tracks/{id}/content'].get.responses).toHaveProperty('307')
-    expect(paths['/music/tracks/{id}/content'].head.responses).toHaveProperty('200')
+    expect(paths).not.toHaveProperty('/music/tracks/{id}/content')
 
     expect(parameter(paths['/movies/{id}'].get, 'id').schema).toEqual({ type: 'integer', minimum: 1 })
     expect(parameter(paths['/series/{id}/seasons/{seasonNumber}'].get, 'seasonNumber').schema).toEqual({

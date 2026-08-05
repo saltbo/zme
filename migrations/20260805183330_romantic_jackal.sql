@@ -1,4 +1,11 @@
 ALTER TABLE `download_records` RENAME TO `download_dispatch_records`;--> statement-breakpoint
+CREATE TABLE `__subscription_download_records_backup` (
+	`subscription_id` text NOT NULL,
+	`download_record_id` text NOT NULL,
+	`created_at` text NOT NULL
+);
+--> statement-breakpoint
+INSERT INTO `__subscription_download_records_backup`("subscription_id", "download_record_id", "created_at") SELECT "subscription_id", "download_record_id", "created_at" FROM `subscription_download_records`;--> statement-breakpoint
 PRAGMA foreign_keys=OFF;--> statement-breakpoint
 CREATE TABLE `__new_download_dispatch_records` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -36,8 +43,9 @@ CREATE TABLE `__new_subscription_download_records` (
 	FOREIGN KEY (`download_record_id`) REFERENCES `download_dispatch_records`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-INSERT INTO `__new_subscription_download_records`("subscription_id", "download_record_id", "created_at") SELECT "subscription_id", "download_record_id", "created_at" FROM `subscription_download_records`;--> statement-breakpoint
+INSERT INTO `__new_subscription_download_records`("subscription_id", "download_record_id", "created_at") SELECT "subscription_id", "download_record_id", "created_at" FROM `__subscription_download_records_backup`;--> statement-breakpoint
 DROP TABLE `subscription_download_records`;--> statement-breakpoint
 ALTER TABLE `__new_subscription_download_records` RENAME TO `subscription_download_records`;--> statement-breakpoint
+DROP TABLE `__subscription_download_records_backup`;--> statement-breakpoint
 CREATE UNIQUE INDEX `subscription_download_records_pair_idx` ON `subscription_download_records` (`subscription_id`,`download_record_id`);--> statement-breakpoint
 CREATE INDEX `subscription_download_records_record_idx` ON `subscription_download_records` (`download_record_id`);
