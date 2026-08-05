@@ -84,11 +84,11 @@ async function startZpanFixture(): Promise<{ url: string; streamCount: () => num
       const status = url.searchParams.get('status')
       const items = status ? current.filter((task) => task.status.state === status) : current
       response.writeHead(200, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ items, total: items.length, page: 1, pageSize: 50 }))
+      response.end(JSON.stringify({ items, nextPageToken: null }))
       return
     }
 
-    if (url.pathname === '/api/events' && url.searchParams.get('downloadTasks') === '1') {
+    if (url.pathname === '/api/events') {
       streamCount += 1
       response.writeHead(200, {
         'content-type': 'text/event-stream',
@@ -117,7 +117,7 @@ async function startZpanFixture(): Promise<{ url: string; streamCount: () => num
           () => {
             current = snapshot
             response.write(
-              `event: download-tasks\ndata: ${JSON.stringify({ items: snapshot, total: snapshot.length, page: 1, pageSize: 50 })}\n\n`,
+              `event: resource-change\ndata: ${JSON.stringify({ resourceType: 'download-task', changeType: 'updated' })}\n\n`,
             )
           },
           1_500 + index * 2_000,

@@ -42,7 +42,7 @@ type DownloaderFormState = {
 const initialForm: DownloaderFormState = {
   description: '',
   kind: 'zpan',
-  endpoint: 'https://zpan.space',
+  endpoint: 'https://drive.zpan.space',
   username: '',
   password: '',
   apiKey: '',
@@ -613,7 +613,7 @@ function getEndpointPlaceholder(kind: DownloaderKind) {
 }
 
 function getDefaultEndpoint(kind: DownloaderKind) {
-  if (kind === 'zpan') return 'https://zpan.space'
+  if (kind === 'zpan') return 'https://drive.zpan.space'
   if (kind === 'qbittorrent') return 'http://127.0.0.1:8080'
   if (kind === 'transmission') return 'http://127.0.0.1:9091'
   return 'http://127.0.0.1:6800/jsonrpc'

@@ -139,6 +139,7 @@ it('completes the least-privilege Agent media, release-search, and download-task
           output: { objectId: 'zpan-object-123' },
           runtime: {},
           error: null,
+          updatedAt: '2026-08-01T00:05:00.000Z',
         },
       })
     }

@@ -11,7 +11,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const SPEC_URL = process.env.ZPAN_OPENAPI_URL ?? 'https://zpan.space/api/openapi.json'
+const SPEC_URL = process.env.ZPAN_OPENAPI_URL ?? 'https://drive.zpan.space/api/openapi.json'
 const KEEP_TAGS = new Set(['Download Tasks', 'Events'])
 
 const response = await fetch(SPEC_URL)

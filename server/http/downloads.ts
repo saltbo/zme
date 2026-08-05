@@ -38,7 +38,7 @@ const downloadsQuerySchema = z.object({
 
 export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloads', zValidator('query', downloadsQuerySchema), async (c) => {
-    const result = await listDownloadTasks(c.get('deps'), c.get('user').id, c.req.valid('query'))
+    const result = await listDownloadTasks(c.get('deps'), c.get('user').id, c.req.valid('query'), c.req.raw.signal)
     return c.json(result)
   })
 

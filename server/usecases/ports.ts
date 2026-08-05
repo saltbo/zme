@@ -97,7 +97,12 @@ export type DownloadTaskGatewayEvent =
 
 export interface DownloadTaskGateway {
   get?(config: ConnectorConfig, owner: DownloadTaskOwner, id: string): Promise<DownloadTaskSummary | null>
-  list(config: ConnectorConfig, owner: DownloadTaskOwner, input: ListDownloadTasksInput): Promise<DownloadTaskPage>
+  list(
+    config: ConnectorConfig,
+    owner: DownloadTaskOwner,
+    input: ListDownloadTasksInput,
+    signal?: AbortSignal,
+  ): Promise<DownloadTaskPage>
   stream(
     config: ConnectorConfig,
     owner: DownloadTaskOwner,
