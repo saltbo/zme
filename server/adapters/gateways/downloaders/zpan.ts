@@ -21,6 +21,17 @@ const upstreamPageSize = 100
 const maxUpstreamPages = 100
 const upstreamScanTimeoutMs = 10_000
 const snapshotRefreshIntervalMs = 1_500
+const liveTaskStates: ZpanDownloadTaskState[] = [
+  'queued',
+  'assigned',
+  'downloading',
+  'suspended',
+  'pausing',
+  'paused',
+  'interrupted',
+  'uploading',
+  'canceling',
+]
 
 export const zpanDownloaderGateway: DownloaderGateway = {
   supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
@@ -68,7 +79,7 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
 
   async stream(config, owner, signal, emit) {
     const client = getClient(config)
-    const tasks = new Map((await listAllDownloadTasks(client, {}, signal)).map((task) => [task.id, task]))
+    const tasks = new Map((await listLiveDownloadTasks(client, signal)).map((task) => [task.id, task]))
     await emitSnapshot(emit, owner, [...tasks.values()])
     const streamAborter = new AbortController()
     const streamSignal = AbortSignal.any([signal, streamAborter.signal])
@@ -93,7 +104,7 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
           .then(async () => {
             if (refreshAll) {
               tasks.clear()
-              for (const task of await listAllDownloadTasks(client, {}, streamSignal)) tasks.set(task.id, task)
+              for (const task of await listLiveDownloadTasks(client, streamSignal)) tasks.set(task.id, task)
             } else {
               const changedTasks = await Promise.all(taskIds.map((id) => client.getDownloadTask({ id })))
               for (const [index, task] of changedTasks.entries()) {
@@ -113,7 +124,8 @@ export const zpanDownloadTaskGateway: DownloadTaskGateway = {
     try {
       await client.streamDownloadTaskEvents(streamSignal, async (event) => {
         if (event.event === 'resource-change') {
-          if (event.data.resourceType === 'download-task') scheduleRefresh(event.data.resourceId)
+          const change = event.data as { resourceType: string; resourceId: string }
+          if (change.resourceType === 'download-task') scheduleRefresh(change.resourceId)
           return
         }
         if (event.event === 'resync') {
@@ -138,6 +150,11 @@ function getZpanEventErrorMessage(data: unknown) {
     return data.message
   }
   throw new Error('ZPan error event returned an invalid payload')
+}
+
+async function listLiveDownloadTasks(client: ZpanClient, signal: AbortSignal) {
+  const pages = await Promise.all(liveTaskStates.map((status) => listAllDownloadTasks(client, { status }, signal)))
+  return pages.flat()
 }
 
 async function listAllDownloadTasks(
