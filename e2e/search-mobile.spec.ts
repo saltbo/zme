@@ -173,7 +173,7 @@ async function stubReleaseSearchApis(page: Page, getSearchGate: () => Promise<vo
 async function submitSearchFromMusic(page: Page, viewport: { width: number; height: number }, query: string) {
   await page.setViewportSize(viewport)
   await page.goto('/music')
-  await expect(page.getByRole('heading', { name: 'Music' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Music', exact: true })).toBeVisible()
   if (viewport.width < 768) await expectNoHorizontalOverflow(page)
 
   await submitGlobalSearch(page, query)
