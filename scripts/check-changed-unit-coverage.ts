@@ -14,7 +14,10 @@ const changedFiles = new Set([
   ...git(['ls-files', '--others', '--exclude-standard'])!.split('\n').filter(Boolean),
 ])
 const unitFiles = [...changedFiles].filter(isUnitOwnedSource).sort()
-if (unitFiles.length === 0) fail('No changed Unit-owned production files were discovered.')
+if (unitFiles.length === 0) {
+  console.log('No changed Unit-owned production files were discovered; changed Unit coverage is not applicable.')
+  process.exit(0)
+}
 
 const trackedChangedLines = changedLines(base, new Set(unitFiles))
 let aggregateCovered = 0
