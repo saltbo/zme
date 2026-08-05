@@ -318,6 +318,8 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     fixture.env,
   )
   expect(taskResponse.status).toBe(201)
+  expect(taskResponse.headers.get('ETag')).toMatch(/^".+"$/)
+  expect(taskResponse.headers.get('Cache-Control')).toContain('no-transform')
   const task = (await taskResponse.json()) as { id: string; status: string; externalTaskId: string }
   expect(task).toMatchObject({ status: 'submitted', externalTaskId: 'zpan-task-123' })
   const missingPrecondition = await app.fetch(
@@ -383,6 +385,8 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     await fixture.signedRequest(`/api/downloads/${task.id}`, ['downloads:read']),
     fixture.env,
   )
+  expect(statusResponse.headers.get('ETag')).toMatch(/^".+"$/)
+  expect(statusResponse.headers.get('Cache-Control')).toContain('no-transform')
   expect(await statusResponse.json()).toMatchObject({
     status: 'completed',
     externalTaskId: 'zpan-task-123',

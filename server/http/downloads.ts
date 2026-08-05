@@ -73,7 +73,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     try {
       const item = await createDownload(c.get('deps'), c.env, c.get('principal').userId, key, parsed.data)
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}`)
-      c.header('ETag', entityTag(item.updatedAt))
+      setEntityHeaders(c, item.updatedAt)
       return c.json(await representation(c, item), 201)
     } catch (error) {
       return resourceError(c, error)
@@ -83,8 +83,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloads/:id', async (c) => {
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
-    c.header('ETag', entityTag(item.updatedAt))
-    c.header('Cache-Control', 'private, no-store')
+    setEntityHeaders(c, item.updatedAt)
     return c.json(await representation(c, item))
   })
 
@@ -103,7 +102,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
     if (!item.suspensionCreatedAt) return problem(c, 404, 'not-found', 'Download suspension not found')
-    c.header('ETag', entityTag(item.updatedAt))
+    setEntityHeaders(c, item.updatedAt)
     return c.json(suspensionRepresentation(c, item))
   })
 
@@ -114,7 +113,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
       const existing = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
       const item = await suspendDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}/suspension`)
-      c.header('ETag', entityTag(item.updatedAt))
+      setEntityHeaders(c, item.updatedAt)
       return existing?.suspensionCreatedAt
         ? c.json(suspensionRepresentation(c, item), 200)
         : c.json(suspensionRepresentation(c, item), 201)
@@ -128,7 +127,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     if (revision instanceof Response) return revision
     try {
       const item = await resumeDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
-      c.header('ETag', entityTag(item.updatedAt))
+      setEntityHeaders(c, item.updatedAt)
       return c.body(null, 204)
     } catch (error) {
       return resourceError(c, error)
@@ -139,7 +138,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
     if (!item.cancellationCreatedAt) return problem(c, 404, 'not-found', 'Download cancellation not found')
-    c.header('ETag', entityTag(item.updatedAt))
+    setEntityHeaders(c, item.updatedAt)
     return c.json(cancellationRepresentation(c, item))
   })
 
@@ -150,7 +149,7 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
       const existing = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
       const item = await cancelDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}/cancellation`)
-      c.header('ETag', entityTag(item.updatedAt))
+      setEntityHeaders(c, item.updatedAt)
       return existing?.cancellationCreatedAt
         ? c.json(cancellationRepresentation(c, item), 200)
         : c.json(cancellationRepresentation(c, item), 201)
@@ -158,6 +157,11 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
       return resourceError(c, error)
     }
   })
+}
+
+function setEntityHeaders(c: Context<AppEnv>, updatedAt: string) {
+  c.header('ETag', entityTag(updatedAt))
+  c.header('Cache-Control', 'private, no-store, no-transform')
 }
 
 async function representation(c: Context<AppEnv>, item: DownloadRecord) {
