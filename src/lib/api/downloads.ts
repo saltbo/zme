@@ -13,5 +13,7 @@ export function downloadTaskEventsUrl() {
 }
 
 export async function createDownload(input: CreateDownloadInput) {
-  return apiRequest<{ item: CreateDownloadResult }>('/api/downloads', 'Failed to submit download.', jsonBody(input))
+  const init = jsonBody(input)
+  init.headers = { 'Idempotency-Key': crypto.randomUUID() }
+  return apiRequest<{ item: CreateDownloadResult }>('/api/downloads', 'Failed to submit download.', init)
 }

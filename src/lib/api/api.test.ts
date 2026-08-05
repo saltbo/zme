@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  createDownload,
   discoverBooks,
   discoverMusicAlbums,
   getBookDetails,
@@ -166,6 +167,24 @@ describe('resource api client', () => {
     expect(fetch).toHaveBeenCalledWith(
       '/api/release-candidates?q=Dune+2021&searchType=search&categories=2000%7C2040',
       expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('identifies browser download creation requests', async () => {
+    const fetch = stubJsonFetch({ item: { status: 'submitted' } })
+
+    await createDownload({
+      downloaderId: 'downloader-1',
+      sourceType: 'magnet',
+      uri: 'magnet:?xt=urn:btih:abc',
+    })
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/downloads',
+      expect.objectContaining({
+        headers: expect.objectContaining({ 'Idempotency-Key': expect.stringMatching(/^[0-9a-f-]{36}$/) }),
+        method: 'POST',
+      }),
     )
   })
 
