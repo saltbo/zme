@@ -31,6 +31,12 @@ Feature: Authentication & access
     When it calls a protected API endpoint
     Then the API responds 401
 
+  @auth/resource-metadata @api
+  Scenario: An OAuth client discovers the Resource Server authorization contract
+    Given an OAuth client knows the Resource Server URL
+    When it requests the protected resource metadata
+    Then it receives the authorization server, supported scopes, and required DPoP capabilities
+
   @auth/admin-only @api
   Scenario: Admin-only endpoints are hidden from non-admin users
     Given a signed-in user without the admin role

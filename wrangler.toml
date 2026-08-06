@@ -10,7 +10,7 @@ MUSIC_AUTO_TAGGING_ENABLED = "true"
 [assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api", "/api/*", "/auth/*"]
+run_worker_first = ["/api", "/api/*", "/auth/*", "/.well-known/oauth-protected-resource/api"]
 
 [[d1_databases]]
 binding = "DB"

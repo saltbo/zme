@@ -11,6 +11,7 @@ import { getCookie } from 'hono/cookie'
 import type { AppEnv, Principal } from './context'
 import { SESSION_COOKIE } from './identity'
 import { problem } from './protocol'
+import { agentScopeForRequest } from './resource-authorization'
 
 export const requireAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const authorization = c.req.header('Authorization')
@@ -19,7 +20,7 @@ export const requireAuthMiddleware: MiddlewareHandler<AppEnv> = async (c, next) 
   const token = getCookie(c, SESSION_COOKIE)
   const session = token ? await getLocalSession(c.get('deps').identityRepo, token) : null
   if (!session) {
-    if (agentScope(c.req.method, apiPath(c.req.path))) {
+    if (agentScopeForRequest(c.req.method, apiPath(c.req.path))) {
       c.header('WWW-Authenticate', dpopChallenge(readConfig(c.env)))
     }
     return problem(c, 401, 'authentication-required', 'Authentication required')
@@ -94,7 +95,7 @@ async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], ne
   }
   c.set('principal', principal)
   c.set('user', user)
-  const requiredScope = agentScope(c.req.method, apiPath(c.req.path))
+  const requiredScope = agentScopeForRequest(c.req.method, apiPath(c.req.path))
   if (!requiredScope) return problem(c, 403, 'agent-operation-forbidden', 'This operation is not available to Agents')
   if (!principal.scopes.includes(requiredScope)) {
     c.header('WWW-Authenticate', dpopChallenge(config, 'insufficient_scope', requiredScope))
@@ -105,36 +106,6 @@ async function authenticateAgent(c: Parameters<MiddlewareHandler<AppEnv>>[0], ne
 
 function apiPath(path: string): string {
   return path.startsWith('/api/') ? path.slice(4) : path
-}
-
-function agentScope(method: string, path: string): string | null {
-  if (method === 'GET' && path === '/media') return 'media:read'
-  if (method === 'GET' && path === '/release-candidates') return 'release-candidates:read'
-  if (method === 'GET' && (path === '/downloaders' || /^\/downloaders\/[^/]+$/.test(path))) {
-    return 'downloaders:read'
-  }
-  if (method === 'POST' && path === '/downloads') return 'downloads:write'
-  if (method === 'GET' && /^\/downloads(?:\/[^/]+(?:\/(?:suspension|cancellation))?)?$/.test(path)) {
-    return 'downloads:read'
-  }
-  if (
-    (method === 'PUT' || method === 'DELETE') &&
-    /^\/downloads\/[^/]+(?:\/(?:suspension|cancellation))?$/.test(path)
-  ) {
-    return 'downloads:manage'
-  }
-  return null
-}
-
-export function requireScope(scope: string): MiddlewareHandler<AppEnv> {
-  return async (c, next) => {
-    const principal = c.get('principal')
-    if (principal.kind === 'agent' && !principal.scopes.includes(scope)) {
-      c.header('WWW-Authenticate', dpopChallenge(readConfig(c.env), 'insufficient_scope', scope))
-      return problem(c, 403, 'insufficient-scope', 'The access token lacks the required scope')
-    }
-    await next()
-  }
 }
 
 function dpopChallenge(

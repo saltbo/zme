@@ -43,6 +43,9 @@ const workerConfig = readFileSync(join(root, 'wrangler.toml'), 'utf8')
 if (!/run_worker_first\s*=\s*\[[^\]]*"\/api"/s.test(workerConfig)) {
   fail('Worker asset routing must send the exact /api Resource Server URL through the Worker.')
 }
+if (!/run_worker_first\s*=\s*\[[^\]]*"\/\.well-known\/oauth-protected-resource\/api"/s.test(workerConfig)) {
+  fail('Worker asset routing must send the RFC 9728 metadata URL through the Worker.')
+}
 if (!/compatibility_flags\s*=\s*\[[^\]]*"global_fetch_strictly_public"/s.test(workerConfig)) {
   fail('Worker compatibility must permit standards-based public OIDC fetches on the same Cloudflare zone.')
 }

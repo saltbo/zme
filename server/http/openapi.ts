@@ -1,7 +1,8 @@
 import type { AppConfig } from '@server/config'
 import { API_VERSION } from '@server/config'
+import { agentScopeForOperation } from './resource-authorization'
 
-const secured = (scope: string) => [{ oidcSession: [] }, { oidcDpop: [scope] }]
+const secured = (operationId: string) => [{ oidcSession: [] }, { oidcDpop: [agentScopeForOperation(operationId)] }]
 const traceParameters = [
   { $ref: '#/components/parameters/Traceparent' },
   { $ref: '#/components/parameters/Tracestate' },
@@ -65,7 +66,7 @@ export function openapiDocument(config: AppConfig) {
           operationId: 'listDownloaders',
           summary: 'List safe downloader choices',
           tags: ['downloads'],
-          security: secured('downloaders:read'),
+          security: secured('listDownloaders'),
           parameters,
           responses: { '200': success('#/components/schemas/DownloaderCollection'), ...errors },
         },
@@ -76,7 +77,7 @@ export function openapiDocument(config: AppConfig) {
           operationId: 'getDownloader',
           summary: 'Get a safe downloader choice',
           tags: ['downloads'],
-          security: secured('downloaders:read'),
+          security: secured('getDownloader'),
           parameters: [...parameters, pathParameter('id')],
           responses: { '200': success('#/components/schemas/DownloaderEnvelope'), ...errors },
         },
@@ -86,7 +87,7 @@ export function openapiDocument(config: AppConfig) {
           operationId: 'listMedia',
           summary: operationSummaries.listMedia,
           tags: ['media-catalog'],
-          security: secured('media:read'),
+          security: secured('listMedia'),
           parameters: [
             ...parameters,
             { name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
@@ -101,7 +102,7 @@ export function openapiDocument(config: AppConfig) {
           operationId: 'listReleaseCandidates',
           summary: 'Search ephemeral release candidates',
           tags: ['release-acquisition'],
-          security: secured('release-candidates:read'),
+          security: secured('listReleaseCandidates'),
           parameters: [
             ...parameters,
             { name: 'mediaKey', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
@@ -120,7 +121,7 @@ export function openapiDocument(config: AppConfig) {
       },
       '/downloads': {
         get: {
-          ...listOperation('listDownloads', 'downloads:read', '#/components/schemas/DownloadCollection'),
+          ...listOperation('listDownloads', '#/components/schemas/DownloadCollection'),
           parameters: [
             ...parameters,
             { name: 'status', in: 'query', schema: { $ref: '#/components/schemas/DownloadStatus' } },
@@ -128,15 +129,10 @@ export function openapiDocument(config: AppConfig) {
             { $ref: '#/components/parameters/PageSize' },
           ],
         },
-        post: createOperation(
-          'createDownload',
-          'downloads:write',
-          '#/components/schemas/CreateDownload',
-          '#/components/schemas/Download',
-        ),
+        post: createOperation('createDownload', '#/components/schemas/CreateDownload', '#/components/schemas/Download'),
       },
       '/downloads/{downloadId}': {
-        get: getOperation('getDownload', 'downloads:read', 'downloadId', '#/components/schemas/Download'),
+        get: getOperation('getDownload', 'downloadId', '#/components/schemas/Download'),
         delete: managedDownloadOperation('deleteDownload', '204'),
       },
       '/downloads/{downloadId}/suspension': managedSingletonPath('DownloadSuspension'),
@@ -683,12 +679,12 @@ function queryParameter(name: string, schema: object, required = false) {
   return { name, in: 'query', required, schema }
 }
 
-function createOperation(operationId: string, scope: string, input: string, output: string) {
+function createOperation(operationId: string, input: string, output: string) {
   return {
     operationId,
     summary: operationSummaries[operationId],
     tags: ['release-acquisition'],
-    security: secured(scope),
+    security: secured(operationId),
     parameters: [...parameters, { $ref: '#/components/parameters/IdempotencyKey' }],
     requestBody: { required: true, content: json({ $ref: input }) },
     responses: {
@@ -701,22 +697,22 @@ function createOperation(operationId: string, scope: string, input: string, outp
     },
   }
 }
-function listOperation(operationId: string, scope: string, schema: string) {
+function listOperation(operationId: string, schema: string) {
   return {
     operationId,
     summary: operationSummaries[operationId],
     tags: ['release-acquisition'],
-    security: secured(scope),
+    security: secured(operationId),
     parameters: [...parameters, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }],
     responses: { '200': success(schema), ...errors },
   }
 }
-function getOperation(operationId: string, scope: string, name: string, schema: string) {
+function getOperation(operationId: string, name: string, schema: string) {
   return {
     operationId,
     summary: operationSummaries[operationId],
     tags: ['release-acquisition'],
-    security: secured(scope),
+    security: secured(operationId),
     parameters: [...parameters, pathParameter(name)],
     responses: { '200': success(schema), ...errors },
   }
@@ -726,7 +722,7 @@ function managedDownloadOperation(operationId: string, successStatus: '200' | '2
     operationId,
     summary: operationId,
     tags: ['downloads'],
-    security: secured('downloads:manage'),
+    security: secured(operationId),
     parameters: [...parameters, pathParameter('downloadId'), { $ref: '#/components/parameters/IfMatch' }],
     responses: {
       [successStatus]:
@@ -745,7 +741,7 @@ function managedSingletonPath(schema: 'DownloadSuspension' | 'DownloadCancellati
       operationId: `get${schema}`,
       summary: `Get ${schema}`,
       tags: ['downloads'],
-      security: secured('downloads:read'),
+      security: secured(`get${schema}`),
       parameters: [...parameters, pathParameter('downloadId')],
       responses: { '200': success(`#/components/schemas/${schema}`), ...errors },
     },

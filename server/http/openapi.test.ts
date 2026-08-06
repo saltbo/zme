@@ -3,6 +3,7 @@ import type { AppConfig } from '@server/config'
 import { API_VERSION } from '@server/config'
 import { describe, expect, it } from 'vitest'
 import { openapiDocument } from './openapi'
+import { AGENT_OPERATION_POLICIES, AGENT_SCOPES, agentScopeForRequest } from './resource-authorization'
 
 const config: AppConfig = {
   appOrigin: 'https://zme.example',
@@ -57,23 +58,22 @@ describe('DPoP resource OpenAPI contract', () => {
 
   it('makes least-privilege DPoP scopes machine-readable on every operation', () => {
     const scopes = new Set<string>()
-    for (const { operation } of operations) {
+    const operationIds = new Set<string>()
+    for (const { method, path, operation } of operations) {
       expect(operation.tags?.length).toBeGreaterThan(0)
       const dpop = operation.security?.find((requirement) => requirement.oidcDpop)
       if (!dpop) continue
+      operationIds.add(operation.operationId)
       expect(dpop?.oidcDpop).toHaveLength(1)
       for (const scope of dpop?.oidcDpop ?? []) scopes.add(scope)
+      expect(agentScopeForRequest(method.toUpperCase(), path.replaceAll(/\{[^}]+\}/g, 'resource-id'))).toBe(
+        dpop.oidcDpop?.[0],
+      )
     }
-    expect(scopes).toEqual(
-      new Set([
-        'downloaders:read',
-        'media:read',
-        'release-candidates:read',
-        'downloads:write',
-        'downloads:read',
-        'downloads:manage',
-      ]),
-    )
+    expect(operationIds).toEqual(new Set(AGENT_OPERATION_POLICIES.map(({ operationId }) => operationId)))
+    const catalogScopes = new Set<string>(AGENT_SCOPES)
+    expect([...scopes].every((scope) => catalogScopes.has(scope))).toBe(true)
+    expect(agentScopeForRequest('GET', '/library')).toBeNull()
   })
 
   it('declares versioning, DPoP semantics, pagination, idempotency, and Problem Details', () => {

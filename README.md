@@ -119,8 +119,9 @@ pnpm deploy
 The server follows a clean, layered architecture (domain → use cases → adapters →
 HTTP) with the two halves meeting only through a shared API contract. The full
 layout, boundaries, and conventions live in the contributor guide — see below.
-The DPoP-protected contract is published at `/api/openapi.json`; see the
-[Resource Server guide](docs/resource-server.md).
+OAuth clients discover the Resource Server authorization contract at
+`/.well-known/oauth-protected-resource/api` and the operation contract at
+`/api/openapi.json`; see the [Resource Server guide](docs/resource-server.md).
 
 ## Contributing
 

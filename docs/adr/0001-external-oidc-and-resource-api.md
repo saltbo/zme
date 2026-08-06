@@ -16,7 +16,7 @@ Observable acceptance criteria are:
 1. an external Authorization Code + PKCE S256 login establishes an opaque, secure local application session;
 2. only `(issuer, subject)` resolves identity, while name and email remain mutable display data;
 3. existing owned records survive an explicitly mapped upgrade;
-4. a DPoP-bound token can use only OpenAPI-declared scopes and only resources owned by its represented subject;
+4. a DPoP-bound token can use only RFC 9728-declared scopes, only the subset required by each OpenAPI operation, and only resources owned by its represented subject;
 5. the complete media → release-search job → candidate → download-task lifecycle is represented as resources and tested through HTTP.
 
 ## Decision
@@ -29,7 +29,7 @@ ZME stores an opaque session token only in a `Secure`, `HttpOnly`, `SameSite=Lax
 
 The local `users` row is an authorization projection. Its identity key is the unique nullable pair `(issuer, subject)` during migration and the pair is required before the row may authenticate. `oidc_email`, name, and image may change on every login. Credential-era email-verification and ban fields are removed; the protected pre-migration backup and reviewed binding artifact provide audit and rollback evidence. Email is never an identity link. Initial administrator status comes solely from the configured subject allowlist for the single configured issuer.
 
-The complete HTTP API is described by `/api/openapi.json`. It uses nouns, standard methods, stable operation IDs, Problem Details, mandatory API versioning, pagination, ownership filters, idempotency keys for create operations, and conditional requests for mutable configuration. The old browser routes were renamed to resource-shaped paths in the same breaking release. Their OpenAPI operations use session-only security and never advertise Agent scopes, while the Agent-safe resource operations declare the scopes a DPoP client may request.
+The Resource Server publishes RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource/api`. Its `scopes_supported` is the authoritative Resource Server scope catalog, while `authorization_servers` points clients to the external provider. The complete HTTP API is described by `/api/openapi.json`; each Agent-safe operation declares the exact catalog scope it requires. The scope catalog and operation policies share one authorization module, and OpenAPI plus runtime authorization consume the same operation policies. Browser-session operations use session-only security and never advertise Agent scopes.
 
 ## DPoP security model
 

@@ -1,3 +1,4 @@
+import { readConfig } from '@server/config'
 import { Hono } from 'hono'
 import { createDeps } from './composition'
 import { registerBookRoutes } from './http/books'
@@ -16,6 +17,7 @@ import { registerPublicMusicDownloadRoutes } from './http/music-downloads'
 import { registerMusicLibraryRoutes } from './http/music-library'
 import { apiVersionMiddleware, normalizeProblemMiddleware, problem, requestBoundaryMiddleware } from './http/protocol'
 import { registerPublicContractRoutes, registerResourceApiRoutes } from './http/resource-api'
+import { PROTECTED_RESOURCE_METADATA_PATH, protectedResourceMetadata } from './http/resource-authorization'
 import { StaleWriteError } from './usecases/ports'
 
 const app = new Hono<AppEnv>()
@@ -27,6 +29,7 @@ app.use('*', async (c, next) => {
   await next()
 })
 registerIdentityRoutes(app)
+app.get(PROTECTED_RESOURCE_METADATA_PATH, (c) => c.json(protectedResourceMetadata(readConfig(c.env))))
 
 const routes = new Hono<AppEnv>()
 routes.get('/', (c) => c.json({ resource: c.req.url, openapi: `${new URL(c.req.url).origin}/api/openapi.json` }))

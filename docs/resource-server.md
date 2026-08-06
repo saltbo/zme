@@ -4,22 +4,39 @@ ZME is a standards-based Resource Server at `${PUBLIC_APP_ORIGIN}/api`. It uses 
 
 ## Discovery and scopes
 
+The Resource Server publishes RFC 9728 Protected Resource Metadata at:
+
+```http
+GET https://zme.example/.well-known/oauth-protected-resource/api
+```
+
+Its `resource` is the exact `https://zme.example/api` audience,
+`authorization_servers` identifies the configured external issuer, and
+`scopes_supported` is the authoritative Resource Server scope catalog. The
+metadata also declares that DPoP-bound access tokens are required and lists the
+accepted DPoP proof algorithms.
+
 Every Resource Server response publishes RFC 8631 discovery:
 
 ```http
 Link: <https://zme.example/api/openapi.json>; rel="service-desc"; type="application/openapi+json"
 ```
 
-The OpenAPI security requirements are the machine-readable scope source:
+The current scope catalog is:
 
 - `media:read`
-- `release-search-jobs:write`
-- `release-search-jobs:read`
-- `download-destinations:read`
-- `download-tasks:write`
-- `download-tasks:read`
+- `release-candidates:read`
+- `downloaders:read`
+- `downloads:read`
+- `downloads:write`
+- `downloads:manage`
 
-Credential, connector login, OIDC, media-source, indexer, downloader, and site-administration operations are browser-session-only and never appear as Agent scopes.
+OpenAPI operation security requirements map each Agent-safe HTTP operation to
+one catalog scope. The catalog is declared independently, so a supported scope
+can remain discoverable even when no current OpenAPI operation uses it.
+Credential, connector login, OIDC, media-source, indexer, downloader
+configuration, and site-administration operations are browser-session-only and
+never appear as Agent scopes.
 
 ## Authorization semantics
 
@@ -29,16 +46,16 @@ The token `sub` identifies the represented local user. The standard `act.sub` cl
 
 ## Least-privilege acceptance flow
 
-1. Discover the Resource Server and follow its `service-desc` link.
-2. Read the OpenAPI and request only the scopes needed for the next operation.
-3. `GET /api/media?query=...` with `media:read`; select a movie or series.
-4. `POST /api/release-search-jobs` with `release-search-jobs:write`, an `Idempotency-Key`, the media key/title, query, optional search type, and categories.
-5. Read the job and `/release-search-jobs/{id}/results` with `release-search-jobs:read`. Candidates include title, source, bytes, source/resolution/HDR quality, video/audio encoding, seeders, leechers, protocol, and publish time when supplied by the indexer.
-6. `GET /api/download-destinations` with `download-destinations:read`; choose an enabled credential-free destination summary.
-7. Select a result and `POST /api/download-tasks` with `download-tasks:write`, the chosen destination ID, and a new `Idempotency-Key`.
-8. Read `/download-tasks/{id}` with `download-tasks:read`. Report downstream status and progress while submitted or running; on completion, report the safe result object and final byte counts.
+1. Derive and read the RFC 9728 Protected Resource Metadata from the Resource Server URL.
+2. Read `authorization_servers` to discover the external provider and `scopes_supported` to learn the complete Resource Server scope catalog.
+3. Follow the Resource Server's `service-desc` link and read the OpenAPI to request only the scopes needed for the next operation.
+4. `GET /api/media?query=...` with `media:read`; select a movie or series.
+5. `GET /api/release-candidates?mediaKey=...&query=...` with `release-candidates:read`; select a release candidate.
+6. `GET /api/downloaders` with `downloaders:read`; choose an enabled credential-free downloader summary.
+7. `POST /api/downloads` with `downloads:write`, a new `Idempotency-Key`, the opaque candidate reference, and downloader ID.
+8. Read `/api/downloads/{id}` with `downloads:read`. Use `downloads:manage` for the owned download's suspension, cancellation, or deletion resources.
 
-All job, result, destination, and task reads are scoped to the represented user. Reusing an idempotency key with different content returns a conflict. Replaying a proof, changing its method or URL, using the wrong audience, omitting a scope, or crossing an ownership boundary is rejected with a DPoP challenge or Problem Details response.
+All downloader and download reads are scoped to the represented user. Reusing an idempotency key with different content returns a conflict. Replaying a proof, changing its method or URL, using the wrong audience, omitting a scope, or crossing an ownership boundary is rejected with a DPoP challenge or Problem Details response.
 
 ## Deployment acceptance
 

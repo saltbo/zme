@@ -34,7 +34,8 @@ The committed Worker configuration enables Cloudflare's `global_fetch_strictly_p
 ## Operational checks
 
 1. Fetch provider discovery and confirm the returned `issuer` is exact, PKCE includes `S256`, and authorization/token/JWKS endpoints use HTTPS.
-2. Fetch `${PUBLIC_APP_ORIGIN}/api/openapi.json` and confirm `Link: <.../openapi.json>; rel="service-desc"; type="application/openapi+json"` is returned from the exact resource server URL.
-3. Complete login, reload, and logout in a real browser. The application cookie must be `__Host-zme_session`, Secure, HttpOnly, SameSite=Lax, and Path `/`.
-4. Verify that registration, password recovery, password change, and local account administration are absent.
-5. Watch structured request logs for request IDs and error classes only. Tokens, secrets, raw claims, email, and DPoP proofs must not appear.
+2. Fetch `${PUBLIC_APP_ORIGIN}/.well-known/oauth-protected-resource/api`; confirm its `resource` is exactly `${PUBLIC_APP_ORIGIN}/api`, its `authorization_servers` contains the configured issuer, and its `scopes_supported` and DPoP metadata match the deployed contract.
+3. Fetch `${PUBLIC_APP_ORIGIN}/api/openapi.json` and confirm `Link: <.../openapi.json>; rel="service-desc"; type="application/openapi+json"` is returned from the exact resource server URL.
+4. Complete login, reload, and logout in a real browser. The application cookie must be `__Host-zme_session`, Secure, HttpOnly, SameSite=Lax, and Path `/`.
+5. Verify that registration, password recovery, password change, and local account administration are absent.
+6. Watch structured request logs for request IDs and error classes only. Tokens, secrets, raw claims, email, and DPoP proofs must not appear.

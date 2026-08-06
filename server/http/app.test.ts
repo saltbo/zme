@@ -29,6 +29,40 @@ function request(path: string, init?: RequestInit) {
 }
 
 describe('http wiring', () => {
+  it('publishes RFC 9728 protected resource metadata without authentication or API version [spec: auth/resource-metadata]', async () => {
+    const response = await request('/.well-known/oauth-protected-resource/api')
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('application/json')
+    expect(await response.json()).toEqual({
+      resource: 'https://zme.test/api',
+      authorization_servers: ['https://issuer.zme.test'],
+      scopes_supported: [
+        'media:read',
+        'release-candidates:read',
+        'downloaders:read',
+        'downloads:read',
+        'downloads:write',
+        'downloads:manage',
+      ],
+      bearer_methods_supported: [],
+      resource_name: 'ZME Resource API',
+      dpop_signing_alg_values_supported: [
+        'RS256',
+        'RS384',
+        'RS512',
+        'PS256',
+        'PS384',
+        'PS512',
+        'ES256',
+        'ES384',
+        'ES512',
+        'EdDSA',
+      ],
+      dpop_bound_access_tokens_required: true,
+    })
+  })
+
   it('serves the health check without authentication', async () => {
     const response = await request('/api/health')
     expect(response.status).toBe(200)
