@@ -30,20 +30,20 @@ describe('OIDC protocol client', () => {
       code_challenge: await calculatePKCECodeChallenge('verifier-value'),
     })
 
-    await expect(
-      client.exchangeCallback(
-        new URL('https://app.test/auth/callback?code=valid-code&state=expected-state'),
-        'expected-state',
-        'expected-nonce',
-        'verifier-value',
-      ),
-    ).resolves.toEqual({
+    const login = await client.exchangeCallback(
+      new URL('https://app.test/auth/callback?code=valid-code&state=expected-state'),
+      'expected-state',
+      'expected-nonce',
+      'verifier-value',
+    )
+    expect(login.profile).toEqual({
       issuer: provider.issuer,
       subject: 'human-123',
       name: 'OIDC User',
       email: 'user@example.test',
       image: null,
     })
+    expect(login.idToken.split('.')).toHaveLength(3)
     expect(provider.tokenRequests()).toBe(1)
   })
 
@@ -127,11 +127,14 @@ describe('OIDC protocol client', () => {
         'nonce',
         'verifier',
       ),
-    ).resolves.toMatchObject({ name: 'current-user', email: null, image: 'https://images.test/user.png' })
-    const logout = await client.createLogoutUrl()
+    ).resolves.toMatchObject({
+      profile: { name: 'current-user', email: null, image: 'https://images.test/user.png' },
+    })
+    const logout = await client.createLogoutUrl('validated-id-token')
     expect(logout).not.toBeNull()
     if (!logout) throw new Error('Expected logout URL')
     expect(logout.origin + logout.pathname).toBe(`${provider.issuer}/logout`)
+    expect(logout.searchParams.get('id_token_hint')).toBe('validated-id-token')
     expect(logout.searchParams.get('client_id')).toBe('zme-client')
     expect(logout.searchParams.get('post_logout_redirect_uri')).toBe('https://app.test/login')
   })
@@ -139,7 +142,7 @@ describe('OIDC protocol client', () => {
   it('returns no logout URL when the provider has no end-session endpoint', async () => {
     const provider = await fakeProvider()
     vi.stubGlobal('fetch', provider.fetch)
-    await expect(createOidcClient(provider.config).createLogoutUrl()).resolves.toBeNull()
+    await expect(createOidcClient(provider.config).createLogoutUrl('validated-id-token')).resolves.toBeNull()
   })
 
   it.each([
@@ -156,7 +159,7 @@ describe('OIDC protocol client', () => {
         'nonce',
         'verifier',
       ),
-    ).resolves.toMatchObject({ subject: 'human-123' })
+    ).resolves.toMatchObject({ profile: { subject: 'human-123' } })
     const tokenRequest = provider.lastTokenRequest()
     expect(Boolean(tokenRequest?.authorization?.startsWith('Basic '))).toBe(usesHeader)
     expect(tokenRequest?.body.get('client_secret')).toBe(usesHeader ? null : 'secret')

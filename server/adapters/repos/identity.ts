@@ -97,11 +97,19 @@ export function createIdentityRepo(db: Db): IdentityRepo {
         .limit(1)
       const row = rows[0]
       if (!row || row.user.disabled || !row.user.issuer || !row.user.subject) return null
-      return { id: row.session.id, expiresAt: row.session.expiresAt, user: mapUser(row.user) }
+      return {
+        id: row.session.id,
+        expiresAt: row.session.expiresAt,
+        user: mapUser(row.user),
+      }
     },
 
     async deleteSession(tokenHash) {
-      await db.delete(applicationSessions).where(eq(applicationSessions.tokenHash, tokenHash))
+      const deleted = await db
+        .delete(applicationSessions)
+        .where(eq(applicationSessions.tokenHash, tokenHash))
+        .returning({ idToken: applicationSessions.idToken })
+      return deleted[0]?.idToken ?? null
     },
 
     async recordDpopProof(issuer, proofJti, keyThumbprint, expiresAt, now) {

@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import { createIdentityRepo } from '@server/adapters/repos/identity'
 import { app } from '@server/app'
 import { createDb } from '@server/db/client'
+import { hashSecret } from '@server/usecases/identity'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { calculatePKCECodeChallenge } from 'oauth4webapi'
 import { expect, it, vi } from 'vitest'
@@ -11,6 +12,7 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
   const publicJwk = { ...(await exportJWK(publicKey)), kid: 'issuer-key-1', alg: 'ES256', use: 'sig' }
   let expectedNonce = ''
   let expectedChallenge = ''
+  let issuedIdToken = ''
   let tokenRequests = 0
   vi.stubGlobal(
     'fetch',
@@ -34,7 +36,7 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
         const form = new URLSearchParams(await request.text())
         expect(await calculatePKCECodeChallenge(form.get('code_verifier') ?? '')).toBe(expectedChallenge)
         const now = Math.floor(Date.now() / 1000)
-        const idToken = await new SignJWT({ nonce: expectedNonce, name: 'Admin from IdP', email: 'admin@idp.test' })
+        issuedIdToken = await new SignJWT({ nonce: expectedNonce, name: 'Admin from IdP', email: 'admin@idp.test' })
           .setProtectedHeader({ alg: 'ES256', kid: 'issuer-key-1', typ: 'JWT' })
           .setIssuer('https://issuer.zme.test')
           .setAudience('zme-test-client')
@@ -43,7 +45,7 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
           .setExpirationTime(now + 300)
           .sign(privateKey)
         return json(
-          { access_token: 'opaque-access-token', token_type: 'Bearer', expires_in: 300, id_token: idToken },
+          { access_token: 'opaque-access-token', token_type: 'Bearer', expires_in: 300, id_token: issuedIdToken },
           { headers: { 'cache-control': 'no-store', pragma: 'no-cache' } },
         )
       }
@@ -87,10 +89,12 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
     method: 'POST',
     headers: { cookie: sessionCookie, origin: 'https://zme.test' },
   })
-  expect(await logout.json()).toEqual({
-    redirectTo:
-      'https://issuer.zme.test/logout?client_id=zme-test-client&post_logout_redirect_uri=https%3A%2F%2Fzme.test%2Flogin',
-  })
+  const logoutBody = (await logout.json()) as { redirectTo: string }
+  const providerLogout = new URL(logoutBody.redirectTo)
+  expect(providerLogout.origin + providerLogout.pathname).toBe('https://issuer.zme.test/logout')
+  expect(providerLogout.searchParams.get('id_token_hint')).toBe(issuedIdToken)
+  expect(providerLogout.searchParams.get('client_id')).toBe('zme-test-client')
+  expect(providerLogout.searchParams.get('post_logout_redirect_uri')).toBe('https://zme.test/login')
   expect(await (await request('/auth/session', { headers: { cookie: sessionCookie } })).json()).toEqual({ user: null })
 })
 
@@ -128,6 +132,43 @@ it('keeps equal email addresses as separate issuer/subject projections [spec: au
   expect(
     await env.DB.prepare("SELECT COUNT(*) AS total FROM users WHERE oidc_email = 'same@example.test'").first(),
   ).toEqual({ total: 2 })
+})
+
+it('locally revokes a session created before ID tokens were retained', async () => {
+  const repo = createIdentityRepo(createDb(env))
+  const now = new Date().toISOString()
+  const user = await repo.resolveUser(
+    {
+      issuer: 'https://issuer.zme.test',
+      subject: 'legacy-session-subject',
+      name: 'Existing User',
+      email: null,
+      image: null,
+    },
+    undefined,
+    false,
+    true,
+    now,
+  )
+  const sessionToken = 'session-created-before-id-token-storage'
+  await env.DB.prepare(
+    `INSERT INTO application_sessions (id, token_hash, user_id, expires_at, created_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind('legacy-session', await hashSecret(sessionToken), user.id, '2027-01-01T00:00:00.000Z', now, now)
+    .run()
+
+  const logout = await request('/auth/logout', {
+    method: 'POST',
+    headers: { cookie: `__Host-zme_session=${sessionToken}`, origin: 'https://zme.test' },
+  })
+
+  expect(await logout.json()).toEqual({ redirectTo: 'https://zme.test/login' })
+  expect(
+    await env.DB.prepare("SELECT COUNT(*) AS total FROM application_sessions WHERE id = 'legacy-session'").first(),
+  ).toEqual({
+    total: 0,
+  })
 })
 
 function request(path: string, init?: RequestInit) {

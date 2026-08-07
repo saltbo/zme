@@ -81,7 +81,7 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
           })
           source = await oauth.processUserInfoResponse(metadata, client, claims.sub, userInfoResponse)
         }
-        return profileFromClaims(config.issuer, claims.sub, source)
+        return { profile: profileFromClaims(config.issuer, claims.sub, source), idToken: tokens.id_token }
       } catch (error) {
         if (error instanceof OidcCallbackError) throw error
         if (error instanceof OidcProviderError || error instanceof oauth.OperationProcessingError) {
@@ -91,10 +91,11 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
       }
     },
 
-    async createLogoutUrl() {
+    async createLogoutUrl(idTokenHint) {
       const metadata = await discover(config.issuer)
       if (!metadata.end_session_endpoint) return null
       const url = new URL(metadata.end_session_endpoint)
+      url.searchParams.set('id_token_hint', idTokenHint)
       url.searchParams.set('client_id', config.clientId)
       url.searchParams.set('post_logout_redirect_uri', config.postLogoutRedirectUri)
       return url

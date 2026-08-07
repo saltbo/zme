@@ -70,9 +70,9 @@ export function registerIdentityRoutes(app: Hono<AppEnv>) {
     const config = readConfig(c.env)
     if (c.req.header('Origin') !== config.appOrigin) return c.body(null, 403)
     const token = getCookie(c, SESSION_COOKIE)
-    if (token) await endLocalSession(c.get('deps').identityRepo, token)
+    const idTokenHint = token ? await endLocalSession(c.get('deps').identityRepo, token) : null
     deleteCookie(c, SESSION_COOKIE, clearCookie())
-    const providerLogout = await c.get('deps').oidcClient.createLogoutUrl()
+    const providerLogout = idTokenHint ? await c.get('deps').oidcClient.createLogoutUrl(idTokenHint) : null
     return c.json({ redirectTo: providerLogout?.toString() ?? config.oidc.postLogoutRedirectUri })
   })
 }

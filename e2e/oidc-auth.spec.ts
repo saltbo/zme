@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test.describe
   .serial('external OIDC authentication', () => {
-    test('logs in through Authorization Code with PKCE, persists the session, and logs out [spec: auth/login-redirect, auth/sign-in, auth/session-persists]', async ({
+    test('logs in through Authorization Code with PKCE, persists the session, and logs out [spec: auth/login-redirect, auth/sign-in, auth/session-persists, auth/sign-out]', async ({
       page,
       context,
     }) => {

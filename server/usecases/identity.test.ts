@@ -27,6 +27,7 @@ describe('external OIDC identity orchestration', () => {
   let transactions: LoginTransaction[]
   let sessions: LocalSession[]
   let sessionHashes: string[]
+  let sessionIdTokens: string[]
   let deletedHashes: string[]
   let repo: IdentityRepo
   let oidc: OidcClient
@@ -35,6 +36,7 @@ describe('external OIDC identity orchestration', () => {
     transactions = []
     sessions = []
     sessionHashes = []
+    sessionIdTokens = []
     deletedHashes = []
     repo = {
       createLoginTransaction: async (transaction) => {
@@ -48,10 +50,13 @@ describe('external OIDC identity orchestration', () => {
       createSession: async (record) => {
         sessions.push({ id: record.id, expiresAt: record.expiresAt, user })
         sessionHashes.push(record.tokenHash)
+        sessionIdTokens.push(record.idToken)
       },
       getSession: async (tokenHash) => (sessionHashes.includes(tokenHash) ? (sessions[0] ?? null) : null),
       deleteSession: async (tokenHash) => {
         deletedHashes.push(tokenHash)
+        const index = sessionHashes.indexOf(tokenHash)
+        return index < 0 ? null : (sessionIdTokens[index] ?? null)
       },
       recordDpopProof: async () => true,
     }
@@ -61,7 +66,7 @@ describe('external OIDC identity orchestration', () => {
         url.search = new URLSearchParams({ state, nonce, verifier }).toString()
         return url
       }),
-      exchangeCallback: vi.fn(async () => profile),
+      exchangeCallback: vi.fn(async () => ({ profile, idToken: 'validated-id-token' })),
       createLogoutUrl: async () => null,
     }
   })
@@ -95,6 +100,7 @@ describe('external OIDC identity orchestration', () => {
     expect(repo.resolveUser).toHaveBeenCalledWith(profile, 'old-user-1', true, true, now.toISOString())
     expect(result.returnTo).toBe('/library?kind=movie')
     expect(result.session).toMatchObject({ expiresAt: '2026-08-05T00:00:00.000Z', user })
+    expect(sessionIdTokens).toEqual(['validated-id-token'])
     expect(await getLocalSession(repo, result.sessionToken, now)).toEqual(result.session)
     expect(sessions).toHaveLength(1)
   })
@@ -108,7 +114,9 @@ describe('external OIDC identity orchestration', () => {
   })
 
   it('hashes session revocation and never passes the opaque token to persistence', async () => {
-    await endLocalSession(repo, 'session-token')
+    sessionHashes.push(await hashSecret('session-token'))
+    sessionIdTokens.push('validated-id-token')
+    await expect(endLocalSession(repo, 'session-token')).resolves.toBe('validated-id-token')
     expect(deletedHashes).toEqual([await hashSecret('session-token')])
     expect(deletedHashes).not.toContain('session-token')
   })

@@ -30,6 +30,11 @@ export interface LocalSession {
   user: AuthenticatedUser
 }
 
+export interface OidcLoginResult {
+  profile: OidcProfile
+  idToken: string
+}
+
 export interface IdentityRepo {
   createLoginTransaction(transaction: LoginTransaction): Promise<void>
   consumeLoginTransaction(stateHash: string, now: string): Promise<LoginTransaction | null>
@@ -44,12 +49,13 @@ export interface IdentityRepo {
     id: string
     tokenHash: string
     userId: string
+    idToken: string
     expiresAt: string
     createdAt: string
     lastSeenAt: string
   }): Promise<void>
   getSession(tokenHash: string, now: string): Promise<LocalSession | null>
-  deleteSession(tokenHash: string): Promise<void>
+  deleteSession(tokenHash: string): Promise<string | null>
   recordDpopProof(
     issuer: string,
     proofJti: string,
@@ -61,8 +67,13 @@ export interface IdentityRepo {
 
 export interface OidcClient {
   createAuthorizationRequest(state: string, nonce: string, codeVerifier: string): Promise<URL>
-  exchangeCallback(callbackUrl: URL, expectedState: string, nonce: string, codeVerifier: string): Promise<OidcProfile>
-  createLogoutUrl(idTokenHint?: string): Promise<URL | null>
+  exchangeCallback(
+    callbackUrl: URL,
+    expectedState: string,
+    nonce: string,
+    codeVerifier: string,
+  ): Promise<OidcLoginResult>
+  createLogoutUrl(idTokenHint: string): Promise<URL | null>
 }
 
 export interface DpopTokenPrincipal {
@@ -136,7 +147,12 @@ export async function completeOidcLogin(
 ): Promise<{ sessionToken: string; session: LocalSession; returnTo: string }> {
   const transaction = await repo.consumeLoginTransaction(await hashSecret(state), now.toISOString())
   if (!transaction) throw new OidcCallbackError('The OIDC login transaction is missing, expired, or already used.')
-  const profile = await oidc.exchangeCallback(callbackUrl, state, transaction.nonce, transaction.codeVerifier)
+  const { profile, idToken } = await oidc.exchangeCallback(
+    callbackUrl,
+    state,
+    transaction.nonce,
+    transaction.codeVerifier,
+  )
   const key = principalKey(profile.issuer, profile.subject)
   const user = await repo.resolveUser(
     profile,
@@ -152,6 +168,7 @@ export async function completeOidcLogin(
     id: session.id,
     tokenHash: await hashSecret(sessionToken),
     userId: user.id,
+    idToken,
     expiresAt,
     createdAt: now.toISOString(),
     lastSeenAt: now.toISOString(),
@@ -167,8 +184,8 @@ export async function getLocalSession(
   return repo.getSession(await hashSecret(token), now.toISOString())
 }
 
-export async function endLocalSession(repo: IdentityRepo, token: string): Promise<void> {
-  await repo.deleteSession(await hashSecret(token))
+export async function endLocalSession(repo: IdentityRepo, token: string): Promise<string | null> {
+  return repo.deleteSession(await hashSecret(token))
 }
 
 export function safeReturnTo(value: string | null): string {

@@ -25,6 +25,12 @@ Feature: Authentication & access
     When they reload the page
     Then they remain signed in
 
+  @auth/sign-out @e2e
+  Scenario: Signing out ends the application and identity-provider sessions
+    Given a signed-in user
+    When they sign out
+    Then both sessions end and they return to the login screen
+
   @auth/api-requires-session @api
   Scenario: The API refuses unauthenticated requests to protected endpoints
     Given a request without a session
