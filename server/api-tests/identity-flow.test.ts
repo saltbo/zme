@@ -12,8 +12,8 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
   const publicJwk = { ...(await exportJWK(publicKey)), kid: 'issuer-key-1', alg: 'ES256', use: 'sig' }
   let expectedNonce = ''
   let expectedChallenge = ''
-  let issuedIdToken = ''
   let tokenRequests = 0
+  let providerLogoutRequests = 0
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -36,7 +36,11 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
         const form = new URLSearchParams(await request.text())
         expect(await calculatePKCECodeChallenge(form.get('code_verifier') ?? '')).toBe(expectedChallenge)
         const now = Math.floor(Date.now() / 1000)
-        issuedIdToken = await new SignJWT({ nonce: expectedNonce, name: 'Admin from IdP', email: 'admin@idp.test' })
+        const issuedIdToken = await new SignJWT({
+          nonce: expectedNonce,
+          name: 'Admin from IdP',
+          email: 'admin@idp.test',
+        })
           .setProtectedHeader({ alg: 'ES256', kid: 'issuer-key-1', typ: 'JWT' })
           .setIssuer('https://issuer.zme.test')
           .setAudience('zme-test-client')
@@ -49,6 +53,7 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
           { headers: { 'cache-control': 'no-store', pragma: 'no-cache' } },
         )
       }
+      if (url.pathname === '/logout') providerLogoutRequests += 1
       return new Response(null, { status: 404 })
     }),
   )
@@ -89,18 +94,12 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
     method: 'POST',
     headers: { cookie: sessionCookie, origin: 'https://zme.test' },
   })
-  const logoutBody = (await logout.json()) as { redirectTo: string }
-  const providerLogout = new URL(logoutBody.redirectTo)
-  expect(providerLogout.origin + providerLogout.pathname).toBe('https://issuer.zme.test/logout')
-  expect(providerLogout.searchParams.get('id_token_hint')).toBe(issuedIdToken)
-  expect(providerLogout.searchParams.get('client_id')).toBe('zme-test-client')
-  expect(providerLogout.searchParams.get('post_logout_redirect_uri')).toBe('https://zme.test/login')
+  expect(await logout.json()).toEqual({ redirectTo: 'https://zme.test/login' })
+  expect(providerLogoutRequests).toBe(0)
   expect(await (await request('/auth/session', { headers: { cookie: sessionCookie } })).json()).toEqual({ user: null })
 
-  const forceProviderLoginCookie = cookiePair(logout.headers.get('set-cookie'), '__Host-zme_force_provider_login')
-  const nextLogin = await request('/auth/login', { headers: { cookie: forceProviderLoginCookie } })
-  expect(new URL(nextLogin.headers.get('location') ?? '').searchParams.get('prompt')).toBe('login')
-  expect(nextLogin.headers.get('set-cookie')).toContain('__Host-zme_force_provider_login=;')
+  const nextLogin = await request('/auth/login')
+  expect(new URL(nextLogin.headers.get('location') ?? '').searchParams.get('prompt')).toBeNull()
 })
 
 it('keeps equal email addresses as separate issuer/subject projections [spec: auth/no-email-linking]', async () => {
@@ -172,12 +171,11 @@ it('maps an OAuth token endpoint rejection to a login failure [spec: auth/reject
 
   expect(callback.status).toBe(302)
   expect(callback.headers.get('location')).toBe('/login?error=oidc_callback_failed')
-  const forceProviderLoginCookie = cookiePair(callback.headers.get('set-cookie'), '__Host-zme_force_provider_login')
-  const retry = await request('/auth/login', { headers: { cookie: forceProviderLoginCookie } })
-  expect(new URL(retry.headers.get('location') ?? '').searchParams.get('prompt')).toBe('login')
+  const retry = await request('/auth/login')
+  expect(new URL(retry.headers.get('location') ?? '').searchParams.get('prompt')).toBeNull()
 })
 
-it('locally revokes a session created before ID tokens were retained', async () => {
+it('locally revokes an existing application session', async () => {
   const repo = createIdentityRepo(createDb(env))
   const now = new Date().toISOString()
   const user = await repo.resolveUser(

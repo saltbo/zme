@@ -13,7 +13,6 @@ const config: AppConfig = {
     clientId: 'zme',
     tokenEndpointAuthMethod: 'none',
     redirectUri: 'https://zme.example/auth/callback',
-    postLogoutRedirectUri: 'https://zme.example/login',
     allowedAlgorithms: ['ES256'],
     adminSubjects: new Set(['https://identity.example/tenant|admin']),
     legacyBindings: new Map(),

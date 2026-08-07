@@ -19,7 +19,6 @@ describe('readConfig', () => {
     expect(config.oidc.legacyBindings.get(principalKey(config.oidc.issuer, 'migrated-1'))).toBe('old-user-1')
     expect(config.resourceUrl).toBe('https://zme.example/api')
     expect(config.oidc.redirectUri).toBe('https://zme.example/auth/callback')
-    expect(config.oidc.postLogoutRedirectUri).toBe('https://zme.example/login')
     expect(config.oidc.tokenEndpointAuthMethod).toBe('none')
     expect(config.oidc.allowedAlgorithms).not.toContain('HS256')
   })

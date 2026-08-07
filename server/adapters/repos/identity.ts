@@ -105,11 +105,7 @@ export function createIdentityRepo(db: Db): IdentityRepo {
     },
 
     async deleteSession(tokenHash) {
-      const deleted = await db
-        .delete(applicationSessions)
-        .where(eq(applicationSessions.tokenHash, tokenHash))
-        .returning({ idToken: applicationSessions.idToken })
-      return deleted[0]?.idToken ?? null
+      await db.delete(applicationSessions).where(eq(applicationSessions.tokenHash, tokenHash))
     },
 
     async recordDpopProof(issuer, proofJti, keyThumbprint, expiresAt, now) {

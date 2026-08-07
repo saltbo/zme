@@ -180,7 +180,6 @@ async function dpopFixture(
     clientId: 'zme-client',
     tokenEndpointAuthMethod: 'none' as const,
     redirectUri: 'https://zme.test/auth/callback',
-    postLogoutRedirectUri: 'https://zme.test/login',
     allowedAlgorithms: ['ES256'],
     adminSubjects: new Set<string>(),
     legacyBindings: new Map<string, string>(),

@@ -1,0 +1,1 @@
+ALTER TABLE `application_sessions` DROP COLUMN `id_token`;

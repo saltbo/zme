@@ -21,7 +21,6 @@ export const user = sqliteTable(
 export const applicationSessions = sqliteTable('application_sessions', {
   id: text('id').primaryKey(),
   tokenHash: text('token_hash').notNull().unique(),
-  idToken: text('id_token'),
   userId: text('user_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),

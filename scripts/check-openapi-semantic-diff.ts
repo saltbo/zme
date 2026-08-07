@@ -12,7 +12,6 @@ const config: AppConfig = {
     clientId: 'zme-contract',
     tokenEndpointAuthMethod: 'none',
     redirectUri: 'https://zme.example.test/auth/callback',
-    postLogoutRedirectUri: 'https://zme.example.test/login',
     allowedAlgorithms: ['ES256'],
     adminSubjects: new Set(),
     legacyBindings: new Map(),

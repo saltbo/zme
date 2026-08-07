@@ -7,9 +7,7 @@ const issuer = `http://localhost:${port}`
 const clientId = 'zme-e2e-client'
 const appOrigin = process.env.FAKE_OIDC_APP_ORIGIN ?? 'http://localhost:7171'
 const redirectUri = `${appOrigin}/auth/callback`
-const postLogoutRedirectUri = `${appOrigin}/login`
 const codes = new Map()
-const issuedIdTokens = new Set()
 const { privateKey, publicKey } = await generateKeyPair('ES256', { extractable: true })
 const publicJwk = { ...(await exportJWK(publicKey)), kid: 'e2e-key-1', alg: 'ES256', use: 'sig' }
 
@@ -40,7 +38,10 @@ const server = createServer(async (request, response) => {
     if (!valid || !state || !nonce || !challenge) return sendJson(response, { error: 'invalid_request' }, 400)
     const code = randomUUID()
     codes.set(code, { nonce, challenge })
-    response.writeHead(302, { location: `${redirectUri}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}` })
+    response.writeHead(302, {
+      location: `${redirectUri}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`,
+      'set-cookie': 'fake_oidc_session=authenticated; HttpOnly; SameSite=Lax; Path=/',
+    })
     return response.end()
   }
   if (request.method === 'POST' && url.pathname === '/token') {
@@ -68,7 +69,6 @@ const server = createServer(async (request, response) => {
       .setIssuedAt(now)
       .setExpirationTime(now + 300)
       .sign(privateKey)
-    issuedIdTokens.add(idToken)
     return sendJson(
       response,
       { access_token: 'e2e-access-token', token_type: 'Bearer', expires_in: 300, id_token: idToken },
@@ -77,17 +77,10 @@ const server = createServer(async (request, response) => {
     )
   }
   if (request.method === 'GET' && url.pathname === '/logout') {
-    const idTokenHint = url.searchParams.get('id_token_hint')
-    if (
-      url.searchParams.get('client_id') !== clientId ||
-      !idTokenHint ||
-      !issuedIdTokens.has(idTokenHint) ||
-      url.searchParams.get('post_logout_redirect_uri') !== postLogoutRedirectUri
-    ) {
-      return sendJson(response, { error: 'invalid_request' }, 400)
-    }
-    issuedIdTokens.delete(idTokenHint)
-    response.writeHead(302, { location: postLogoutRedirectUri })
+    response.writeHead(302, {
+      location: `${appOrigin}/login`,
+      'set-cookie': 'fake_oidc_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0',
+    })
     return response.end()
   }
   sendJson(response, { error: 'not_found' }, 404)

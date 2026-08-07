@@ -30,7 +30,6 @@ export interface AppConfig {
     clientSecret?: string
     tokenEndpointAuthMethod: 'none' | 'client_secret_basic' | 'client_secret_post'
     redirectUri: string
-    postLogoutRedirectUri: string
     allowedAlgorithms: string[]
     adminSubjects: Set<string>
     legacyBindings: Map<string, string>
@@ -41,8 +40,7 @@ export function readConfig(env: Env): AppConfig {
   const appOrigin = parseOrigin(required(env.PUBLIC_APP_ORIGIN, 'PUBLIC_APP_ORIGIN'), 'PUBLIC_APP_ORIGIN')
   const issuer = parseIssuer(required(env.OIDC_ISSUER, 'OIDC_ISSUER'))
   const clientId = required(env.OIDC_CLIENT_ID, 'OIDC_CLIENT_ID')
-  const redirectUri = `${appOrigin}/auth/callback`
-  const postLogoutRedirectUri = `${appOrigin}/login`
+  const redirectUri = new URL('/auth/callback', appOrigin).toString()
   const clientSecret = env.OIDC_CLIENT_SECRET?.trim() || undefined
   const tokenEndpointAuthMethod =
     env.OIDC_TOKEN_ENDPOINT_AUTH_METHOD?.trim() || (clientSecret ? 'client_secret_basic' : 'none')
@@ -78,7 +76,6 @@ export function readConfig(env: Env): AppConfig {
       clientSecret,
       tokenEndpointAuthMethod: tokenEndpointAuthMethod as AppConfig['oidc']['tokenEndpointAuthMethod'],
       redirectUri,
-      postLogoutRedirectUri,
       allowedAlgorithms: [...ASYMMETRIC_JWT_ALGORITHMS],
       adminSubjects,
       legacyBindings,

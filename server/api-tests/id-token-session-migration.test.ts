@@ -1,12 +1,14 @@
 import { applyD1Migrations, env } from 'cloudflare:test'
 import { expect, it } from 'vitest'
 
-it('preserves existing application sessions when adding the logout ID token', async () => {
+it('preserves existing application sessions while removing temporary logout ID tokens', async () => {
   const db = (env as typeof env & { MIGRATION_DB: D1Database }).MIGRATION_DB
   const migrations = env.TEST_MIGRATIONS
-  const migrationIndex = migrations.findIndex((migration) => migration.name === '20260806232926_eager_sister_grimm.sql')
-  expect(migrationIndex).toBeGreaterThan(0)
-  await applyD1Migrations(db, migrations.slice(0, migrationIndex))
+  const addIndex = migrations.findIndex((migration) => migration.name === '20260806232926_eager_sister_grimm.sql')
+  const dropIndex = migrations.findIndex((migration) => migration.name === '20260807004314_cynical_lorna_dane.sql')
+  expect(addIndex).toBeGreaterThan(0)
+  expect(dropIndex).toBeGreaterThan(addIndex)
+  await applyD1Migrations(db, migrations.slice(0, addIndex))
   await db.batch([
     db.prepare(
       `INSERT INTO users (id, name, role, disabled, issuer, subject, created_at, updated_at)
@@ -18,10 +20,13 @@ it('preserves existing application sessions when adding the logout ID token', as
     ),
   ])
 
-  await applyD1Migrations(db, migrations.slice(migrationIndex))
+  await applyD1Migrations(db, migrations.slice(addIndex, dropIndex))
+  await db.prepare("UPDATE application_sessions SET id_token = 'temporary-id-token' WHERE id = 'session-1'").run()
+  await applyD1Migrations(db, migrations.slice(dropIndex))
 
-  expect(await db.prepare("SELECT id, id_token FROM application_sessions WHERE id = 'session-1'").first()).toEqual({
+  expect(await db.prepare("SELECT id FROM application_sessions WHERE id = 'session-1'").first()).toEqual({
     id: 'session-1',
-    id_token: null,
   })
+  const columns = await db.prepare('PRAGMA table_info(application_sessions)').all<{ name: string }>()
+  expect(columns.results.map((column) => column.name)).not.toContain('id_token')
 })

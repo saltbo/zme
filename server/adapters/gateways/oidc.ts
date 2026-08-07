@@ -18,7 +18,7 @@ const accessTokenJwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
 export function createOidcClient(config: AppConfig['oidc']): OidcClient {
   const client: oauth.Client = { client_id: config.clientId }
   return {
-    async createAuthorizationRequest(state, nonce, codeVerifier, forceProviderLogin) {
+    async createAuthorizationRequest(state, nonce, codeVerifier) {
       const metadata = await discover(config.issuer)
       if (!metadata.authorization_endpoint) throw new Error('OIDC discovery omitted authorization_endpoint.')
       if (!metadata.code_challenge_methods_supported?.includes('S256')) {
@@ -35,7 +35,6 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
         code_challenge: await oauth.calculatePKCECodeChallenge(codeVerifier),
         code_challenge_method: 'S256',
       }).toString()
-      if (forceProviderLogin) url.searchParams.set('prompt', 'login')
       return url
     },
 
@@ -82,7 +81,7 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
           })
           source = await oauth.processUserInfoResponse(metadata, client, claims.sub, userInfoResponse)
         }
-        return { profile: profileFromClaims(config.issuer, claims.sub, source), idToken: tokens.id_token }
+        return { profile: profileFromClaims(config.issuer, claims.sub, source) }
       } catch (error) {
         if (error instanceof OidcCallbackError) throw error
         if (
@@ -96,16 +95,6 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
         }
         throw error
       }
-    },
-
-    async createLogoutUrl(idTokenHint) {
-      const metadata = await discover(config.issuer)
-      if (!metadata.end_session_endpoint) return null
-      const url = new URL(metadata.end_session_endpoint)
-      url.searchParams.set('id_token_hint', idTokenHint)
-      url.searchParams.set('client_id', config.clientId)
-      url.searchParams.set('post_logout_redirect_uri', config.postLogoutRedirectUri)
-      return url
     },
   }
 }

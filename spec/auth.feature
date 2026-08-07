@@ -26,10 +26,10 @@ Feature: Authentication & access
     Then they remain signed in
 
   @auth/sign-out @e2e
-  Scenario: Signing out ends the application and identity-provider sessions
+  Scenario: Signing out ends only the application session
     Given a signed-in user
     When they sign out
-    Then both sessions end and they return to the login screen
+    Then the application session ends, the identity-provider session remains, and they return to the login screen
 
   @auth/api-requires-session @api
   Scenario: The API refuses unauthenticated requests to protected endpoints
