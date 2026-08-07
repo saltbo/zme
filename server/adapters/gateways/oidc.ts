@@ -18,7 +18,7 @@ const accessTokenJwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
 export function createOidcClient(config: AppConfig['oidc']): OidcClient {
   const client: oauth.Client = { client_id: config.clientId }
   return {
-    async createAuthorizationRequest(state, nonce, codeVerifier) {
+    async createAuthorizationRequest(state, nonce, codeVerifier, forceProviderLogin) {
       const metadata = await discover(config.issuer)
       if (!metadata.authorization_endpoint) throw new Error('OIDC discovery omitted authorization_endpoint.')
       if (!metadata.code_challenge_methods_supported?.includes('S256')) {
@@ -35,6 +35,7 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
         code_challenge: await oauth.calculatePKCECodeChallenge(codeVerifier),
         code_challenge_method: 'S256',
       }).toString()
+      if (forceProviderLogin) url.searchParams.set('prompt', 'login')
       return url
     },
 
@@ -84,7 +85,13 @@ export function createOidcClient(config: AppConfig['oidc']): OidcClient {
         return { profile: profileFromClaims(config.issuer, claims.sub, source), idToken: tokens.id_token }
       } catch (error) {
         if (error instanceof OidcCallbackError) throw error
-        if (error instanceof OidcProviderError || error instanceof oauth.OperationProcessingError) {
+        if (
+          error instanceof OidcProviderError ||
+          error instanceof oauth.OperationProcessingError ||
+          error instanceof oauth.ResponseBodyError ||
+          error instanceof oauth.AuthorizationResponseError ||
+          error instanceof oauth.WWWAuthenticateChallengeError
+        ) {
           throw new OidcCallbackError('The OIDC callback could not be validated.', { cause: error })
         }
         throw error

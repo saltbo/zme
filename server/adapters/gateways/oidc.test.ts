@@ -1,5 +1,6 @@
 import { createOidcClient } from '@server/adapters/gateways/oidc'
 import type { AppConfig } from '@server/config'
+import { OidcCallbackError } from '@server/usecases/identity'
 import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { calculatePKCECodeChallenge } from 'oauth4webapi'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -45,6 +46,18 @@ describe('OIDC protocol client', () => {
     })
     expect(login.idToken.split('.')).toHaveLength(3)
     expect(provider.tokenRequests()).toBe(1)
+  })
+
+  it('requests fresh provider authentication only when the caller requires it', async () => {
+    const provider = await fakeProvider()
+    vi.stubGlobal('fetch', provider.fetch)
+    const client = createOidcClient(provider.config)
+
+    const regular = await client.createAuthorizationRequest('state', 'nonce', 'verifier')
+    const fresh = await client.createAuthorizationRequest('state', 'nonce', 'verifier', true)
+
+    expect(regular.searchParams.get('prompt')).toBeNull()
+    expect(fresh.searchParams.get('prompt')).toBe('login')
   })
 
   it.each([
@@ -202,6 +215,25 @@ describe('OIDC protocol client', () => {
       ),
     ).rejects.toThrow()
   })
+
+  it('classifies an OAuth token endpoint error as a callback failure', async () => {
+    const provider = await fakeProvider({
+      tokenError: { error: 'invalid_request', error_description: 'session no longer exists' },
+    })
+    vi.stubGlobal('fetch', provider.fetch)
+
+    await expect(
+      createOidcClient(provider.config).exchangeCallback(
+        new URL('https://app.test/auth/callback?code=stale-provider-session&state=state'),
+        'state',
+        'nonce',
+        'verifier',
+      ),
+    ).rejects.toMatchObject({
+      name: OidcCallbackError.name,
+      cause: { name: 'ResponseBodyError', error: 'invalid_request', status: 400 },
+    })
+  })
 })
 
 async function fakeProvider(
@@ -211,6 +243,7 @@ async function fakeProvider(
     metadata?: Record<string, unknown>
     userInfo?: Record<string, unknown>
     omitIdToken?: boolean
+    tokenError?: { error: string; error_description: string }
     issuer?: string
   } = {},
 ) {
@@ -241,6 +274,7 @@ async function fakeProvider(
       tokenRequestCount += 1
       const body = new URLSearchParams(await request.text())
       lastTokenRequest = { authorization: request.headers.get('authorization'), body }
+      if (options.tokenError) return json(options.tokenError, { status: 400 })
       if (body.get('redirect_uri') !== 'https://app.test/auth/callback')
         return json({ error: 'invalid_request' }, { status: 400 })
       return json(

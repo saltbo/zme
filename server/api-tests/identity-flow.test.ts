@@ -61,7 +61,7 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
   expect(expectedNonce).not.toBe('')
   expect(authorization.searchParams.get('code_challenge_method')).toBe('S256')
   const state = authorization.searchParams.get('state') ?? ''
-  const stateCookie = cookiePair(login.headers.get('set-cookie'))
+  const stateCookie = cookiePair(login.headers.get('set-cookie'), '__Host-zme_oidc_state')
 
   const callback = await request(`/auth/callback?code=valid-code&state=${encodeURIComponent(state)}`, {
     headers: { cookie: stateCookie },
@@ -96,6 +96,11 @@ it('completes browser OIDC login, establishes a secure local session, and logs o
   expect(providerLogout.searchParams.get('client_id')).toBe('zme-test-client')
   expect(providerLogout.searchParams.get('post_logout_redirect_uri')).toBe('https://zme.test/login')
   expect(await (await request('/auth/session', { headers: { cookie: sessionCookie } })).json()).toEqual({ user: null })
+
+  const forceProviderLoginCookie = cookiePair(logout.headers.get('set-cookie'), '__Host-zme_force_provider_login')
+  const nextLogin = await request('/auth/login', { headers: { cookie: forceProviderLoginCookie } })
+  expect(new URL(nextLogin.headers.get('location') ?? '').searchParams.get('prompt')).toBe('login')
+  expect(nextLogin.headers.get('set-cookie')).toContain('__Host-zme_force_provider_login=;')
 })
 
 it('keeps equal email addresses as separate issuer/subject projections [spec: auth/no-email-linking]', async () => {
@@ -132,6 +137,44 @@ it('keeps equal email addresses as separate issuer/subject projections [spec: au
   expect(
     await env.DB.prepare("SELECT COUNT(*) AS total FROM users WHERE oidc_email = 'same@example.test'").first(),
   ).toEqual({ total: 2 })
+})
+
+it('maps an OAuth token endpoint rejection to a login failure [spec: auth/reject-invalid-callback]', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : input)
+      if (url.pathname === '/.well-known/openid-configuration') {
+        return json({
+          issuer: 'https://issuer.zme.test',
+          authorization_endpoint: 'https://issuer.zme.test/authorize',
+          token_endpoint: 'https://issuer.zme.test/token',
+          jwks_uri: 'https://issuer.zme.test/jwks',
+          code_challenge_methods_supported: ['S256'],
+          id_token_signing_alg_values_supported: ['ES256'],
+        })
+      }
+      if (url.pathname === '/token') {
+        return json({ error: 'invalid_request', error_description: 'session no longer exists' }, { status: 400 })
+      }
+      return new Response(null, { status: 404 })
+    }),
+  )
+
+  const login = await request('/auth/login')
+  const authorization = new URL(login.headers.get('location') ?? '')
+  const state = authorization.searchParams.get('state') ?? ''
+  const stateCookie = cookiePair(login.headers.get('set-cookie'), '__Host-zme_oidc_state')
+
+  const callback = await request(`/auth/callback?code=rejected-code&state=${encodeURIComponent(state)}`, {
+    headers: { cookie: stateCookie },
+  })
+
+  expect(callback.status).toBe(302)
+  expect(callback.headers.get('location')).toBe('/login?error=oidc_callback_failed')
+  const forceProviderLoginCookie = cookiePair(callback.headers.get('set-cookie'), '__Host-zme_force_provider_login')
+  const retry = await request('/auth/login', { headers: { cookie: forceProviderLoginCookie } })
+  expect(new URL(retry.headers.get('location') ?? '').searchParams.get('prompt')).toBe('login')
 })
 
 it('locally revokes a session created before ID tokens were retained', async () => {

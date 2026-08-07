@@ -66,7 +66,12 @@ export interface IdentityRepo {
 }
 
 export interface OidcClient {
-  createAuthorizationRequest(state: string, nonce: string, codeVerifier: string): Promise<URL>
+  createAuthorizationRequest(
+    state: string,
+    nonce: string,
+    codeVerifier: string,
+    forceProviderLogin?: boolean,
+  ): Promise<URL>
   exchangeCallback(
     callbackUrl: URL,
     expectedState: string,
@@ -119,6 +124,7 @@ export async function beginOidcLogin(
   repo: IdentityRepo,
   oidc: OidcClient,
   returnTo: string,
+  forceProviderLogin = false,
   now = new Date(),
 ): Promise<{ authorizationUrl: URL; state: string }> {
   const state = randomValue()
@@ -134,7 +140,10 @@ export async function beginOidcLogin(
     createdAt,
     expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
   })
-  return { authorizationUrl: await oidc.createAuthorizationRequest(state, nonce, codeVerifier), state }
+  return {
+    authorizationUrl: await oidc.createAuthorizationRequest(state, nonce, codeVerifier, forceProviderLogin),
+    state,
+  }
 }
 
 export async function completeOidcLogin(

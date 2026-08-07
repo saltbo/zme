@@ -72,7 +72,7 @@ describe('external OIDC identity orchestration', () => {
   })
 
   it('creates a ten-minute one-time transaction with state, nonce, and a high-entropy verifier', async () => {
-    const result = await beginOidcLogin(repo, oidc, '/movies/550', now)
+    const result = await beginOidcLogin(repo, oidc, '/movies/550', false, now)
     const transaction = transactions[0]
 
     expect(transaction).toMatchObject({
@@ -87,7 +87,7 @@ describe('external OIDC identity orchestration', () => {
   })
 
   it('binds only the configured issuer/subject and creates a twelve-hour hashed session [spec: auth/configured-admin]', async () => {
-    const login = await beginOidcLogin(repo, oidc, '/library?kind=movie', now)
+    const login = await beginOidcLogin(repo, oidc, '/library?kind=movie', false, now)
     const result = await completeOidcLogin(
       repo,
       oidc,
@@ -106,7 +106,7 @@ describe('external OIDC identity orchestration', () => {
   })
 
   it('consumes a login transaction once and refuses a replay', async () => {
-    const login = await beginOidcLogin(repo, oidc, '/', now)
+    const login = await beginOidcLogin(repo, oidc, '/', false, now)
     await completeOidcLogin(repo, oidc, config(), new URL('https://zme.example/auth/callback'), login.state, now)
     await expect(
       completeOidcLogin(repo, oidc, config(), new URL('https://zme.example/auth/callback'), login.state, now),
