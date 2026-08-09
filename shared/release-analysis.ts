@@ -1,4 +1,18 @@
-import type { IndexerSearchItem } from './types'
+import type { ReleaseCandidateFull } from './types'
+
+type ReleaseAnalysisInput = Pick<
+  ReleaseCandidateFull,
+  | 'title'
+  | 'fileName'
+  | 'categories'
+  | 'indexerFlags'
+  | 'seeders'
+  | 'publishDate'
+  | 'size'
+  | 'imdbId'
+  | 'tmdbId'
+  | 'tvdbId'
+>
 
 export type ReleaseSourceTier = 'excellent' | 'good' | 'watchable' | 'poor' | 'unknown'
 export type ReleaseResolutionId = '2160p' | '1080p' | '720p' | '480p' | '360p' | 'other'
@@ -68,7 +82,7 @@ const otherResolution: ReleaseResolutionAnalysis = {
   score: 0,
 }
 
-export function analyzeIndexerRelease(item: IndexerSearchItem): IndexerReleaseAnalysis {
+export function analyzeIndexerRelease(item: ReleaseAnalysisInput): IndexerReleaseAnalysis {
   const text = getReleaseText(item)
   const source = getReleaseSource(text)
   const resolution = getReleaseResolution(text)
@@ -127,7 +141,10 @@ export function analyzeIndexerRelease(item: IndexerSearchItem): IndexerReleaseAn
   }
 }
 
-export function compareIndexerReleasesByRecommendation(left: IndexerSearchItem, right: IndexerSearchItem): number {
+export function compareIndexerReleasesByRecommendation(
+  left: ReleaseCandidateFull,
+  right: ReleaseCandidateFull,
+): number {
   const leftAnalysis = analyzeIndexerRelease(left)
   const rightAnalysis = analyzeIndexerRelease(right)
   return (
@@ -138,7 +155,7 @@ export function compareIndexerReleasesByRecommendation(left: IndexerSearchItem, 
   )
 }
 
-function getReleaseText(item: IndexerSearchItem) {
+function getReleaseText(item: ReleaseAnalysisInput) {
   return normalizeReleaseMarkerText(
     [item.title, item.fileName, item.categories.join(' '), item.indexerFlags.join(' ')].filter(Boolean).join(' '),
   )
@@ -176,7 +193,7 @@ function getReleaseScore({
   audio,
   warnings,
 }: {
-  item: IndexerSearchItem
+  item: ReleaseAnalysisInput
   source: ReleaseSourceAnalysis
   resolution: ReleaseResolutionAnalysis
   codec: string | null
@@ -186,23 +203,22 @@ function getReleaseScore({
 }) {
   const seedScore = Math.min(Math.log10((item.seeders ?? 0) + 1) * 12, 32)
   const metadataScore = [item.imdbId, item.tmdbId, item.tvdbId].some(Boolean) ? 8 : 0
-  const sourceUrlScore = item.magnetUrl || item.downloadUrl ? 3 : 0
   const codecScore = codec ? 4 : 0
   const hdrScore = hdr && hdr !== 'SDR' ? 3 : 0
   const audioScore = audio ? 3 : 0
   const warningPenalty = warnings.length * 55
 
   return (
-    source.score +
-    resolution.score +
-    seedScore +
-    metadataScore +
-    sourceUrlScore +
-    codecScore +
-    hdrScore +
-    audioScore -
-    warningPenalty
+    source.score + resolution.score + seedScore + metadataScore + codecScore + hdrScore + audioScore - warningPenalty
   )
+}
+
+export function getReleaseAvailabilityTier(seeders: number | null): ReleaseCandidateFull['availability']['tier'] {
+  if (seeders === null) return 'unknown'
+  if (seeders >= 20) return 'high'
+  if (seeders >= 5) return 'medium'
+  if (seeders > 0) return 'low'
+  return 'none'
 }
 
 function findFirstLabel(text: string, patterns: Array<[string, string[]]>) {

@@ -4,7 +4,7 @@ import {
   type IndexerReleaseAnalysis,
   type ReleaseSourceTier,
 } from '@shared/release-analysis'
-import type { DownloaderSummary, IndexerSearchItem, MediaSearchItem } from '@shared/types'
+import type { DownloaderSummary, MediaSearchItem, ReleaseCandidateFull } from '@shared/types'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import {
@@ -65,7 +65,7 @@ type ReleaseRowLayout = 'dialog' | 'page'
 interface ReleaseSearchSurfaceProps {
   media: ReleaseSearchMedia
   query: string
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   loading: boolean
   error: ReleaseSearchError | null
   progress?: ReleaseSearchProgress | null
@@ -93,7 +93,7 @@ export function ReleaseSearchDialog({
 }: {
   media: ReleaseSearchMedia
   query: string
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   loading: boolean
   error: ReleaseSearchError | null
   progress?: ReleaseSearchProgress | null
@@ -856,7 +856,7 @@ function ReleasePanel({
   layout,
 }: {
   downloaders: DownloaderSummary[]
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   loading: boolean
   progress?: ReleaseSearchProgress | null
   loadingDownloaders: boolean
@@ -1006,7 +1006,7 @@ function ReleaseRow({
   layout,
 }: {
   downloaders: DownloaderSummary[]
-  item: IndexerSearchItem
+  item: ReleaseCandidateFull
   loadingDownloaders: boolean
   layout: ReleaseRowLayout
 }) {
@@ -1015,7 +1015,7 @@ function ReleaseRow({
   const title = item.fileName || item.title
 
   async function handleDownload(downloader: DownloaderSummary) {
-    if (!getDownloadSource(item)) {
+    if (!item.resourceRef) {
       toast.error(t('releaseMissingUrl'))
       return
     }
@@ -1036,7 +1036,7 @@ function ReleaseRow({
   }
 
   const submitting = Boolean(submittingDownloaderId)
-  const hasSource = Boolean(getDownloadSource(item))
+  const hasSource = Boolean(item.resourceRef)
   const disabled = !hasSource || loadingDownloaders || downloaders.length === 0 || submitting
   const downloadLabel = loadingDownloaders
     ? t('loadingDownloaders')
@@ -1080,7 +1080,9 @@ function ReleaseRow({
             {item.categories.length > 0 ? (
               <span className="text-muted-foreground">{item.categories.slice(0, 2).join(' / ')}</span>
             ) : null}
-            <span className="text-muted-foreground">{item.infoHash ? t('magnetReady') : t('torrentUrl')}</span>
+            <span className="text-muted-foreground">
+              {item.sourceType === 'magnet' ? t('magnetReady') : t('torrentUrl')}
+            </span>
             {item.infoUrl ? (
               <a
                 className="font-medium text-primary hover:underline"
@@ -1339,23 +1341,11 @@ function getEditionTooltip(label: string, t: TFunction) {
   return t('releaseEditionTooltip')
 }
 
-function getDownloadSource(item: IndexerSearchItem) {
-  if (item.magnetUrl) {
-    return { uri: item.magnetUrl, sourceType: 'magnet' as const }
-  }
-
-  if (item.downloadUrl) {
-    return { uri: item.downloadUrl, sourceType: 'torrent_url' as const }
-  }
-
-  return null
-}
-
-function getReleaseIndexers(items: IndexerSearchItem[]) {
+function getReleaseIndexers(items: ReleaseCandidateFull[]) {
   return Array.from(new Set(items.map((item) => item.indexer))).sort((left, right) => left.localeCompare(right))
 }
 
-function sortReleases(items: IndexerSearchItem[], sort: ReleaseSort) {
+function sortReleases(items: ReleaseCandidateFull[], sort: ReleaseSort) {
   return [...items].sort((left, right) => {
     if (sort === 'best') {
       return compareIndexerReleasesByRecommendation(left, right)
@@ -1385,7 +1375,7 @@ function filterReleases({
   sourceFilter,
   sort,
 }: {
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   keyword: string
   indexer: string
   quality: ReleaseQuality

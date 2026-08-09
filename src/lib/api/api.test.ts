@@ -159,13 +159,15 @@ describe('resource api client', () => {
     const fetch = stubJsonFetch({ results: [] })
 
     await searchIndexerOnce({
+      mediaKey: 'openlibrary:work:OL45804W',
       query: 'Dune 2021',
       searchType: 'search',
       categories: [2000, 2040],
+      target: 'ebook',
     })
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/release-candidates?query=Dune+2021&searchType=search&categories=2000%7C2040&page=1&pageSize=50',
+      '/api/release-candidates?mediaKey=openlibrary%3Awork%3AOL45804W&query=Dune+2021&searchType=search&categories=2000%7C2040&target=ebook&view=full&page=1&pageSize=50',
       expect.objectContaining({ credentials: 'include' }),
     )
   })

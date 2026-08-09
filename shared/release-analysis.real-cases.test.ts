@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { analyzeIndexerRelease } from './release-analysis'
-import type { IndexerSearchItem } from './types'
+import type { ReleaseCandidateFull } from './types'
 
 interface RealReleaseCase {
   title: string
@@ -840,7 +840,7 @@ describe('real indexer release title analysis', () => {
   })
 })
 
-function release(title: string): IndexerSearchItem {
+function release(title: string): ReleaseCandidateFull {
   return {
     id: title,
     downloadTarget: null,
@@ -848,15 +848,24 @@ function release(title: string): IndexerSearchItem {
     fileName: null,
     indexer: 'Indexer',
     size: null,
+    quality: {
+      resolution: 'other',
+      source: 'unknown',
+      codec: null,
+      hdr: null,
+      audio: null,
+      tier: 'unknown',
+      warnings: [],
+    },
+    availability: { tier: 'unknown' },
     seeders: null,
     leechers: null,
     files: null,
-    protocol: null,
     publishDate: null,
-    downloadUrl: null,
-    magnetUrl: null,
+    resourceRef: 'release-ref:v1:test',
+    resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
+    sourceType: 'torrent_url',
     infoUrl: null,
-    infoHash: null,
     categories: [],
     categoryIds: [],
     indexerFlags: [],

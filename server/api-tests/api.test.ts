@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:test'
 import { app } from '@server/app'
+import { API_VERSION } from '@server/config'
 import { hashSecret } from '@server/usecases/identity'
 import { describe, expect, it } from 'vitest'
 
@@ -7,7 +8,7 @@ function request(path: string, init?: RequestInit & { cookie?: string }) {
   const headers = new Headers(init?.headers)
   if (init?.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
   if (init?.cookie) headers.set('cookie', init.cookie)
-  if (path.startsWith('/api/')) headers.set('API-Version', '2026-08-05')
+  if (path.startsWith('/api/')) headers.set('API-Version', API_VERSION)
   return app.fetch(new Request(`https://zme.test${path}`, { ...init, headers }), env)
 }
 

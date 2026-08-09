@@ -1,4 +1,4 @@
-import type { IndexerSearchItem } from '@shared/types'
+import type { ReleaseCandidateFull } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { searchIndexerOnce } from '@/lib/api'
 import { automaticReleaseResultLimit, searchMediaReleasesInSteps } from './release-search'
@@ -95,12 +95,10 @@ describe('release search orchestration', () => {
 
   it('reports only newly accepted and deduplicated results for each search step', async () => {
     const duplicate = release('duplicate', 'Original Title 2026 1080p')
-    duplicate.infoHash = 'ABC'
-    const sameHash = release('other-id', '本地标题 2026 1080p')
-    sameHash.infoHash = 'abc'
+    const sameCandidate = release('duplicate', '本地标题 2026 1080p')
     vi.mocked(searchIndexerOnce)
       .mockResolvedValueOnce({ results: [duplicate] })
-      .mockResolvedValueOnce({ results: [sameHash] })
+      .mockResolvedValueOnce({ results: [sameCandidate] })
       .mockResolvedValue({ results: [] })
     const counts: number[] = []
 
@@ -133,7 +131,7 @@ function releases(title: string, count: number, offset = 0) {
   )
 }
 
-function release(id: string, title: string): IndexerSearchItem {
+function release(id: string, title: string): ReleaseCandidateFull {
   return {
     id,
     downloadTarget: null,
@@ -141,15 +139,16 @@ function release(id: string, title: string): IndexerSearchItem {
     fileName: null,
     indexer: 'Test',
     size: 1_000,
+    quality: testQuality,
+    availability: { tier: 'low' },
     seeders: 1,
     leechers: 0,
     files: 1,
-    protocol: 'torrent',
     publishDate: null,
-    downloadUrl: `https://example.test/${id}.torrent`,
-    magnetUrl: null,
+    resourceRef: `release-ref:v1:${id}`,
+    resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
+    sourceType: 'torrent_url',
     infoUrl: null,
-    infoHash: null,
     categories: [],
     categoryIds: [],
     indexerFlags: [],
@@ -157,4 +156,14 @@ function release(id: string, title: string): IndexerSearchItem {
     tmdbId: null,
     tvdbId: null,
   }
+}
+
+const testQuality: ReleaseCandidateFull['quality'] = {
+  resolution: '1080p',
+  source: 'webdl',
+  codec: null,
+  hdr: null,
+  audio: null,
+  tier: 'good',
+  warnings: [],
 }

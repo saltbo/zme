@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import { createIdentityRepo } from '@server/adapters/repos/identity'
 import { app } from '@server/app'
 import { createDeps } from '@server/composition'
+import { API_VERSION } from '@server/config'
 import { createDb } from '@server/db/client'
 import { processDownloadReconciliation } from '@server/usecases/downloads'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
@@ -30,7 +31,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
   vi.stubGlobal('fetch', fixture.fetch)
   const bearer = await app.fetch(
     new Request('https://zme.test/api/media?query=test', {
-      headers: { authorization: 'Bearer bearer-is-never-accepted', 'API-Version': '2026-08-05' },
+      headers: { authorization: 'Bearer bearer-is-never-accepted', 'API-Version': API_VERSION },
     }),
     fixture.env,
   )
@@ -41,7 +42,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
 
   const missingProof = await app.fetch(
     new Request('https://zme.test/api/media?query=test', {
-      headers: { authorization: 'DPoP proof-required', 'API-Version': '2026-08-05' },
+      headers: { authorization: 'DPoP proof-required', 'API-Version': API_VERSION },
     }),
     fixture.env,
   )
@@ -290,21 +291,52 @@ it('completes the least-privilege Agent media, release-candidate, and download f
   expect(resultsResponse.status).toBe(200)
   const results = (await resultsResponse.json()) as {
     items: Array<{
+      id: string
       title: string
-      source: string
-      sizeBytes: number
       quality: unknown
-      encoding: unknown
       availability: unknown
       resourceRef: string
       resourceRefExpiresAt: string
     }>
   }
   expect(results.items[0]).toMatchObject({
+    id: expect.stringMatching(/^release-candidate:[0-9a-f]{64}$/),
     title: 'Fight.Club.1999.1080p.BluRay.x265.DTS',
+    quality: {
+      resolution: '1080p',
+      source: 'bluray',
+      codec: 'x265',
+      audio: 'DTS',
+      tier: 'good',
+      warnings: [],
+    },
+    availability: { tier: 'high' },
     resourceRef: expect.stringMatching(/^release-ref:v1:/),
     resourceRefExpiresAt: expect.any(String),
   })
+  expect(results.items[0]).not.toHaveProperty('magnetUrl')
+  expect(results.items[0]).not.toHaveProperty('downloadUrl')
+  expect(results.items[0]).not.toHaveProperty('infoHash')
+  expect(results.items[0]).not.toHaveProperty('seeders')
+
+  const fullResultsResponse = await app.fetch(
+    await fixture.signedRequest(
+      `/api/release-candidates?mediaKey=${encodeURIComponent(media.items[0].mediaKey)}&query=Fight%20Club%201999&view=full`,
+      ['release-candidates:read'],
+    ),
+    fixture.env,
+  )
+  expect(fullResultsResponse.status).toBe(200)
+  const fullResults = (await fullResultsResponse.json()) as { items: Array<Record<string, unknown>> }
+  expect(fullResults.items[0]).toMatchObject({
+    id: results.items[0].id,
+    seeders: 42,
+    leechers: 3,
+    sourceType: 'magnet',
+  })
+  expect(fullResults.items[0]).not.toHaveProperty('magnetUrl')
+  expect(fullResults.items[0]).not.toHaveProperty('downloadUrl')
+  expect(fullResults.items[0]).not.toHaveProperty('infoHash')
 
   const taskResponse = await app.fetch(
     await fixture.signedRequest(
@@ -500,7 +532,7 @@ async function dpopFixture() {
       const headers: Record<string, string> = {
         authorization: `DPoP ${accessToken}`,
         dpop: proof,
-        'API-Version': '2026-08-05',
+        'API-Version': API_VERSION,
       }
       if (body !== undefined) headers['content-type'] = 'application/json'
       if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey

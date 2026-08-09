@@ -1,4 +1,4 @@
-import type { IndexerSearchItem } from '@shared/types'
+import type { ReleaseCandidateFull } from '@shared/types'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
@@ -35,7 +35,7 @@ describe('release search tasks', () => {
   })
 
   it('keeps a search running after the detail action leaves the tree', async () => {
-    let finishSearch: ((value: { items: IndexerSearchItem[]; stoppedEarly: boolean }) => void) | undefined
+    let finishSearch: ((value: { items: ReleaseCandidateFull[]; stoppedEarly: boolean }) => void) | undefined
     mockedSearchMediaReleases.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -81,7 +81,7 @@ describe('release search tasks', () => {
   })
 
   it('warns before reloading only while a search is running', async () => {
-    let finishSearch: ((value: { items: IndexerSearchItem[]; stoppedEarly: boolean }) => void) | undefined
+    let finishSearch: ((value: { items: ReleaseCandidateFull[]; stoppedEarly: boolean }) => void) | undefined
     mockedSearchMediaReleases.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -172,22 +172,31 @@ const request: ReleaseSearchTaskRequest = {
   },
 }
 
-const release: IndexerSearchItem = {
+const release: ReleaseCandidateFull = {
   id: 'release-1',
   downloadTarget: null,
   title: 'The.Matrix.1999.1080p.BluRay',
   fileName: null,
   indexer: 'Test',
   size: 1_000,
+  quality: {
+    resolution: '1080p',
+    source: 'bluray',
+    codec: null,
+    hdr: null,
+    audio: null,
+    tier: 'good',
+    warnings: [],
+  },
+  availability: { tier: 'high' },
   seeders: 20,
   leechers: 2,
   files: 1,
-  protocol: 'torrent',
   publishDate: '2026-07-27T00:00:00.000Z',
-  downloadUrl: 'https://example.com/download',
-  magnetUrl: null,
+  resourceRef: 'release-ref:v1:test',
+  resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
+  sourceType: 'torrent_url',
   infoUrl: null,
-  infoHash: 'abc',
   categories: ['Movies'],
   categoryIds: [2000],
   indexerFlags: [],

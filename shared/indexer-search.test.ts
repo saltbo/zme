@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { buildTitleSearches, filterExactMediaMatches, uniqueReleases } from './indexer-search'
-import { analyzeIndexerRelease, compareIndexerReleasesByRecommendation } from './release-analysis'
-import type { IndexerSearchItem } from './types'
+import {
+  buildTitleSearches,
+  filterExactMediaMatches,
+  scoreResourceResults,
+  uniqueById,
+  uniqueReleases,
+} from './indexer-search'
+import {
+  analyzeIndexerRelease,
+  compareIndexerReleasesByRecommendation,
+  getReleaseAvailabilityTier,
+} from './release-analysis'
+import type { ReleaseCandidateFull } from './types'
 
 describe('media indexer search planning', () => {
   it('keeps more title aliases for multilingual release searches', () => {
@@ -51,18 +61,45 @@ describe('media indexer search planning', () => {
     expect(buildTitleSearches({ query: '' })).toEqual([{ query: '', titleKind: 'original' }])
   })
 
-  it('deduplicates releases by explicit or magnet info hash and falls back to source identity', () => {
-    const explicit = { ...release('explicit', 'Release A'), infoHash: 'ABC123' }
-    const sameExplicit = { ...release('duplicate-explicit', 'Release A mirror'), infoHash: 'abc123' }
-    const magnet = { ...release('magnet', 'Release B'), magnetUrl: 'magnet:?xt=urn:btih:DEF456' }
-    const sameMagnet = { ...release('duplicate-magnet', 'Release B mirror'), infoHash: 'def456' }
-    const malformed = { ...release('fallback', 'Release C'), magnetUrl: 'magnet:%' }
+  it('deduplicates releases by their opaque candidate identity', () => {
+    const explicit = release('explicit', 'Release A')
+    const sameExplicit = { ...release('explicit', 'Release A mirror') }
+    const magnet = release('magnet', 'Release B')
+    const sameMagnet = { ...release('magnet', 'Release B mirror') }
+    const fallback = release('fallback', 'Release C')
 
-    expect(uniqueReleases([explicit, sameExplicit, magnet, sameMagnet, malformed, malformed])).toEqual([
+    expect(uniqueReleases([explicit, sameExplicit, magnet, sameMagnet, fallback, fallback])).toEqual([
       explicit,
       magnet,
-      malformed,
+      fallback,
     ])
+  })
+
+  it('scores resource candidates and assigns the requested download target', () => {
+    const preferred = release('preferred', 'Roald Dahl Matilda 1988 EPUB')
+    preferred.categories = ['Books', 'Ebook']
+    preferred.categoryIds = [7000, 7020]
+    preferred.seeders = 12
+    const unrelated = release('unrelated', 'Different Book EPUB')
+
+    const results = scoreResourceResults([unrelated, preferred], {
+      mediaKey: 'openlibrary:work:OL45804W',
+      target: 'ebook',
+      query: 'Matilda Roald Dahl 1988 ebook',
+      title: 'Matilda',
+      creators: ['Roald Dahl'],
+      year: '1988',
+      formats: ['epub'],
+    })
+
+    expect(results).toEqual([{ ...preferred, downloadTarget: 'ebook' }])
+  })
+
+  it('keeps the first candidate for duplicate opaque identities', () => {
+    const first = release('same', 'First')
+    const duplicate = release('same', 'Second')
+
+    expect(uniqueById([first, duplicate])).toEqual([first])
   })
 
   it('does not drop title matches only because the release title omits the year', () => {
@@ -94,6 +131,10 @@ describe('media indexer search planning', () => {
 
     expect(analysis.resolution.id).toBe('360p')
     expect(analysis.resolution.label).toBe('360p')
+  })
+
+  it('formats seed counts into stable availability tiers', () => {
+    expect([null, 0, 1, 5, 20].map(getReleaseAvailabilityTier)).toEqual(['unknown', 'none', 'low', 'medium', 'high'])
   })
 
   it('penalizes likely cinema recordings in recommendation sort', () => {
@@ -255,7 +296,7 @@ describe('media indexer search planning', () => {
   })
 })
 
-function release(id: string, title: string): IndexerSearchItem {
+function release(id: string, title: string): ReleaseCandidateFull {
   return {
     id,
     downloadTarget: null,
@@ -263,15 +304,16 @@ function release(id: string, title: string): IndexerSearchItem {
     fileName: null,
     indexer: 'Indexer',
     size: null,
+    quality: testQuality,
+    availability: { tier: 'unknown' },
     seeders: null,
     leechers: null,
     files: null,
-    protocol: null,
     publishDate: null,
-    downloadUrl: null,
-    magnetUrl: null,
+    resourceRef: 'release-ref:v1:test',
+    resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
+    sourceType: 'torrent_url',
     infoUrl: null,
-    infoHash: null,
     categories: [],
     categoryIds: [],
     indexerFlags: [],
@@ -279,4 +321,14 @@ function release(id: string, title: string): IndexerSearchItem {
     tmdbId: null,
     tvdbId: null,
   }
+}
+
+const testQuality: ReleaseCandidateFull['quality'] = {
+  resolution: 'other',
+  source: 'unknown',
+  codec: null,
+  hdr: null,
+  audio: null,
+  tier: 'unknown',
+  warnings: [],
 }

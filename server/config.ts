@@ -1,6 +1,8 @@
+import { API_VERSION as SHARED_API_VERSION } from '@shared/api'
 import type { Env } from './env'
 
-export const API_VERSION = '2026-08-05'
+export const API_VERSION = SHARED_API_VERSION
+
 const ASYMMETRIC_JWT_ALGORITHMS = new Set([
   'RS256',
   'RS384',

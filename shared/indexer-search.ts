@@ -1,4 +1,4 @@
-import type { DownloadSearchTarget, IndexerSearchItem, MediaKind } from './types'
+import type { DownloadSearchTarget, MediaKind, ReleaseCandidateFull } from './types'
 
 export interface ReleaseMatchCriteria {
   query: string
@@ -98,7 +98,10 @@ export function buildTitleSearches(input: ReleaseMatchCriteria): ReleaseTitleSea
   return searches.length > 0 ? searches : [{ ...input, titleKind: 'original' }]
 }
 
-export function filterExactMediaMatches(items: IndexerSearchItem[], input: ReleaseMatchCriteria): IndexerSearchItem[] {
+export function filterExactMediaMatches(
+  items: ReleaseCandidateFull[],
+  input: ReleaseMatchCriteria,
+): ReleaseCandidateFull[] {
   const imdbId = parseImdbNumber(input.imdbId ?? undefined)
   return items.filter((item) => {
     if (imdbId && item.imdbId === imdbId) return true
@@ -122,23 +125,23 @@ export function getResourceSearchQueries(
 }
 
 export function scoreResourceResults(
-  items: IndexerSearchItem[],
+  items: ReleaseCandidateFull[],
   input: ResourceDownloadSearchInput,
-): IndexerSearchItem[] {
-  const scoredItems: Array<{ item: IndexerSearchItem; score: number | null }> = items.map((item) => ({
+): ReleaseCandidateFull[] {
+  const scoredItems: Array<{ item: ReleaseCandidateFull; score: number | null }> = items.map((item) => ({
     item: { ...item, downloadTarget: input.target },
     score: scoreResourceResult(item, input),
   }))
   const scored = scoredItems
-    .filter((entry): entry is { item: IndexerSearchItem; score: number } => entry.score !== null)
+    .filter((entry): entry is { item: ReleaseCandidateFull; score: number } => entry.score !== null)
     .sort((left, right) => right.score - left.score || (right.item.seeders ?? 0) - (left.item.seeders ?? 0))
 
   return uniqueById(scored.map((entry) => entry.item))
 }
 
-export function uniqueById(items: IndexerSearchItem[]): IndexerSearchItem[] {
+export function uniqueById(items: ReleaseCandidateFull[]): ReleaseCandidateFull[] {
   const seen = new Set<string>()
-  const unique: IndexerSearchItem[] = []
+  const unique: ReleaseCandidateFull[] = []
   for (const item of items) {
     if (seen.has(item.id)) continue
     seen.add(item.id)
@@ -147,14 +150,12 @@ export function uniqueById(items: IndexerSearchItem[]): IndexerSearchItem[] {
   return unique
 }
 
-export function uniqueReleases(items: IndexerSearchItem[]): IndexerSearchItem[] {
+export function uniqueReleases(items: ReleaseCandidateFull[]): ReleaseCandidateFull[] {
   const seen = new Set<string>()
-  const unique: IndexerSearchItem[] = []
+  const unique: ReleaseCandidateFull[] = []
   for (const item of items) {
-    const infoHash = item.infoHash?.trim().toLowerCase() || getMagnetInfoHash(item.magnetUrl)
-    const key = infoHash ? `hash:${infoHash}` : `id:${item.id}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    if (seen.has(item.id)) continue
+    seen.add(item.id)
     unique.push(item)
   }
   return unique
@@ -202,7 +203,7 @@ function buildResourceQueries(input: ResourceDownloadSearchInput): string[] {
   ]).slice(0, 8)
 }
 
-function scoreResourceResult(item: IndexerSearchItem, input: ResourceDownloadSearchInput): number | null {
+function scoreResourceResult(item: ReleaseCandidateFull, input: ResourceDownloadSearchInput): number | null {
   const config = targetConfigs[input.target]
   const haystack = normalizeReleaseText(
     [item.title, item.fileName, item.categories.join(' ')].filter(Boolean).join(' '),
@@ -236,7 +237,7 @@ function scoreResourceResult(item: IndexerSearchItem, input: ResourceDownloadSea
   return score >= config.minimumScore ? score : null
 }
 
-function matchesExpectedTitle(item: IndexerSearchItem, input: ReleaseMatchCriteria): boolean {
+function matchesExpectedTitle(item: ReleaseCandidateFull, input: ReleaseMatchCriteria): boolean {
   if (input.kind === 'movie' && looksLikeMovieCollection(item.title)) return false
 
   const expectedTitles = uniqueStrings([
@@ -256,11 +257,11 @@ function matchesExpectedTitle(item: IndexerSearchItem, input: ReleaseMatchCriter
   return releaseTitle.includes(input.year) || !hasReleaseYear(releaseTitle)
 }
 
-function hasCategoryEvidence(item: IndexerSearchItem): boolean {
+function hasCategoryEvidence(item: ReleaseCandidateFull): boolean {
   return item.categoryIds.length > 0 || item.categories.length > 0
 }
 
-function hasTargetCategory(item: IndexerSearchItem, config: TargetConfig): boolean {
+function hasTargetCategory(item: ReleaseCandidateFull, config: TargetConfig): boolean {
   if (item.categoryIds.some((id) => config.categories.includes(id))) return true
   const categoryText = normalizeReleaseText(item.categories.join(' '))
   return config.categoryTerms.some((term) => textIncludesPhrase(categoryText, normalizeReleaseText(term)))
@@ -293,16 +294,6 @@ function parseImdbNumber(value: string | undefined): number | null {
   if (!match) return null
   const parsed = Number(match[1])
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
-}
-
-function getMagnetInfoHash(value: string | null): string | null {
-  if (!value?.startsWith('magnet:')) return null
-  try {
-    const hash = new URL(value).searchParams.get('xt')?.match(/^urn:btih:(.+)$/i)?.[1]
-    return hash?.toLowerCase() ?? null
-  } catch {
-    return null
-  }
 }
 
 function joinTerms(values: Array<string | undefined | null>): string {

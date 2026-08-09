@@ -35,6 +35,9 @@ describe('download resource references', () => {
   it('round-trips a one-hour user-bound encrypted release reference', async () => {
     const now = new Date()
     const issued = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:tv:44652', item, now)
+    expect(issued.candidateId).toMatch(/^release-candidate:[0-9a-f]{64}$/)
+    expect(issued.candidateId).not.toContain(item.id)
+    expect(issued.sourceType).toBe('magnet')
     expect(issued.resourceRef).toMatch(/^release-ref:v1:/)
     expect(issued.resourceRef).not.toContain(item.magnetUrl)
     expect(Date.parse(issued.resourceRefExpiresAt) - now.getTime()).toBe(60 * 60 * 1000)
@@ -44,6 +47,30 @@ describe('download resource references', () => {
       mediaKey: 'tmdb:tv:44652',
       tags: expect.arrayContaining(['mediaKey=tmdb:tv:44652', 'tmdbId=44652']),
     })
+  })
+
+  it('keeps candidate identity stable for the same user, media, and source', async () => {
+    const first = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:tv:44652', item)
+    const second = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:tv:44652', item)
+
+    expect(second.candidateId).toBe(first.candidateId)
+    expect(second.resourceRef).not.toBe(first.resourceRef)
+  })
+
+  it('uses the magnet info hash for stable identity when providers use different GUIDs', async () => {
+    const first = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:tv:44652', {
+      ...item,
+      id: 'provider-guid-1',
+      infoHash: null,
+    })
+    const second = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:tv:44652', {
+      ...item,
+      id: 'provider-guid-2',
+      infoHash: null,
+      magnetUrl: 'magnet:?dn=Last.Resort&xt=urn:btih:ABC',
+    })
+
+    expect(second.candidateId).toBe(first.candidateId)
   })
 
   it('rejects references owned by another user or modified by the client', async () => {

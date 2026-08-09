@@ -98,6 +98,21 @@ describe('DPoP resource OpenAPI contract', () => {
     )
     expect(document.components.schemas.Media.required).toContain('mediaKey')
     expect(document.components.schemas.CreateDownload.required).toEqual(['resourceRef', 'downloaderId'])
+    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('magnetUrl')
+    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('downloadUrl')
+    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('infoHash')
+    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('indexer')
+    expect(document.components.schemas.ReleaseCandidate.required).toEqual(
+      expect.arrayContaining(['quality', 'availability']),
+    )
+    expect(document.components.schemas.ReleaseCandidateQuality.required).toEqual(
+      expect.arrayContaining(['resolution', 'source', 'tier', 'warnings']),
+    )
+    expect(document.components.schemas.ReleaseCandidateFull.properties).toHaveProperty('seeders')
+    expect(document.components.schemas.ReleaseCandidateFull.properties).toHaveProperty('indexer')
+    expect(paths['/release-candidates'].get.parameters).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'view' })]),
+    )
     expect(paths).not.toHaveProperty('/release-search-jobs')
     expect(paths).not.toHaveProperty('/release-search-results/{releaseSearchResultId}')
     expect(paths).not.toHaveProperty('/download-tasks')

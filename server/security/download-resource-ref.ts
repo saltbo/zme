@@ -39,7 +39,12 @@ export async function issueReleaseResourceRef(
   mediaKey: string,
   item: IndexerSearchItem,
   now = new Date(),
-): Promise<{ resourceRef: string; resourceRefExpiresAt: string }> {
+): Promise<{
+  candidateId: string
+  sourceType: ResolvedReleaseRef['sourceType']
+  resourceRef: string
+  resourceRefExpiresAt: string
+}> {
   const source = releaseSource(item)
   if (!source) throw new InvalidDownloadResourceRefError('The release candidate has no downloadable source.')
   const expiresAt = new Date(now.getTime() + releaseRefLifetimeSeconds * 1000)
@@ -57,7 +62,12 @@ export async function issueReleaseResourceRef(
     .setIssuedAt(Math.floor(now.getTime() / 1000))
     .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
     .encrypt(await encryptionKey(secret))
-  return { resourceRef: `${releaseRefPrefix}${token}`, resourceRefExpiresAt: expiresAt.toISOString() }
+  return {
+    candidateId: await releaseCandidateId(secret, userId, mediaKey, item, source.uri),
+    sourceType: source.sourceType,
+    resourceRef: `${releaseRefPrefix}${token}`,
+    resourceRefExpiresAt: expiresAt.toISOString(),
+  }
 }
 
 export async function resolveReleaseResourceRef(
@@ -133,6 +143,45 @@ function releaseTags(mediaKey: string, item: IndexerSearchItem): string[] {
   ].filter((tag): tag is string => Boolean(tag))
 }
 
-async function encryptionKey(secret: string): Promise<Uint8Array> {
+async function encryptionKey(secret: string): Promise<Uint8Array<ArrayBuffer>> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret)))
+}
+
+async function releaseCandidateId(
+  secret: string,
+  userId: string,
+  mediaKey: string,
+  item: IndexerSearchItem,
+  sourceUri: string,
+): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    await encryptionKey(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sourceIdentity =
+    item.infoHash?.trim().toLowerCase() || getMagnetInfoHash(item.magnetUrl) || item.id || sourceUri
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`${userId}\n${mediaKey}\n${sourceIdentity}`),
+  )
+  const value = Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')
+  return `release-candidate:${value}`
+}
+
+function getMagnetInfoHash(value: string | null): string | null {
+  if (!value?.startsWith('magnet:')) return null
+  try {
+    return (
+      new URL(value).searchParams
+        .get('xt')
+        ?.match(/^urn:btih:(.+)$/i)?.[1]
+        ?.toLowerCase() ?? null
+    )
+  } catch {
+    return null
+  }
 }

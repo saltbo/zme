@@ -1,6 +1,7 @@
 import { decryptConnectorPayload } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import { buildMusicFileTags, type MusicFileTags, parseMusicFileTags } from '@server/music-tags'
+import { API_VERSION } from '@shared/api'
 import {
   buildMusicDownloadFilename,
   buildMusicDownloadSubdirectory,
@@ -190,7 +191,7 @@ export async function dispatchMusicDownloadRecord(
 
   const downloadUrl = new URL(`/api/music/tracks/${encodeURIComponent(track.id)}/content`, env.PUBLIC_APP_ORIGIN)
   downloadUrl.searchParams.set('key', key)
-  downloadUrl.searchParams.set('apiVersion', '2026-08-05')
+  downloadUrl.searchParams.set('apiVersion', API_VERSION)
   const targetSubdirectory = buildMusicDownloadSubdirectory(track)
   try {
     const result = await submitDownload(deps, record.userId, {

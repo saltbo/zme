@@ -663,6 +663,44 @@ export interface IndexerSearchItem {
   tvdbId: number | null
 }
 
+export interface ReleaseCandidate {
+  id: string
+  title: string
+  size: number | null
+  publishDate: string | null
+  quality: {
+    resolution: '2160p' | '1080p' | '720p' | '480p' | '360p' | 'other'
+    source: string
+    codec: string | null
+    hdr: string | null
+    audio: string | null
+    tier: 'excellent' | 'good' | 'watchable' | 'poor' | 'unknown'
+    warnings: Array<'lowQualitySource' | 'screenerSource'>
+  }
+  availability: {
+    tier: 'high' | 'medium' | 'low' | 'none' | 'unknown'
+  }
+  resourceRef: string
+  resourceRefExpiresAt: string
+}
+
+export interface ReleaseCandidateFull extends ReleaseCandidate {
+  indexer: string
+  downloadTarget: DownloadSearchTarget | null
+  fileName: string | null
+  seeders: number | null
+  leechers: number | null
+  files: number | null
+  sourceType: 'magnet' | 'torrent_url'
+  infoUrl: string | null
+  categories: string[]
+  categoryIds: number[]
+  indexerFlags: string[]
+  imdbId: number | null
+  tmdbId: number | null
+  tvdbId: number | null
+}
+
 export type IndexerKind = 'prowlarr'
 
 export interface IndexerSummary {

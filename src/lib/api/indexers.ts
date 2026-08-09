@@ -1,4 +1,11 @@
-import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
+import type {
+  DownloadSearchTarget,
+  IndexerDetails,
+  IndexerHealth,
+  IndexerInput,
+  IndexerSummary,
+  ReleaseCandidateFull,
+} from '@shared/types'
 import { apiRequest, jsonBody, mergePatch, query } from './client'
 
 export async function searchIndexerOnce(input: {
@@ -6,13 +13,16 @@ export async function searchIndexerOnce(input: {
   query: string
   searchType?: 'search' | 'audiosearch' | 'booksearch'
   categories?: number[]
+  target?: DownloadSearchTarget
 }) {
-  const response = await apiRequest<{ items: IndexerSearchItem[] }>(
+  const response = await apiRequest<{ items: ReleaseCandidateFull[] }>(
     `/api/release-candidates${query({
       mediaKey: input.mediaKey,
       query: input.query,
       searchType: input.searchType,
       categories: input.categories?.join('|'),
+      target: input.target,
+      view: 'full',
       page: 1,
       pageSize: 50,
     })}`,

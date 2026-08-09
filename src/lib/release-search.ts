@@ -8,7 +8,7 @@ import {
   scoreResourceResults,
   uniqueReleases,
 } from '@shared/indexer-search'
-import type { IndexerSearchItem } from '@shared/types'
+import type { DownloadSearchTarget, ReleaseCandidateFull } from '@shared/types'
 import { searchIndexerOnce } from '@/lib/api'
 
 export interface ReleaseSearchProgress {
@@ -30,7 +30,7 @@ export interface ReleaseSearchStepProgress {
 export type ReleaseSearchStepKind = ReleaseTitleSearchKind | 'targeted' | 'fallback'
 
 export interface ReleaseSearchOutcome {
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   stoppedEarly: boolean
 }
 
@@ -38,7 +38,7 @@ export interface MediaReleaseSearchOptions {
   exhaustive?: boolean
 }
 
-export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: IndexerSearchItem[]) => void
+export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: ReleaseCandidateFull[]) => void
 
 interface SearchTask {
   mediaKey?: string
@@ -46,6 +46,7 @@ interface SearchTask {
   kind: ReleaseSearchStepKind
   searchType?: 'search' | 'audiosearch' | 'booksearch'
   categories?: number[]
+  target?: DownloadSearchTarget
 }
 
 export const automaticReleaseResultLimit = 30
@@ -58,8 +59,8 @@ export async function searchMediaReleasesInSteps(
   options: MediaReleaseSearchOptions = {},
 ): Promise<ReleaseSearchOutcome> {
   const searches = buildTitleSearches(input)
-  const collected: IndexerSearchItem[] = []
-  const getResults = (items: IndexerSearchItem[]) => uniqueReleases(filterExactMediaMatches(items, input))
+  const collected: ReleaseCandidateFull[] = []
+  const getResults = (items: ReleaseCandidateFull[]) => uniqueReleases(filterExactMediaMatches(items, input))
   let firstError: Error | null = null
   const preferred = searches.filter((search) => search.titleKind === 'original' || search.titleKind === 'english')
   const supplemental = searches.filter((search) => search.titleKind !== 'original' && search.titleKind !== 'english')
@@ -101,10 +102,11 @@ export async function searchResourceReleasesInSteps(
   input: ResourceDownloadSearchInput,
   onProgress: ReleaseSearchProgressHandler,
 ): Promise<ReleaseSearchOutcome> {
-  const collected: IndexerSearchItem[] = []
+  const collected: ReleaseCandidateFull[] = []
   const targeted = getResourceSearchQueries(input, true).map((search) => ({
     ...search,
     mediaKey: input.mediaKey,
+    target: input.target,
     kind: 'targeted' as const,
   }))
   const primaryError = await runSearches(
@@ -121,6 +123,7 @@ export async function searchResourceReleasesInSteps(
   const fallback = getResourceSearchQueries(input, false).map((search) => ({
     ...search,
     mediaKey: input.mediaKey,
+    target: input.target,
     kind: 'fallback' as const,
   }))
   const fallbackError = await runSearches(
@@ -143,9 +146,9 @@ export async function searchResourceReleasesInSteps(
 async function runSearches(
   searches: SearchTask[],
   phase: ReleaseSearchProgress['phase'],
-  collected: IndexerSearchItem[],
+  collected: ReleaseCandidateFull[],
   onProgress: ReleaseSearchProgressHandler,
-  getResults: (items: IndexerSearchItem[]) => IndexerSearchItem[],
+  getResults: (items: ReleaseCandidateFull[]) => ReleaseCandidateFull[],
   concurrency: number,
 ): Promise<Error | null> {
   let firstError: Error | null = null
@@ -183,6 +186,7 @@ async function runSearches(
           query: searches[index].query,
           searchType: searches[index].searchType,
           categories: searches[index].categories,
+          target: searches[index].target,
         })
           .then((payload) => {
             const previousResultCount = getResults(collected).length

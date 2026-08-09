@@ -1,4 +1,4 @@
-import type { IndexerSearchItem } from '@shared/types'
+import type { ReleaseCandidateFull } from '@shared/types'
 import type { ReleaseSearchMedia } from '@/components/release-search-dialog'
 import { ReleaseSearchDialog, ReleaseSearchSurface } from '@/components/release-search-dialog'
 import '@/i18n'
@@ -83,6 +83,11 @@ describe('ReleaseSearchSurface standalone page', () => {
     })
 
     expect(screen.getByText(release.title)).toBeInTheDocument()
+    expect(screen.getByText(release.indexer)).toBeInTheDocument()
+    expect(screen.getByText('10 seeders')).toBeInTheDocument()
+    expect(screen.getByText('0 leechers')).toBeInTheDocument()
+    expect(screen.getByText('1 files')).toBeInTheDocument()
+    expect(screen.getByText('Torrent URL')).toBeInTheDocument()
     expect(screen.getAllByText('1 results available to browse now').length).toBeGreaterThan(0)
     expect(screen.queryByRole('heading', { name: 'Searching indexers' })).not.toBeInTheDocument()
   })
@@ -131,7 +136,7 @@ function renderReleaseSearchSurface({
   loading,
   progress,
 }: {
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   loading: boolean
   progress: ReleaseSearchProgress | null
 }) {
@@ -145,7 +150,7 @@ function renderReleaseSearchSurfaceElement({
   canSearchMore = false,
   onSearchMore = () => {},
 }: {
-  items: IndexerSearchItem[]
+  items: ReleaseCandidateFull[]
   loading: boolean
   progress: ReleaseSearchProgress | null
   canSearchMore?: boolean
@@ -225,22 +230,31 @@ const releaseSearchProgress: ReleaseSearchProgress = {
   ],
 }
 
-const release: IndexerSearchItem = {
+const release: ReleaseCandidateFull = {
   id: 'release-1',
   downloadTarget: null,
   title: 'Test Movie 2026 1080p WEB-DL',
   fileName: null,
   indexer: 'Test Indexer',
   size: 1_000,
+  quality: {
+    resolution: '1080p',
+    source: 'webdl',
+    codec: null,
+    hdr: null,
+    audio: null,
+    tier: 'good',
+    warnings: [],
+  },
+  availability: { tier: 'medium' },
   seeders: 10,
   leechers: 0,
   files: 1,
-  protocol: 'torrent',
   publishDate: null,
-  downloadUrl: 'https://example.test/release-1.torrent',
-  magnetUrl: null,
+  resourceRef: 'release-ref:v1:test',
+  resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
+  sourceType: 'torrent_url',
   infoUrl: null,
-  infoHash: null,
   categories: [],
   categoryIds: [],
   indexerFlags: [],

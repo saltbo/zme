@@ -12,6 +12,8 @@ import {
   updateIndexer,
 } from '@server/usecases/indexers'
 import { IndexerNotConfiguredError, IndexerSearchError } from '@server/usecases/ports'
+import { analyzeIndexerRelease, getReleaseAvailabilityTier } from '@shared/release-analysis'
+import type { DownloadSearchTarget, IndexerSearchItem, ReleaseCandidate, ReleaseCandidateFull } from '@shared/types'
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
@@ -23,6 +25,8 @@ const indexerSearchQuerySchema = z.object({
   query: z.string().trim().min(1).max(300),
   searchType: z.enum(['search', 'audiosearch', 'booksearch']).optional(),
   categories: z.string().trim().optional(),
+  target: z.enum(['music', 'ebook', 'audiobook']).optional(),
+  view: z.enum(['compact', 'full']).default('compact'),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(50),
 })
@@ -38,7 +42,7 @@ const indexerSchema = z.object({
 const indexerPatchSchema = indexerSchema.partial().refine((value) => Object.keys(value).length > 0)
 export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   routes.get('/release-candidates', zValidator('query', indexerSearchQuerySchema), async (c) => {
-    const { mediaKey, query, searchType, categories, page, pageSize } = c.req.valid('query')
+    const { mediaKey, query, searchType, categories, target, view, page, pageSize } = c.req.valid('query')
     try {
       const deps = c.get('deps')
       const results = await searchIndexers(deps, {
@@ -50,15 +54,16 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
       const principal = c.get('principal')
       const downloadable = results.filter((item) => item.magnetUrl || item.downloadUrl)
       const withRefs = await Promise.all(
-        downloadable.map(async (item) => ({
-          ...item,
-          ...(await issueReleaseResourceRef(
+        downloadable.map((item) =>
+          serializeReleaseCandidate(
             requiredResourceRefSecret(configured.downloadResourceRefSecret),
             principal.userId,
             mediaKey,
             item,
-          )),
-        })),
+            target,
+            view,
+          ),
+        ),
       )
       const start = (page - 1) * pageSize
       return c.json({
@@ -147,6 +152,56 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
       return c.json({ error: 'Health observation not found.' }, 404)
     return c.json({ item: health })
   })
+}
+
+export async function serializeReleaseCandidate(
+  secret: string,
+  userId: string,
+  mediaKey: string,
+  item: IndexerSearchItem,
+  target: DownloadSearchTarget | undefined,
+  view: 'compact' | 'full',
+): Promise<ReleaseCandidate | ReleaseCandidateFull> {
+  const normalized = target ? { ...item, downloadTarget: target } : item
+  const issued = await issueReleaseResourceRef(secret, userId, mediaKey, normalized)
+  const analysis = analyzeIndexerRelease(item)
+  const compact: ReleaseCandidate = {
+    id: issued.candidateId,
+    title: item.title,
+    size: item.size,
+    publishDate: item.publishDate,
+    quality: {
+      resolution: analysis.resolution.id,
+      source: analysis.source.id,
+      codec: analysis.codec,
+      hdr: analysis.hdr,
+      audio: analysis.audio,
+      tier: analysis.source.tier,
+      warnings: analysis.warnings,
+    },
+    availability: { tier: getReleaseAvailabilityTier(item.seeders) },
+    resourceRef: issued.resourceRef,
+    resourceRefExpiresAt: issued.resourceRefExpiresAt,
+  }
+  if (view === 'compact') return compact
+
+  return {
+    ...compact,
+    indexer: item.indexer,
+    downloadTarget: normalized.downloadTarget,
+    fileName: item.fileName,
+    seeders: item.seeders,
+    leechers: item.leechers,
+    files: item.files,
+    sourceType: issued.sourceType,
+    infoUrl: item.infoUrl,
+    categories: item.categories,
+    categoryIds: item.categoryIds,
+    indexerFlags: item.indexerFlags,
+    imdbId: item.imdbId,
+    tmdbId: item.tmdbId,
+    tvdbId: item.tvdbId,
+  }
 }
 
 function requiredResourceRefSecret(value: string | undefined): string {
