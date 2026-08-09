@@ -79,7 +79,8 @@ describe('download resource references', () => {
       InvalidDownloadResourceRefError,
     )
     const position = issued.resourceRef.length - 20
-    const tampered = `${issued.resourceRef.slice(0, position)}x${issued.resourceRef.slice(position + 1)}`
+    const replacement = issued.resourceRef[position] === 'x' ? 'y' : 'x'
+    const tampered = `${issued.resourceRef.slice(0, position)}${replacement}${issued.resourceRef.slice(position + 1)}`
     await expect(resolveReleaseResourceRef(secret, 'user-1', tampered)).rejects.toBeInstanceOf(
       InvalidDownloadResourceRefError,
     )
