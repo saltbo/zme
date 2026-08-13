@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test'
-import { API_VERSION } from './shared/api'
 
 const appPort = requiredPort('E2E_APP_PORT')
 const oidcPort = requiredPort('E2E_OIDC_PORT')
@@ -17,7 +16,6 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL,
-    extraHTTPHeaders: { 'API-Version': API_VERSION },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

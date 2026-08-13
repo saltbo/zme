@@ -26,7 +26,7 @@ function createEnv() {
 }
 
 describe('worker fetch routing', () => {
-  it('publishes the verifiable ZME Skill archive as a direct static asset', () => {
+  it('publishes the verifiable ZME Skill archive as a direct static asset [spec: auth/agent-skill-discovery]', () => {
     const directory = path.join(process.cwd(), 'public', '.well-known', 'agent-skills')
     const indexBytes = readFileSync(path.join(directory, 'index.json'))
     const archiveBytes = readFileSync(path.join(directory, 'use-zme.tar.gz'))
