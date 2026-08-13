@@ -31,7 +31,7 @@ interface ProwlarrSearchItem {
 }
 
 const prowlarrProbeTimeoutMs = 10_000
-const prowlarrSearchTimeoutMs = 60_000
+const prowlarrSearchTimeoutMs = 120_000
 
 export const prowlarrIndexerGateway: IndexerGateway = {
   async search(config, input) {

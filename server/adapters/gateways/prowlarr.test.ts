@@ -7,7 +7,7 @@ describe('searchProwlarr', () => {
     vi.unstubAllGlobals()
   })
 
-  it('allows slow indexers up to sixty seconds to complete a search', async () => {
+  it('allows slow indexers up to two minutes to complete a search', async () => {
     const signal = new AbortController().signal
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(signal)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', { status: 200 })))
@@ -15,7 +15,7 @@ describe('searchProwlarr', () => {
     await searchProwlarr('https://prowlarr.local', 'secret', { query: 'Release' })
 
     expect(timeout).toHaveBeenCalledOnce()
-    expect(timeout).toHaveBeenCalledWith(60_000)
+    expect(timeout).toHaveBeenCalledWith(120_000)
   })
 
   it('strips Prowlarr API keys from proxy download urls before returning results', async () => {

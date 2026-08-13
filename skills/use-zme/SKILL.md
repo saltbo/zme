@@ -73,12 +73,12 @@ results.
 2. Search release candidates with that exact key and select an opaque
    `resourceRef`. Present materially different release choices to the user when
    quality, language, edition, or size preferences are unresolved. Indexers can
-   take up to a minute to answer, so allow one long request instead of restarting
+   take up to two minutes to answer, so allow one long request instead of restarting
    the complete search on transient responses:
 
    ```bash
    realmroot toolbox zme release-acquisition list-release-candidates \
-     "<media-key>" "<query>" --retry 0 --timeout 75s --no-cache --json
+     "<media-key>" "<query>" --retry 0 --timeout 150s --no-cache --json
    ```
 
 3. List safe downloader choices and select an enabled downloader ID:
