@@ -1,4 +1,4 @@
 interface:
   display_name: "Use ZME"
-  short_description: "Find media and manage downloads through Realmroot"
+  short_description: "Browse your private media library through Realmroot"
   default_prompt: "Use $use-zme to find a release and download it through Realmroot."

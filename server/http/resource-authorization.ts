@@ -50,7 +50,7 @@ export function protectedResourceMetadata(config: AppConfig) {
     authorization_servers: [config.oidc.issuer],
     scopes_supported: AGENT_SCOPES,
     bearer_methods_supported: [],
-    resource_name: 'ZME Resource API',
+    resource_name: 'ZME Private Media Library',
     dpop_signing_alg_values_supported: config.oidc.allowedAlgorithms,
     dpop_bound_access_tokens_required: true,
   }

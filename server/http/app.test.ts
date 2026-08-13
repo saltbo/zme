@@ -44,7 +44,7 @@ describe('http wiring', () => {
         'downloads:manage',
       ],
       bearer_methods_supported: [],
-      resource_name: 'ZME Resource API',
+      resource_name: 'ZME Private Media Library',
       dpop_signing_alg_values_supported: [
         'RS256',
         'RS384',

@@ -41,11 +41,11 @@ export function openapiDocument(config: AppConfig) {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'ZME Resource API',
+      title: 'ZME Private Media Library',
       version: '1.0.0',
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
       description:
-        'Resource-oriented media discovery, ephemeral release search, and download API. Local roles and resource ownership further restrict every operation.',
+        "A private media library and download desk for discovering movies, series, anime, music, and books, finding releases, and sending them to the user's own downloaders. Local roles and resource ownership restrict every operation.",
     },
     servers: [{ url: config.resourceUrl }],
     tags: [

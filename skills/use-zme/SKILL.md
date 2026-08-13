@@ -1,13 +1,13 @@
 ---
 name: use-zme
-description: Use ZME through Realmroot to search the media catalog, find release candidates, choose a downloader, create and inspect downloads, or suspend, resume, cancel, and delete owned downloads. Use whenever an Agent needs to browse or operate ZME media and download resources with controller-approved least-privilege access.
+description: Use ZME, the user's private media library and download desk, through Realmroot to discover movies, series, anime, music, and books; find release candidates; choose a downloader; create and inspect downloads; or suspend, resume, cancel, and delete owned downloads. Use whenever an Agent needs to browse or operate the user's private ZME resources with controller-approved least-privilege access.
 ---
 
 # Use ZME
 
-Operate ZME only through the stable Agent identity and authority supplied by
-`$realmroot`. Do not borrow a user's browser session, cookies, OIDC tokens, or
-API keys.
+Treat ZME as the user's private media library and download desk. Operate it only
+through the stable Agent identity and authority supplied by `$realmroot`. Do
+not borrow a user's browser session, cookies, OIDC tokens, or API keys.
 
 ## Discover The Live Contract
 
