@@ -43,6 +43,12 @@ Feature: Authentication & access
     When it requests the protected resource metadata
     Then it receives the authorization server, supported scopes, and required DPoP capabilities
 
+  @auth/agent-skill-discovery @api
+  Scenario: An Agent discovers how to use ZME through Realmroot
+    Given an Agent client knows the ZME origin
+    When it requests the Agent Skills discovery index
+    Then it receives a verifiable archive containing the ZME Realmroot workflow
+
   @auth/admin-only @api
   Scenario: Admin-only endpoints are hidden from non-admin users
     Given a signed-in user without the admin role

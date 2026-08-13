@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "use-zme",
+      "type": "archive",
+      "description": "Use ZME through Realmroot to search the media catalog, find release candidates, choose a downloader, create and inspect downloads, or suspend, resume, cancel, and delete owned downloads. Use whenever an Agent needs to browse or operate ZME media and download resources with controller-approved least-privilege access.",
+      "url": "/.well-known/agent-skills/use-zme.tar.gz",
+      "digest": "sha256:104144fb5cb52a982c0a5ee47cdd3784af93aef7c7a13bda8aafd2257ad4158d"
+    }
+  ]
+}
