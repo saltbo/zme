@@ -30,6 +30,9 @@ interface ProwlarrSearchItem {
   tvdbId?: number | string
 }
 
+const prowlarrProbeTimeoutMs = 10_000
+const prowlarrSearchTimeoutMs = 60_000
+
 export const prowlarrIndexerGateway: IndexerGateway = {
   async search(config, input) {
     const apiKey = config.credentials.apiKey
@@ -46,7 +49,7 @@ export const prowlarrIndexerGateway: IndexerGateway = {
         'X-Api-Key': apiKey,
         Accept: 'application/json',
       },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(prowlarrProbeTimeoutMs),
     })
     if (!response.ok) {
       throw new Error(`Prowlarr request failed with status ${response.status}.`)
@@ -90,7 +93,7 @@ export async function searchProwlarr(
         'X-Api-Key': apiKey,
         Accept: 'application/json',
       },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(prowlarrSearchTimeoutMs),
     })
   } catch (error) {
     throw new IndexerSearchError('Prowlarr search request failed.', { cause: error })
