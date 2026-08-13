@@ -1,6 +1,10 @@
 import type { AppConfig } from '@server/config'
-import { agentScopeForOperation } from './resource-authorization'
+import { agentScopeForOperation, ZME_RESOURCE_DESCRIPTION, ZME_RESOURCE_NAME } from './resource-authorization'
 
+const resourceInfo = {
+  title: ZME_RESOURCE_NAME,
+  description: ZME_RESOURCE_DESCRIPTION,
+}
 const secured = (operationId: string) => [{ oidcSession: [] }, { oidcDpop: [agentScopeForOperation(operationId)] }]
 const traceParameters = [
   { $ref: '#/components/parameters/Traceparent' },
@@ -41,11 +45,9 @@ export function openapiDocument(config: AppConfig) {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'ZME Private Media Library',
+      ...resourceInfo,
       version: '1.0.0',
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
-      description:
-        "A private media library and download desk for discovering movies, series, anime, music, and books, finding releases, and sending them to the user's own downloaders. Local roles and resource ownership restrict every operation.",
     },
     servers: [{ url: config.resourceUrl }],
     tags: [

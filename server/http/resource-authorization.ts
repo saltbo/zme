@@ -31,6 +31,10 @@ export const AGENT_OPERATION_POLICIES = [
 
 export const AGENT_SCOPES = Object.freeze(Object.values(agentScope))
 
+export const ZME_RESOURCE_NAME = 'ZME Private Media Library'
+export const ZME_RESOURCE_DESCRIPTION =
+  "A private media library and download desk for discovering movies, series, anime, music, and books, finding releases, and sending them to the user's own downloaders. Local roles and resource ownership restrict every operation."
+
 export function agentScopeForOperation(operationId: string): AgentScope {
   const operation = AGENT_OPERATION_POLICIES.find((candidate) => candidate.operationId === operationId)
   if (!operation) throw new Error(`Missing Agent authorization policy for ${operationId}.`)
@@ -50,7 +54,7 @@ export function protectedResourceMetadata(config: AppConfig) {
     authorization_servers: [config.oidc.issuer],
     scopes_supported: AGENT_SCOPES,
     bearer_methods_supported: [],
-    resource_name: 'ZME Private Media Library',
+    resource_name: ZME_RESOURCE_NAME,
     dpop_signing_alg_values_supported: config.oidc.allowedAlgorithms,
     dpop_bound_access_tokens_required: true,
   }
