@@ -52,7 +52,6 @@ export function MediaSourcesPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [selectedRevision, setSelectedRevision] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const [createForm, setCreateForm] = useState<MediaSourceFormState>(initialForm)
   const [editForm, setEditForm] = useState<MediaSourceFormState>(initialForm)
@@ -81,11 +80,10 @@ export function MediaSourcesPage() {
 
   async function handleUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedId || !selectedRevision) return
+    if (!selectedId) return
     setSaving(true)
     try {
-      const payload = await updateMediaSource(selectedId, toMediaSourceInput(editForm), selectedRevision)
-      setSelectedRevision(payload.item.updatedAt)
+      const payload = await updateMediaSource(selectedId, toMediaSourceInput(editForm))
       queryClient.setQueryData<MediaSourceSummary[]>(queryKeys.mediaSources, (current = []) =>
         current.map((item) => (item.id === payload.item.id ? payload.item : item)),
       )
@@ -99,9 +97,9 @@ export function MediaSourcesPage() {
   }
 
   async function handleDeleteSelected() {
-    if (!selectedId || !selectedRevision) return
+    if (!selectedId) return
     try {
-      await deleteMediaSource(selectedId, selectedRevision)
+      await deleteMediaSource(selectedId)
       queryClient.setQueryData<MediaSourceSummary[]>(queryKeys.mediaSources, (current = []) =>
         current.filter((item) => item.id !== selectedId),
       )
@@ -139,13 +137,11 @@ export function MediaSourcesPage() {
 
   async function openEdit(item: MediaSourceSummary) {
     setSelectedId(item.id)
-    setSelectedRevision(item.updatedAt)
     setEditOpen(true)
     setEditing(true)
     setEditForm(fromSummary(item))
     try {
       const payload = await getMediaSource(item.id)
-      setSelectedRevision(payload.item.updatedAt)
       setEditForm(fromDetails(payload.item))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('mediaSourcesLoadFailed'))

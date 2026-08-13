@@ -27,7 +27,6 @@ export async function updateIndexer(
   deps: Deps,
   id: string,
   input: Partial<IndexerInput>,
-  expectedUpdatedAt: string,
 ): Promise<IndexerSummary | null> {
   const current = await deps.indexersRepo.get(id)
   if (!current) return null
@@ -39,13 +38,15 @@ export async function updateIndexer(
     options: input.options ?? current.config.options,
     enabled: input.enabled ?? current.enabled,
   }
-  const record = await deps.indexersRepo.update(id, merged, expectedUpdatedAt)
+  const record = await deps.indexersRepo.update(id, merged, current.updatedAt)
   if (!record) throw new StaleWriteError()
   return record ? toSummary(record) : null
 }
 
-export async function deleteIndexer(deps: Deps, id: string, expectedUpdatedAt: string): Promise<boolean> {
-  const deleted = await deps.indexersRepo.delete(id, expectedUpdatedAt)
+export async function deleteIndexer(deps: Deps, id: string): Promise<boolean> {
+  const current = await deps.indexersRepo.get(id)
+  if (!current) return false
+  const deleted = await deps.indexersRepo.delete(id, current.updatedAt)
   if (!deleted && (await deps.indexersRepo.get(id))) throw new StaleWriteError()
   return deleted
 }

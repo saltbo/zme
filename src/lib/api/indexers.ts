@@ -43,17 +43,15 @@ export async function getIndexer(id: string) {
   return apiRequest<{ item: IndexerDetails }>(`/api/indexers/${id}`, 'Failed to load indexer.')
 }
 
-export async function updateIndexer(id: string, input: IndexerInput, expectedUpdatedAt: string) {
+export async function updateIndexer(id: string, input: IndexerInput) {
   return apiRequest<{ item: IndexerSummary }>(`/api/indexers/${id}`, 'Failed to update indexer.', {
     ...mergePatch(input),
-    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteIndexer(id: string, expectedUpdatedAt: string) {
+export async function deleteIndexer(id: string) {
   return apiRequest<void>(`/api/indexers/${id}`, 'Failed to delete indexer.', {
     method: 'DELETE',
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 

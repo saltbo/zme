@@ -66,15 +66,18 @@ export async function updateConnector(
   userId: string,
   id: string,
   input: { enabled?: boolean },
-  expectedUpdatedAt: string,
 ): Promise<ConnectorSummary | null> {
-  const record = await deps.connectorsRepo.updateState(userId, id, input, expectedUpdatedAt)
+  const current = await deps.connectorsRepo.get(userId, id)
+  if (!current) return null
+  const record = await deps.connectorsRepo.updateState(userId, id, input, current.updatedAt)
   if (!record && (await deps.connectorsRepo.get(userId, id))) throw new StaleWriteError()
   return record ? toConnectorSummary(deps, record) : null
 }
 
-export async function deleteConnector(deps: Deps, userId: string, id: string, expectedUpdatedAt: string) {
-  const deleted = await deps.connectorsRepo.delete(userId, id, expectedUpdatedAt)
+export async function deleteConnector(deps: Deps, userId: string, id: string) {
+  const current = await deps.connectorsRepo.get(userId, id)
+  if (!current) return false
+  const deleted = await deps.connectorsRepo.delete(userId, id, current.updatedAt)
   if (!deleted && (await deps.connectorsRepo.get(userId, id))) throw new StaleWriteError()
   return deleted
 }

@@ -2,7 +2,6 @@ import { env } from 'cloudflare:test'
 import { createIdentityRepo } from '@server/adapters/repos/identity'
 import { app } from '@server/app'
 import { createDeps } from '@server/composition'
-import { API_VERSION } from '@server/config'
 import { createDb } from '@server/db/client'
 import { processDownloadReconciliation } from '@server/usecases/downloads'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
@@ -31,7 +30,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
   vi.stubGlobal('fetch', fixture.fetch)
   const bearer = await app.fetch(
     new Request('https://zme.test/api/media?query=test', {
-      headers: { authorization: 'Bearer bearer-is-never-accepted', 'API-Version': API_VERSION },
+      headers: { authorization: 'Bearer bearer-is-never-accepted' },
     }),
     fixture.env,
   )
@@ -42,7 +41,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
 
   const missingProof = await app.fetch(
     new Request('https://zme.test/api/media?query=test', {
-      headers: { authorization: 'DPoP proof-required', 'API-Version': API_VERSION },
+      headers: { authorization: 'DPoP proof-required' },
     }),
     fixture.env,
   )
@@ -350,25 +349,8 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     fixture.env,
   )
   expect(taskResponse.status).toBe(201)
-  expect(taskResponse.headers.get('ETag')).toMatch(/^".+"$/)
-  expect(taskResponse.headers.get('Cache-Control')).toContain('no-transform')
   const task = (await taskResponse.json()) as { id: string; status: string; externalTaskId: string }
   expect(task).toMatchObject({ status: 'submitted', externalTaskId: 'zpan-task-123' })
-  const missingPrecondition = await app.fetch(
-    await fixture.signedRequest(`/api/downloads/${task.id}/suspension`, ['downloads:manage'], 'different-user', 'PUT'),
-    fixture.env,
-  )
-  expect(missingPrecondition.status).toBe(428)
-  const staleRequest = await fixture.signedRequest(
-    `/api/downloads/${task.id}/suspension`,
-    ['downloads:manage'],
-    'different-user',
-    'PUT',
-  )
-  const staleHeaders = new Headers(staleRequest.headers)
-  staleHeaders.set('If-Match', '"stale"')
-  const staleResponse = await app.fetch(new Request(staleRequest, { headers: staleHeaders }), fixture.env)
-  expect(staleResponse.status).toBe(412)
   const replayResponse = await app.fetch(
     await fixture.signedRequest(
       '/api/downloads',
@@ -417,8 +399,6 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     await fixture.signedRequest(`/api/downloads/${task.id}`, ['downloads:read']),
     fixture.env,
   )
-  expect(statusResponse.headers.get('ETag')).toMatch(/^".+"$/)
-  expect(statusResponse.headers.get('Cache-Control')).toContain('no-transform')
   expect(await statusResponse.json()).toMatchObject({
     status: 'completed',
     externalTaskId: 'zpan-task-123',
@@ -532,7 +512,6 @@ async function dpopFixture() {
       const headers: Record<string, string> = {
         authorization: `DPoP ${accessToken}`,
         dpop: proof,
-        'API-Version': API_VERSION,
       }
       if (body !== undefined) headers['content-type'] = 'application/json'
       if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey

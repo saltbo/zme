@@ -11,7 +11,7 @@ import {
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protocol'
+import { requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
 const mediaSourceSchema = z.object({
@@ -32,14 +32,12 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
     const { id } = c.req.valid('param')
     const item = await getMediaSource(c.get('deps'), id)
     if (!item) return c.json({ error: 'Media source not found.' }, 404)
-    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item })
   })
 
   routes.post('/media-sources', zValidator('json', mediaSourceSchema), async (c) => {
     const item = await createMediaSource(c.get('deps'), c.req.valid('json'))
     c.header('Location', `/api/media-sources/${item.id}`)
-    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item }, 201)
   })
 
@@ -51,20 +49,15 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
       const unsupported = requireMergePatch(c)
       if (unsupported) return unsupported
       const { id } = c.req.valid('param')
-      const expectedUpdatedAt = ifMatchRevision(c)
-      if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-      const item = await updateMediaSource(c.get('deps'), id, c.req.valid('json'), expectedUpdatedAt)
+      const item = await updateMediaSource(c.get('deps'), id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Media source not found.' }, 404)
-      c.header('ETag', entityTag(item.updatedAt))
       return c.json({ item })
     },
   )
 
   routes.delete('/media-sources/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const expectedUpdatedAt = ifMatchRevision(c)
-    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-    const deleted = await deleteMediaSource(c.get('deps'), id, expectedUpdatedAt)
+    const deleted = await deleteMediaSource(c.get('deps'), id)
     if (!deleted) return c.json({ error: 'Media source not found.' }, 404)
     return c.body(null, 204)
   })

@@ -1,6 +1,5 @@
 import { env } from 'cloudflare:test'
 import { app } from '@server/app'
-import { API_VERSION } from '@server/config'
 import { hashSecret } from '@server/usecases/identity'
 import { describe, expect, it } from 'vitest'
 
@@ -8,7 +7,6 @@ function request(path: string, init?: RequestInit & { cookie?: string }) {
   const headers = new Headers(init?.headers)
   if (init?.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
   if (init?.cookie) headers.set('cookie', init.cookie)
-  if (path.startsWith('/api/')) headers.set('API-Version', API_VERSION)
   return app.fetch(new Request(`https://zme.test${path}`, { ...init, headers }), env)
 }
 
@@ -34,7 +32,7 @@ describe('external identity boundary', () => {
     expect((await request('/api/library/states')).status).toBe(401)
   })
 
-  it('does not advertise version negotiation on unversioned public resources', async () => {
+  it('does not require a version header on public resources', async () => {
     for (const path of ['/api', '/api/health', '/api/openapi.json']) {
       const response = await request(path)
       expect(response.status).toBe(200)
@@ -204,15 +202,12 @@ describe('admin-managed connectors', () => {
 
     const created = await request('/api/media-sources', { method: 'POST', cookie, body: JSON.stringify(input) })
     expect(created.status).toBe(201)
-    const createdEtag = created.headers.get('etag')
-    expect(createdEtag).toMatch(/^".+"$/)
     const { item } = (await created.json()) as { item: { id: string } & Record<string, unknown> }
     expect(item).toMatchObject({ kind: 'tmdb', enabled: true, healthStatus: 'unknown' })
     // Summaries never leak credentials.
     expect(item).not.toHaveProperty('credentials')
 
     const details = await request(`/api/media-sources/${item.id}`, { cookie })
-    expect(details.headers.get('etag')).toBe(createdEtag)
     expect(await details.json()).toMatchObject({ item: { credentials: { apiKey: 'tmdb-key' } } })
 
     const health = await request(`/api/media-sources/${item.id}/health-observations`, { cookie })
@@ -222,30 +217,13 @@ describe('admin-managed connectors', () => {
     const updated = await request(`/api/media-sources/${item.id}`, {
       method: 'PATCH',
       cookie,
-      headers: { 'Content-Type': 'application/merge-patch+json', 'If-Match': createdEtag as string },
+      headers: { 'Content-Type': 'application/merge-patch+json' },
       body: JSON.stringify({ enabled: false }),
     })
     expect(await updated.json()).toMatchObject({ item: { enabled: false } })
-    const updatedEtag = updated.headers.get('etag')
-    expect(updatedEtag).toMatch(/^".+"$/)
-    expect(updatedEtag).not.toBe(createdEtag)
-
-    const stale = await request(`/api/media-sources/${item.id}`, {
-      method: 'PATCH',
-      cookie,
-      headers: { 'Content-Type': 'application/merge-patch+json', 'If-Match': createdEtag as string },
-      body: JSON.stringify({ enabled: true }),
-    })
-    expect(stale.status).toBe(412)
-    expect(await stale.json()).toMatchObject({
-      type: 'https://zme.test/problems/precondition-failed',
-      status: 412,
-    })
-
     const deleted = await request(`/api/media-sources/${item.id}`, {
       method: 'DELETE',
       cookie,
-      headers: { 'If-Match': updatedEtag as string },
     })
     expect(deleted.status).toBe(204)
     expect((await request(`/api/media-sources/${item.id}`, { cookie })).status).toBe(404)
@@ -264,19 +242,14 @@ describe('admin-managed connectors', () => {
 
     const created = await request('/api/downloaders', { method: 'POST', cookie, body: JSON.stringify(input) })
     expect(created.status).toBe(201)
-    const createdEtag = created.headers.get('etag')
     const { item } = (await created.json()) as { item: { id: string } }
 
     const list = (await (await request('/api/downloaders', { cookie })).json()) as { items: Array<{ id: string }> }
     expect(list.items.map((entry) => entry.id)).toEqual([item.id])
 
-    const missingPrecondition = await request(`/api/downloaders/${item.id}`, { method: 'DELETE', cookie })
-    expect(missingPrecondition.status).toBe(428)
-
     const deleted = await request(`/api/downloaders/${item.id}`, {
       method: 'DELETE',
       cookie,
-      headers: { 'If-Match': createdEtag as string },
     })
     expect(deleted.status).toBe(204)
   })

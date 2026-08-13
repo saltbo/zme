@@ -11,7 +11,7 @@ import {
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protocol'
+import { requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
 const downloaderSchema = z.object({
@@ -33,14 +33,12 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
     const { id } = c.req.valid('param')
     const item = await getDownloader(c.get('deps'), c.get('user').id, id)
     if (!item) return c.json({ error: 'Downloader not found.' }, 404)
-    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item })
   })
 
   routes.post('/downloaders', zValidator('json', downloaderSchema), async (c) => {
     const item = await createDownloader(c.get('deps'), c.get('user').id, c.req.valid('json'))
     c.header('Location', `/api/downloaders/${item.id}`)
-    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item }, 201)
   })
 
@@ -52,20 +50,15 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
       const unsupported = requireMergePatch(c)
       if (unsupported) return unsupported
       const { id } = c.req.valid('param')
-      const expectedUpdatedAt = ifMatchRevision(c)
-      if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-      const item = await updateDownloader(c.get('deps'), c.get('user').id, id, c.req.valid('json'), expectedUpdatedAt)
+      const item = await updateDownloader(c.get('deps'), c.get('user').id, id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Downloader not found.' }, 404)
-      c.header('ETag', entityTag(item.updatedAt))
       return c.json({ item })
     },
   )
 
   routes.delete('/downloaders/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const expectedUpdatedAt = ifMatchRevision(c)
-    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-    const deleted = await deleteDownloader(c.get('deps'), c.get('user').id, id, expectedUpdatedAt)
+    const deleted = await deleteDownloader(c.get('deps'), c.get('user').id, id)
     if (!deleted) return c.json({ error: 'Downloader not found.' }, 404)
     return c.body(null, 204)
   })

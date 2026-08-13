@@ -67,14 +67,14 @@ function ConnectorSettings() {
   const refreshConnectors = () => queryClient.invalidateQueries({ queryKey: queryKeys.connectors.root })
 
   const setEnabled = useMutation({
-    mutationFn: async (input: { id: string; enabled: boolean; updatedAt: string }) =>
-      updateConnector(input.id, { enabled: input.enabled }, input.updatedAt),
+    mutationFn: async (input: { id: string; enabled: boolean }) =>
+      updateConnector(input.id, { enabled: input.enabled }),
     onSuccess: refreshConnectors,
     onError: (error) => toast.error(error instanceof Error ? error.message : t('connectorUpdateFailed')),
   })
 
   const remove = useMutation({
-    mutationFn: (input: { id: string; updatedAt: string }) => deleteConnector(input.id, input.updatedAt),
+    mutationFn: (input: { id: string }) => deleteConnector(input.id),
     onSuccess: async () => {
       await refreshConnectors()
       toast.success(t('connectorDeleted'))
@@ -96,8 +96,8 @@ function ConnectorSettings() {
       syncing: sync.isPending && sync.variables === item.id,
       removing: remove.isPending && remove.variables?.id === item.id,
       onSync: () => sync.mutate(item.id),
-      onRemove: () => remove.mutate({ id: item.id, updatedAt: item.updatedAt }),
-      onEnabledChange: (enabled: boolean) => setEnabled.mutate({ id: item.id, enabled, updatedAt: item.updatedAt }),
+      onRemove: () => remove.mutate({ id: item.id }),
+      onEnabledChange: (enabled: boolean) => setEnabled.mutate({ id: item.id, enabled }),
     }
   }
 

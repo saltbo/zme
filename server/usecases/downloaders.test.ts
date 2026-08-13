@@ -54,7 +54,7 @@ const httpInput: CreateDownloadInput = {
   sourceType: 'http',
 }
 
-it('applies downloader mutations with the expected revision', async () => {
+it('applies downloader mutations against the latest record', async () => {
   const update = vi.fn(async () => downloader)
   const remove = vi.fn(async () => true)
   const deps = {
@@ -63,10 +63,10 @@ it('applies downloader mutations with the expected revision', async () => {
   } as never as Deps
   const input = { kind: 'zpan' as const, endpoint: 'https://zpan.test', credentials: {}, options: {}, enabled: true }
 
-  await expect(updateDownloader(deps, 'user-1', 'dl-1', input, 'revision-1')).resolves.toMatchObject({ id: 'dl-1' })
-  await expect(deleteDownloader(deps, 'user-1', 'dl-1', 'revision-2')).resolves.toBe(true)
-  expect(update).toHaveBeenCalledWith('user-1', 'dl-1', { ...input, description: 'ZPan' }, 'revision-1')
-  expect(remove).toHaveBeenCalledWith('user-1', 'dl-1', 'revision-2')
+  await expect(updateDownloader(deps, 'user-1', 'dl-1', input)).resolves.toMatchObject({ id: 'dl-1' })
+  await expect(deleteDownloader(deps, 'user-1', 'dl-1')).resolves.toBe(true)
+  expect(update).toHaveBeenCalledWith('user-1', 'dl-1', { ...input, description: 'ZPan' }, downloader.updatedAt)
+  expect(remove).toHaveBeenCalledWith('user-1', 'dl-1', downloader.updatedAt)
 })
 
 function createSubmitDeps(options: {

@@ -59,7 +59,7 @@ describe('searchIndexers', () => {
   })
 })
 
-it('applies indexer mutations with the expected revision', async () => {
+it('applies indexer mutations against the latest record', async () => {
   const update = vi.fn(async () => indexer)
   const remove = vi.fn(async () => true)
   const deps = { indexersRepo: { get: async () => indexer, update, delete: remove } } as never as Deps
@@ -71,14 +71,14 @@ it('applies indexer mutations with the expected revision', async () => {
     enabled: true,
   }
 
-  await expect(updateIndexer(deps, 'indexer-1', input, 'revision-1')).resolves.toMatchObject({ id: 'indexer-1' })
-  await expect(deleteIndexer(deps, 'indexer-1', 'revision-2')).resolves.toBe(true)
+  await expect(updateIndexer(deps, 'indexer-1', input)).resolves.toMatchObject({ id: 'indexer-1' })
+  await expect(deleteIndexer(deps, 'indexer-1')).resolves.toBe(true)
   expect(update).toHaveBeenCalledWith(
     'indexer-1',
     { ...input, description: indexer.description ?? undefined },
-    'revision-1',
+    indexer.updatedAt,
   )
-  expect(remove).toHaveBeenCalledWith('indexer-1', 'revision-2')
+  expect(remove).toHaveBeenCalledWith('indexer-1', indexer.updatedAt)
 })
 
 it('reports a failed Prowlarr health response', async () => {

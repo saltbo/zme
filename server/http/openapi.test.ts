@@ -1,6 +1,5 @@
 import { app } from '@server/app'
 import type { AppConfig } from '@server/config'
-import { API_VERSION } from '@server/config'
 import { describe, expect, it } from 'vitest'
 import { openapiDocument } from './openapi'
 import { AGENT_OPERATION_POLICIES, AGENT_SCOPES, agentScopeForRequest } from './resource-authorization'
@@ -43,12 +42,7 @@ describe('DPoP resource OpenAPI contract', () => {
   it('covers every concrete production API route and method', () => {
     const production = new Set(
       app.routes
-        .filter(
-          ({ method, path }) =>
-            method !== 'ALL' &&
-            (path === '/api' || path.startsWith('/api/')) &&
-            path !== '/api/music/tracks/:id/content',
-        )
+        .filter(({ method, path }) => method !== 'ALL' && (path === '/api' || path.startsWith('/api/')))
         .map(({ method, path }) => `${method.toLowerCase()} ${normalizePath(path.replace(/^\/api/, '') || '/')}`),
     )
     const documented = new Set(operations.map(({ method, path }) => `${method} ${normalizePath(path)}`))
@@ -75,12 +69,11 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(agentScopeForRequest('GET', '/library')).toBeNull()
   })
 
-  it('declares versioning, DPoP semantics, pagination, idempotency, and Problem Details', () => {
-    expect(document.info.version).toBe(API_VERSION)
+  it('declares DPoP semantics, pagination, idempotency, and Problem Details', () => {
+    expect(document.info.version).toBe('1.0.0')
     expect(document.servers).toEqual([{ url: config.resourceUrl }])
     expect(document.components.securitySchemes.oidcDpop.description).toMatch(/DPoP-bound/)
     expect(document.components.securitySchemes.oidcDpop['x-dpop-required']).toBe(true)
-    expect(document.components.parameters.ApiVersion.schema.const).toBe(API_VERSION)
     expect(document.components.parameters.IdempotencyKey.required).toBe(true)
     expect(document.components.parameters.Traceparent.required).toBe(false)
     expect(document.components.parameters.Tracestate.required).toBe(false)
@@ -149,14 +142,15 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(parameter(paths['/media-recommendations'].get, 'year').schema.maximum).toBe(new Date().getUTCFullYear() + 2)
   })
 
-  it('describes download lifecycle, audio, and entity concurrency semantically', () => {
+  it('describes download lifecycle and audio semantically', () => {
     expect(paths).not.toHaveProperty('/downloads/events')
     expect(paths).not.toHaveProperty('/music-download-tasks')
     expect(paths['/downloads/{downloadId}/suspension']).toHaveProperty('put')
     expect(paths['/downloads/{downloadId}/suspension']).toHaveProperty('delete')
     expect(paths['/downloads/{downloadId}/cancellation']).toHaveProperty('put')
 
-    expect(paths).not.toHaveProperty('/music/tracks/{id}/content')
+    expect(paths['/music/tracks/{id}/content']).toHaveProperty('get')
+    expect(paths['/music/tracks/{id}/content']).toHaveProperty('head')
 
     expect(parameter(paths['/movies/{id}'].get, 'id').schema).toEqual({ type: 'integer', minimum: 1 })
     expect(parameter(paths['/series/{id}/seasons/{seasonNumber}'].get, 'seasonNumber').schema).toEqual({
@@ -173,14 +167,14 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(paths['/downloaders'].post.requestBody?.content['application/json'].schema.$ref).toBe(
       '#/components/schemas/DownloaderInput',
     )
-    expect(paths['/downloaders/{id}'].patch.parameters).toContainEqual({
+    expect(paths['/downloaders/{id}'].patch.parameters).not.toContainEqual({
       $ref: '#/components/parameters/IfMatch',
     })
     expect(paths['/downloaders/{id}'].patch.requestBody?.content).toEqual({
       'application/merge-patch+json': { schema: { $ref: '#/components/schemas/DownloaderPatch' } },
     })
-    expect(paths['/downloaders/{id}'].patch.responses).toHaveProperty('412')
-    expect(paths['/downloaders/{id}'].patch.responses).toHaveProperty('428')
+    expect(paths['/downloaders/{id}'].patch.responses).not.toHaveProperty('412')
+    expect(paths['/downloaders/{id}'].patch.responses).not.toHaveProperty('428')
 
     for (const { operation } of operations) {
       for (const response of Object.values(operation.responses ?? {})) {

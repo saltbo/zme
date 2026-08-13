@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ZME Resource API",
-    "version": "2026-08-08",
+    "version": "1.0.0",
     "license": {
       "name": "AGPL-3.0-only",
       "identifier": "AGPL-3.0-only"
@@ -191,9 +191,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -218,9 +215,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -281,9 +275,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -320,9 +311,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -382,9 +370,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -485,9 +470,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -548,9 +530,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -587,9 +566,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -650,9 +626,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -686,9 +659,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -749,9 +719,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -795,9 +762,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -858,9 +822,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -904,9 +865,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -967,9 +925,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -1013,9 +968,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1076,9 +1028,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -1121,9 +1070,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1184,9 +1130,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -1230,9 +1173,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1293,9 +1233,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -1341,9 +1278,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1403,9 +1337,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -1480,9 +1411,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1543,9 +1471,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -1570,9 +1495,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1632,9 +1554,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -1699,9 +1618,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1769,9 +1685,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -1890,9 +1803,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -1953,9 +1863,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -1980,9 +1887,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2042,9 +1946,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -2121,9 +2022,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2184,9 +2082,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2202,9 +2097,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2265,9 +2157,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2292,9 +2181,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2363,9 +2249,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2390,9 +2273,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2453,9 +2333,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2483,9 +2360,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2546,9 +2420,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2573,9 +2444,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2634,9 +2502,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2661,9 +2526,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2724,9 +2586,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2751,9 +2610,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2822,9 +2678,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2849,9 +2702,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -2912,9 +2762,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -2930,9 +2777,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -3006,9 +2850,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3024,9 +2865,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -3085,9 +2923,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3103,9 +2938,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -3176,9 +3008,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3194,9 +3023,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -3257,9 +3083,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3275,9 +3098,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -3336,9 +3156,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3354,9 +3171,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -3430,9 +3244,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3448,9 +3259,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -3524,9 +3332,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3551,9 +3356,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -3614,9 +3416,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3641,9 +3440,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -3714,9 +3510,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3730,9 +3523,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -3744,12 +3534,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -3775,17 +3559,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -3824,9 +3602,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3840,9 +3615,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -3854,9 +3626,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             }
           },
@@ -3875,17 +3644,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -3916,9 +3679,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -3937,9 +3697,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -4013,9 +3770,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4040,9 +3794,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -4103,9 +3854,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4130,9 +3878,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -4191,9 +3936,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4218,9 +3960,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -4291,9 +4030,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4309,9 +4045,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -4371,9 +4104,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4389,12 +4119,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -4469,9 +4193,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4496,12 +4217,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -4561,9 +4276,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4577,9 +4289,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -4591,12 +4300,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -4622,17 +4325,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -4672,9 +4369,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4688,9 +4382,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -4702,9 +4393,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             }
           },
@@ -4723,17 +4411,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -4765,9 +4447,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4792,9 +4471,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -4854,9 +4530,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4881,9 +4554,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -4948,9 +4618,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -4984,9 +4651,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -5048,9 +4712,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5066,9 +4727,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -5128,9 +4786,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5146,12 +4801,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -5226,9 +4875,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5253,12 +4899,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -5318,9 +4958,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5334,9 +4971,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -5348,12 +4982,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -5379,17 +5007,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -5429,9 +5051,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5445,9 +5064,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -5459,9 +5075,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             }
           },
@@ -5480,17 +5093,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -5522,9 +5129,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5549,9 +5153,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -5611,9 +5212,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5638,9 +5236,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -5705,9 +5300,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5741,9 +5333,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -5810,9 +5399,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5828,9 +5414,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -5889,9 +5472,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -5907,12 +5487,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -5991,9 +5565,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6018,9 +5589,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -6079,9 +5647,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6095,9 +5660,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -6109,12 +5671,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
-              },
-              "ETag": {
-                "$ref": "#/components/headers/ETag"
               }
             },
             "content": {
@@ -6140,17 +5696,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -6189,9 +5739,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6205,9 +5752,6 @@
               "type": "string",
               "minLength": 1
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -6219,9 +5763,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             }
           },
@@ -6240,17 +5781,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -6281,9 +5816,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6308,9 +5840,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -6369,9 +5898,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6396,9 +5922,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -6462,9 +5985,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6498,9 +6018,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -6547,6 +6064,126 @@
         }
       }
     },
+    "/music/tracks/{id}/content": {
+      "get": {
+        "operationId": "getSignedMusicContent",
+        "summary": "Read music track content with a one-time key",
+        "tags": [
+          "downloads"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Music content returned directly",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "307": {
+            "description": "Temporary redirect to music content",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PublicBadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/PublicInternalError"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headSignedMusicContent",
+        "summary": "Inspect music track content with a one-time key",
+        "tags": [
+          "downloads"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 256
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Music content metadata",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PublicBadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/PublicInternalError"
+          }
+        }
+      }
+    },
     "/media": {
       "get": {
         "operationId": "listMedia",
@@ -6565,9 +6202,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -6611,9 +6245,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -6678,9 +6309,6 @@
           }
         ],
         "parameters": [
-          {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
           {
             "$ref": "#/components/parameters/Traceparent"
           },
@@ -6765,9 +6393,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -6833,9 +6458,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6864,9 +6486,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -6930,9 +6549,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -6961,9 +6577,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -7032,9 +6645,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7059,9 +6669,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -7125,9 +6732,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7141,9 +6745,6 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -7155,9 +6756,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             }
           },
@@ -7176,17 +6774,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -7222,9 +6814,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7249,9 +6838,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -7315,9 +6901,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7331,12 +6914,27 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
+          "200": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadSuspension"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Resource created",
             "headers": {
@@ -7345,9 +6943,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -7376,17 +6971,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -7420,9 +7009,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7436,9 +7022,6 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
@@ -7450,9 +7033,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             }
           },
@@ -7471,17 +7051,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -7517,9 +7091,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7544,9 +7115,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               }
             },
             "content": {
@@ -7610,9 +7178,6 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/ApiVersion"
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
@@ -7626,12 +7191,27 @@
               "type": "string",
               "format": "uuid"
             }
-          },
-          {
-            "$ref": "#/components/parameters/IfMatch"
           }
         ],
         "responses": {
+          "200": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadCancellation"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Resource created",
             "headers": {
@@ -7640,9 +7220,6 @@
               },
               "Link": {
                 "$ref": "#/components/headers/Link"
-              },
-              "API-Version": {
-                "$ref": "#/components/headers/ApiVersion"
               },
               "Location": {
                 "$ref": "#/components/headers/Location"
@@ -7671,17 +7248,11 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -7715,15 +7286,6 @@
       }
     },
     "parameters": {
-      "ApiVersion": {
-        "name": "API-Version",
-        "in": "header",
-        "required": true,
-        "schema": {
-          "type": "string",
-          "const": "2026-08-08"
-        }
-      },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
@@ -7732,16 +7294,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200
-        }
-      },
-      "IfMatch": {
-        "name": "If-Match",
-        "in": "header",
-        "required": true,
-        "description": "Strong ETag returned by the most recent read or write of this resource.",
-        "schema": {
-          "type": "string",
-          "pattern": "^\".+\"$"
         }
       },
       "Traceparent": {
@@ -7792,12 +7344,6 @@
           "format": "uuid"
         }
       },
-      "ApiVersion": {
-        "schema": {
-          "type": "string",
-          "const": "2026-08-08"
-        }
-      },
       "Location": {
         "schema": {
           "type": "string",
@@ -7807,12 +7353,6 @@
       "Link": {
         "schema": {
           "type": "string"
-        }
-      },
-      "ETag": {
-        "schema": {
-          "type": "string",
-          "pattern": "^\".+\"$"
         }
       },
       "WwwAuthenticate": {
@@ -7833,9 +7373,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -7854,9 +7391,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           },
           "WWW-Authenticate": {
             "$ref": "#/components/headers/WwwAuthenticate"
@@ -7879,9 +7413,6 @@
           "Link": {
             "$ref": "#/components/headers/Link"
           },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
-          },
           "WWW-Authenticate": {
             "$ref": "#/components/headers/WwwAuthenticate"
           }
@@ -7902,9 +7433,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -7923,9 +7451,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -7944,9 +7469,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -7965,9 +7487,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -7986,9 +7505,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -8007,51 +7523,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
-          }
-        },
-        "content": {
-          "application/problem+json": {
-            "schema": {
-              "$ref": "#/components/schemas/Problem"
-            }
-          }
-        }
-      },
-      "PreconditionFailed": {
-        "description": "The resource changed after it was read",
-        "headers": {
-          "Request-Id": {
-            "$ref": "#/components/headers/RequestId"
-          },
-          "Link": {
-            "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
-          }
-        },
-        "content": {
-          "application/problem+json": {
-            "schema": {
-              "$ref": "#/components/schemas/Problem"
-            }
-          }
-        }
-      },
-      "PreconditionRequired": {
-        "description": "If-Match is required for this mutation",
-        "headers": {
-          "Request-Id": {
-            "$ref": "#/components/headers/RequestId"
-          },
-          "Link": {
-            "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -8070,9 +7541,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -8091,9 +7559,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -8112,9 +7577,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {
@@ -8133,9 +7595,6 @@
           },
           "Link": {
             "$ref": "#/components/headers/Link"
-          },
-          "API-Version": {
-            "$ref": "#/components/headers/ApiVersion"
           }
         },
         "content": {

@@ -26,17 +26,15 @@ export async function saveDoubanConnector(input: DoubanConnectorInput) {
   })
 }
 
-export async function updateConnector(id: string, input: { enabled: boolean }, expectedUpdatedAt: string) {
+export async function updateConnector(id: string, input: { enabled: boolean }) {
   return apiRequest<{ item: ConnectorSummary }>(`/api/connectors/${id}`, 'Failed to update connector.', {
     ...mergePatch(input),
-    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteConnector(id: string, expectedUpdatedAt: string) {
+export async function deleteConnector(id: string) {
   return apiRequest<void>(`/api/connectors/${id}`, 'Failed to delete connector.', {
     method: 'DELETE',
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 

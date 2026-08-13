@@ -35,7 +35,6 @@ export async function updateDownloader(
   userId: string,
   id: string,
   input: Partial<DownloaderInput>,
-  expectedUpdatedAt: string,
 ): Promise<DownloaderSummary | null> {
   const current = await deps.downloadersRepo.get(userId, id)
   if (!current) return null
@@ -47,18 +46,15 @@ export async function updateDownloader(
     options: input.options ?? current.config.options,
     enabled: input.enabled ?? current.enabled,
   }
-  const record = await deps.downloadersRepo.update(userId, id, merged, expectedUpdatedAt)
+  const record = await deps.downloadersRepo.update(userId, id, merged, current.updatedAt)
   if (!record) throw new StaleWriteError()
   return record ? toSummary(deps, record) : null
 }
 
-export async function deleteDownloader(
-  deps: Deps,
-  userId: string,
-  id: string,
-  expectedUpdatedAt: string,
-): Promise<boolean> {
-  const deleted = await deps.downloadersRepo.delete(userId, id, expectedUpdatedAt)
+export async function deleteDownloader(deps: Deps, userId: string, id: string): Promise<boolean> {
+  const current = await deps.downloadersRepo.get(userId, id)
+  if (!current) return false
+  const deleted = await deps.downloadersRepo.delete(userId, id, current.updatedAt)
   if (!deleted && (await deps.downloadersRepo.get(userId, id))) throw new StaleWriteError()
   return deleted
 }

@@ -17,7 +17,7 @@ import type { DownloadSearchTarget, IndexerSearchItem, ReleaseCandidate, Release
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protocol'
+import { requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
 const indexerSearchQuerySchema = z.object({
@@ -95,14 +95,12 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
     const { id } = c.req.valid('param')
     const item = await getIndexer(c.get('deps'), id)
     if (!item) return c.json({ error: 'Indexer not found.' }, 404)
-    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item })
   })
 
   routes.post('/indexers', zValidator('json', indexerSchema), async (c) => {
     const item = await createIndexer(c.get('deps'), c.req.valid('json'))
     c.header('Location', `/api/indexers/${item.id}`)
-    c.header('ETag', entityTag(item.updatedAt))
     return c.json({ item }, 201)
   })
 
@@ -114,20 +112,15 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
       const unsupported = requireMergePatch(c)
       if (unsupported) return unsupported
       const { id } = c.req.valid('param')
-      const expectedUpdatedAt = ifMatchRevision(c)
-      if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-      const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'), expectedUpdatedAt)
+      const item = await updateIndexer(c.get('deps'), id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Indexer not found.' }, 404)
-      c.header('ETag', entityTag(item.updatedAt))
       return c.json({ item })
     },
   )
 
   routes.delete('/indexers/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const expectedUpdatedAt = ifMatchRevision(c)
-    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-    const deleted = await deleteIndexer(c.get('deps'), id, expectedUpdatedAt)
+    const deleted = await deleteIndexer(c.get('deps'), id)
     if (!deleted) return c.json({ error: 'Indexer not found.' }, 404)
     return c.body(null, 204)
   })

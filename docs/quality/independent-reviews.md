@@ -12,7 +12,7 @@ Resolved findings:
 - Access-token and DPoP-proof failures have distinct credential error classes and challenges.
 - Concurrent idempotent creates use atomic insert-or-load rather than leaking unique-constraint failures.
 - Public signed music URLs carry API versioning, display/session responses are not cached, inputs/results are bounded, and public task errors are stable.
-- The complete browser-session API is present in OpenAPI with operation-specific request/response schemas, Problem Details, idempotency, ETags, and precondition failures.
+- The complete browser-session API is present in OpenAPI with operation-specific request/response schemas, Problem Details, and idempotency.
 - Download tasks reconcile exact downstream progress, terminal result objects, and monotonic revisions.
 - The upgrade fixture inventories every direct user-owned table and every transitive ownership edge without deleting or silently reassigning data.
 - Connector-sync jobs now have per-user idempotency, crash-recovery leases, stable public errors, and a composite database ownership constraint.

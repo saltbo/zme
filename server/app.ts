@@ -15,7 +15,7 @@ import { requireAdminMiddleware, requireAuthMiddleware } from './http/middleware
 import { registerMusicRoutes } from './http/music'
 import { registerPublicMusicDownloadRoutes } from './http/music-downloads'
 import { registerMusicLibraryRoutes } from './http/music-library'
-import { apiVersionMiddleware, normalizeProblemMiddleware, problem, requestBoundaryMiddleware } from './http/protocol'
+import { normalizeProblemMiddleware, problem, requestBoundaryMiddleware } from './http/protocol'
 import { registerPublicContractRoutes, registerResourceApiRoutes } from './http/resource-api'
 import { PROTECTED_RESOURCE_METADATA_PATH, protectedResourceMetadata } from './http/resource-authorization'
 import { StaleWriteError } from './usecases/ports'
@@ -35,7 +35,6 @@ const routes = new Hono<AppEnv>()
 routes.get('/', (c) => c.json({ resource: c.req.url, openapi: `${new URL(c.req.url).origin}/api/openapi.json` }))
 routes.get('/health', (c) => c.json({ ok: true, name: 'zme' }))
 registerPublicContractRoutes(routes)
-routes.use('*', apiVersionMiddleware)
 registerPublicMusicDownloadRoutes(routes)
 routes.use('*', requireAuthMiddleware)
 routes.use('/indexers/*', requireAdminMiddleware)

@@ -36,22 +36,24 @@ const connectorRecord: ConnectorRecord = {
 
 afterEach(() => vi.restoreAllMocks())
 
-it('applies connector mutations with the expected revision', async () => {
+it('applies connector mutations against the latest record', async () => {
   const updateState = vi.fn(async () => ({ ...connectorRecord, enabled: false }))
   const remove = vi.fn(async () => true)
   const deps = {
-    connectorsRepo: { updateState, delete: remove },
+    connectorsRepo: {
+      get: async () => ({ ...connectorRecord, updatedAt: 'revision-current' }),
+      updateState,
+      delete: remove,
+    },
     musicConnectors: new Map(),
   } as never as Deps
 
-  await expect(updateConnector(deps, 'user-1', 'connector-1', { enabled: false }, 'revision-1')).resolves.toMatchObject(
-    {
-      enabled: false,
-    },
-  )
-  await expect(deleteConnector(deps, 'user-1', 'connector-1', 'revision-2')).resolves.toBe(true)
-  expect(updateState).toHaveBeenCalledWith('user-1', 'connector-1', { enabled: false }, 'revision-1')
-  expect(remove).toHaveBeenCalledWith('user-1', 'connector-1', 'revision-2')
+  await expect(updateConnector(deps, 'user-1', 'connector-1', { enabled: false })).resolves.toMatchObject({
+    enabled: false,
+  })
+  await expect(deleteConnector(deps, 'user-1', 'connector-1')).resolves.toBe(true)
+  expect(updateState).toHaveBeenCalledWith('user-1', 'connector-1', { enabled: false }, 'revision-current')
+  expect(remove).toHaveBeenCalledWith('user-1', 'connector-1', 'revision-current')
 })
 
 function neteaseModule(input: { auth?: Record<string, unknown>; session?: Record<string, unknown> } = {}) {

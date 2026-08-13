@@ -21,7 +21,7 @@ import {
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem, setPageLinks } from './protocol'
+import { problem, setPageLinks } from './protocol'
 
 const createSchema = z.object({
   resourceRef: z.string().trim().min(1).max(8_000),
@@ -73,7 +73,6 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     try {
       const item = await createDownload(c.get('deps'), c.env, c.get('principal').userId, key, parsed.data)
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}`)
-      setEntityHeaders(c, item.updatedAt)
       return c.json(await representation(c, item), 201)
     } catch (error) {
       return resourceError(c, error)
@@ -83,15 +82,12 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloads/:id', async (c) => {
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
-    setEntityHeaders(c, item.updatedAt)
     return c.json(await representation(c, item))
   })
 
   routes.delete('/downloads/:id', async (c) => {
-    const revision = requireIfMatch(c)
-    if (revision instanceof Response) return revision
     try {
-      await deleteDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      await deleteDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
       return c.body(null, 204)
     } catch (error) {
       return resourceError(c, error)
@@ -102,18 +98,14 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
     if (!item.suspensionCreatedAt) return problem(c, 404, 'not-found', 'Download suspension not found')
-    setEntityHeaders(c, item.updatedAt)
     return c.json(suspensionRepresentation(c, item))
   })
 
   routes.put('/downloads/:id/suspension', async (c) => {
-    const revision = requireIfMatch(c)
-    if (revision instanceof Response) return revision
     try {
       const existing = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
-      const item = await suspendDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      const item = await suspendDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}/suspension`)
-      setEntityHeaders(c, item.updatedAt)
       return existing?.suspensionCreatedAt
         ? c.json(suspensionRepresentation(c, item), 200)
         : c.json(suspensionRepresentation(c, item), 201)
@@ -123,11 +115,8 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.delete('/downloads/:id/suspension', async (c) => {
-    const revision = requireIfMatch(c)
-    if (revision instanceof Response) return revision
     try {
-      const item = await resumeDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
-      setEntityHeaders(c, item.updatedAt)
+      await resumeDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
       return c.body(null, 204)
     } catch (error) {
       return resourceError(c, error)
@@ -138,18 +127,14 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
     if (!item.cancellationCreatedAt) return problem(c, 404, 'not-found', 'Download cancellation not found')
-    setEntityHeaders(c, item.updatedAt)
     return c.json(cancellationRepresentation(c, item))
   })
 
   routes.put('/downloads/:id/cancellation', async (c) => {
-    const revision = requireIfMatch(c)
-    if (revision instanceof Response) return revision
     try {
       const existing = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
-      const item = await cancelDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'), revision)
+      const item = await cancelDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}/cancellation`)
-      setEntityHeaders(c, item.updatedAt)
       return existing?.cancellationCreatedAt
         ? c.json(cancellationRepresentation(c, item), 200)
         : c.json(cancellationRepresentation(c, item), 201)
@@ -157,11 +142,6 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
       return resourceError(c, error)
     }
   })
-}
-
-function setEntityHeaders(c: Context<AppEnv>, updatedAt: string) {
-  c.header('ETag', entityTag(updatedAt))
-  c.header('Cache-Control', 'private, no-store, no-transform')
 }
 
 async function representation(c: Context<AppEnv>, item: DownloadRecord) {
@@ -225,11 +205,6 @@ function cancellationRepresentation(c: Context<AppEnv>, item: DownloadRecord) {
     createdAt: item.cancellationCreatedAt,
     links: { self: `${new URL(c.req.url).origin}/api/downloads/${item.id}/cancellation` },
   }
-}
-
-function requireIfMatch(c: Context<AppEnv>): string | Response {
-  const revision = ifMatchRevision(c)
-  return revision ?? problem(c, 428, 'precondition-required', 'If-Match is required')
 }
 
 function resourceError(c: Context<AppEnv>, error: unknown): Response {

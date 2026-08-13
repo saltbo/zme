@@ -1,5 +1,3 @@
-import { API_VERSION } from '@shared/api'
-
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -25,7 +23,6 @@ export async function apiRequest<T>(path: string, fallbackMessage: string, init?
     ...init,
     credentials: 'include',
     headers: {
-      'API-Version': API_VERSION,
       ...(init?.body ? { 'content-type': 'application/json' } : {}),
       ...init?.headers,
     },

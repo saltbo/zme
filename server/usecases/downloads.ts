@@ -246,49 +246,31 @@ export async function recoverDownloadReconciliations(deps: Deps): Promise<void> 
   }
 }
 
-export async function suspendDownload(
-  deps: Deps,
-  userId: string,
-  id: string,
-  expectedUpdatedAt: string,
-): Promise<DownloadRecord> {
+export async function suspendDownload(deps: Deps, userId: string, id: string): Promise<DownloadRecord> {
   const current = await ownedDownload(deps, userId, id)
-  if (current.updatedAt !== expectedUpdatedAt) throw new StaleWriteError()
   if (current.suspensionCreatedAt) return current
-  return setManagedStatus(deps, userId, id, expectedUpdatedAt, 'paused', {
+  return setManagedStatus(deps, userId, id, 'paused', {
     suspensionCreatedAt: new Date().toISOString(),
   })
 }
 
-export async function resumeDownload(
-  deps: Deps,
-  userId: string,
-  id: string,
-  expectedUpdatedAt: string,
-): Promise<DownloadRecord> {
+export async function resumeDownload(deps: Deps, userId: string, id: string): Promise<DownloadRecord> {
   const current = await ownedDownload(deps, userId, id)
-  if (current.updatedAt !== expectedUpdatedAt) throw new StaleWriteError()
   if (!current.suspensionCreatedAt) throw new ResourceNotFoundError('Download suspension not found.')
-  return setManagedStatus(deps, userId, id, expectedUpdatedAt, 'queued', {
+  return setManagedStatus(deps, userId, id, 'queued', {
     suspensionCreatedAt: null,
   })
 }
 
-export async function cancelDownload(
-  deps: Deps,
-  userId: string,
-  id: string,
-  expectedUpdatedAt: string,
-): Promise<DownloadRecord> {
+export async function cancelDownload(deps: Deps, userId: string, id: string): Promise<DownloadRecord> {
   const current = await ownedDownload(deps, userId, id)
-  if (current.updatedAt !== expectedUpdatedAt) throw new StaleWriteError()
   if (current.cancellationCreatedAt) return current
-  return setManagedStatus(deps, userId, id, expectedUpdatedAt, 'canceled', {
+  return setManagedStatus(deps, userId, id, 'canceled', {
     cancellationCreatedAt: new Date().toISOString(),
   })
 }
 
-export async function deleteDownload(deps: Deps, userId: string, id: string, expectedUpdatedAt: string): Promise<void> {
+export async function deleteDownload(deps: Deps, userId: string, id: string): Promise<void> {
   const current = await ownedDownload(deps, userId, id)
   if (!['completed', 'failed', 'canceled'].includes(current.status)) {
     throw new DownloadNotTerminalError('Only a terminal download can be deleted.')
@@ -298,19 +280,17 @@ export async function deleteDownload(deps: Deps, userId: string, id: string, exp
     if (!gateway.delete) throw new DownloadManagementUnsupportedError('Download management is unsupported.')
     await gateway.delete(downloader.config, current.externalTaskId)
   }
-  if (!(await deps.downloadsRepo.delete(userId, id, expectedUpdatedAt))) throw new StaleWriteError()
+  if (!(await deps.downloadsRepo.delete(userId, id, current.updatedAt))) throw new StaleWriteError()
 }
 
 async function setManagedStatus(
   deps: Deps,
   userId: string,
   id: string,
-  expectedUpdatedAt: string,
   downstreamStatus: 'paused' | 'queued' | 'canceled',
   patch: Partial<DownloadRecord>,
 ): Promise<DownloadRecord> {
   const current = await ownedDownload(deps, userId, id)
-  if (current.updatedAt !== expectedUpdatedAt) throw new StaleWriteError()
   const { gateway, downloader } = await managedGateway(deps, userId, current)
   if (!gateway.setStatus || !current.externalTaskId)
     throw new DownloadManagementUnsupportedError('Download management is unsupported.')
@@ -329,12 +309,28 @@ async function setManagedStatus(
   } catch (error) {
     throw new ResourceUpstreamError(error instanceof Error ? error.message : 'Downloader is unavailable.')
   }
-  const updated = await deps.downloadsRepo.update(userId, id, expectedUpdatedAt, {
+  const update = {
     ...patch,
     status: snapshot.status,
+    stage: snapshot.stage ?? null,
     downstreamStatus: snapshot.status,
+    downstreamRevision: snapshot.downstreamRevision ?? null,
+    downloadedBytes: snapshot.downloadedBytes,
+    storageUploadedBytes: snapshot.storageUploadedBytes,
+    totalBytes: snapshot.totalBytes,
+    downloadBps: snapshot.downloadBps,
+    storageUploadBps: snapshot.storageUploadBps,
+    resultObjectId: snapshot.outputObjectId ?? null,
+    resultName: isTerminal(snapshot.status) ? snapshot.name : null,
+    resultTargetFolder: isTerminal(snapshot.status) ? snapshot.targetFolder : null,
+    error: snapshot.errorMessage,
     completedAt: isTerminal(snapshot.status) ? new Date().toISOString() : null,
-  })
+  }
+  let updated = await deps.downloadsRepo.update(userId, id, current.updatedAt, update)
+  if (!updated) {
+    const latest = await ownedDownload(deps, userId, id)
+    updated = await deps.downloadsRepo.update(userId, id, latest.updatedAt, update)
+  }
   if (!updated) throw new StaleWriteError()
   if (updated.externalTaskId && !isTerminal(updated.status)) {
     await deps.downloadReconciliationQueue?.enqueue({ userId: updated.userId, downloadId: updated.id }, 5)

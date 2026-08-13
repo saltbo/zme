@@ -17,17 +17,15 @@ export async function getMediaSource(id: string) {
   return apiRequest<{ item: MediaSourceDetails }>(`/api/media-sources/${id}`, 'Failed to load media source.')
 }
 
-export async function updateMediaSource(id: string, input: MediaSourceInput, expectedUpdatedAt: string) {
+export async function updateMediaSource(id: string, input: MediaSourceInput) {
   return apiRequest<{ item: MediaSourceSummary }>(`/api/media-sources/${id}`, 'Failed to update media source.', {
     ...mergePatch(input),
-    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteMediaSource(id: string, expectedUpdatedAt: string) {
+export async function deleteMediaSource(id: string) {
   return apiRequest<void>(`/api/media-sources/${id}`, 'Failed to delete media source.', {
     method: 'DELETE',
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 

@@ -5,29 +5,41 @@ import type { DownloadRecord } from './ports'
 import { DownloadManagementUnsupportedError, DownloadNotTerminalError } from './resource-errors'
 
 describe('unified download management', () => {
-  it('pauses a ZPan task through an optimistic child-resource write', async () => {
+  it('pauses a ZPan task without a caller-supplied revision', async () => {
     const current = download()
     const setStatus = vi.fn(async () => snapshot('paused'))
     const deps = managedDeps(current, { setStatus })
 
-    await expect(suspendDownload(deps, current.userId, current.id, current.updatedAt)).resolves.toMatchObject({
+    await expect(suspendDownload(deps, current.userId, current.id)).resolves.toMatchObject({
       status: 'paused',
       suspensionCreatedAt: expect.any(String),
     })
     expect(setStatus).toHaveBeenCalledWith(expect.anything(), expect.anything(), current.externalTaskId, 'paused')
   })
 
+  it('retries the local write after reconciliation changes the download revision', async () => {
+    const current = download()
+    const update = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...current, status: 'paused', updatedAt: '2026-08-05T00:02:00.000Z' })
+    const deps = managedDeps(current, { setStatus: async () => snapshot('paused') }, update)
+
+    await expect(suspendDownload(deps, current.userId, current.id)).resolves.toMatchObject({ status: 'paused' })
+    expect(update).toHaveBeenCalledTimes(2)
+  })
+
   it('rejects deletion until the download is terminal', async () => {
     const current = download()
-    await expect(
-      deleteDownload(managedDeps(current), current.userId, current.id, current.updatedAt),
-    ).rejects.toBeInstanceOf(DownloadNotTerminalError)
+    await expect(deleteDownload(managedDeps(current), current.userId, current.id)).rejects.toBeInstanceOf(
+      DownloadNotTerminalError,
+    )
   })
 
   it('rejects management for a non-ZPan downloader', async () => {
     const current = download()
     await expect(
-      suspendDownload(managedDeps(current, {}, undefined, 'aria2'), current.userId, current.id, current.updatedAt),
+      suspendDownload(managedDeps(current, {}, undefined, 'aria2'), current.userId, current.id),
     ).rejects.toBeInstanceOf(DownloadManagementUnsupportedError)
   })
 

@@ -1,5 +1,4 @@
 import type { AppConfig } from '@server/config'
-import { API_VERSION } from '@server/config'
 import { agentScopeForOperation } from './resource-authorization'
 
 const secured = (operationId: string) => [{ oidcSession: [] }, { oidcDpop: [agentScopeForOperation(operationId)] }]
@@ -7,7 +6,7 @@ const traceParameters = [
   { $ref: '#/components/parameters/Traceparent' },
   { $ref: '#/components/parameters/Tracestate' },
 ]
-const parameters = [{ $ref: '#/components/parameters/ApiVersion' }, ...traceParameters]
+const parameters = traceParameters
 const errors = {
   '400': { $ref: '#/components/responses/BadRequest' },
   '401': { $ref: '#/components/responses/Unauthorized' },
@@ -43,7 +42,7 @@ export function openapiDocument(config: AppConfig) {
     openapi: '3.1.0',
     info: {
       title: 'ZME Resource API',
-      version: API_VERSION,
+      version: '1.0.0',
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
       description:
         'Resource-oriented media discovery, ephemeral release search, and download API. Local roles and resource ownership further restrict every operation.',
@@ -60,6 +59,7 @@ export function openapiDocument(config: AppConfig) {
     ],
     paths: {
       ...sessionPaths,
+      '/music/tracks/{id}/content': musicContentPath(),
       '/downloaders': {
         ...sessionPaths['/downloaders'],
         get: {
@@ -155,24 +155,11 @@ export function openapiDocument(config: AppConfig) {
         },
       },
       parameters: {
-        ApiVersion: {
-          name: 'API-Version',
-          in: 'header',
-          required: true,
-          schema: { type: 'string', const: API_VERSION },
-        },
         IdempotencyKey: {
           name: 'Idempotency-Key',
           in: 'header',
           required: true,
           schema: { type: 'string', minLength: 1, maxLength: 200 },
-        },
-        IfMatch: {
-          name: 'If-Match',
-          in: 'header',
-          required: true,
-          description: 'Strong ETag returned by the most recent read or write of this resource.',
-          schema: { type: 'string', pattern: '^".+"$' },
         },
         Traceparent: {
           name: 'traceparent',
@@ -193,10 +180,8 @@ export function openapiDocument(config: AppConfig) {
       },
       headers: {
         RequestId: { schema: { type: 'string', format: 'uuid' } },
-        ApiVersion: { schema: { type: 'string', const: API_VERSION } },
         Location: { schema: { type: 'string', format: 'uri' } },
         Link: { schema: { type: 'string' } },
-        ETag: { schema: { type: 'string', pattern: '^".+"$' } },
         WwwAuthenticate: {
           description:
             'DPoP challenge with supported proof algorithms and, when applicable, a token, proof, or scope error.',
@@ -214,14 +199,12 @@ export function openapiDocument(config: AppConfig) {
         Conflict: problemResponse('Resource conflict'),
         UnsupportedMediaType: problemResponse('Request media type is not supported'),
         ValidationError: problemResponse('Request validation failed'),
-        PreconditionFailed: problemResponse('The resource changed after it was read'),
-        PreconditionRequired: problemResponse('If-Match is required for this mutation'),
         TooManyRequests: problemResponse('The upstream or application rate limit was exceeded'),
         BadGateway: problemResponse('An upstream service could not complete the request'),
         ServiceUnavailable: problemResponse('A required service is not configured or is unavailable'),
         InternalError: problemResponse('Unexpected server failure'),
-        PublicBadRequest: problemResponse('Malformed public request', false, false),
-        PublicInternalError: problemResponse('Unexpected server failure', false, false),
+        PublicBadRequest: problemResponse('Malformed public request'),
+        PublicInternalError: problemResponse('Unexpected server failure'),
       },
       schemas: schemas(),
     },
@@ -400,8 +383,6 @@ function sessionApiPaths() {
     const security = policy === 'public' ? [] : [{ oidcSession: [] }]
     const successStatus = sessionSuccessStatus(operationId, method)
     const noContent = successStatus === '204'
-    const optimisticResource = /^\/(connectors|downloaders|indexers|media-sources)\/\{id\}$/.test(path)
-    const optimisticMutation = optimisticResource && (method === 'patch' || method === 'delete')
     const operation: Record<string, unknown> = {
       operationId,
       summary,
@@ -412,22 +393,11 @@ function sessionApiPaths() {
         ...pathParameters,
         ...sessionQueryParameters(operationId),
         ...(operationId === 'createConnectorSyncJob' ? [{ $ref: '#/components/parameters/IdempotencyKey' }] : []),
-        ...(optimisticMutation ? [{ $ref: '#/components/parameters/IfMatch' }] : []),
       ],
       responses: {
         [successStatus]: noContent
           ? { description: 'Resource deleted', headers: headers() }
-          : sessionSuccessResponse(
-              operationId,
-              optimisticResource || (method === 'post' && /^\/(downloaders|indexers|media-sources)$/.test(path)),
-              successStatus === '201',
-            ),
-        ...(optimisticMutation
-          ? {
-              '412': { $ref: '#/components/responses/PreconditionFailed' },
-              '428': { $ref: '#/components/responses/PreconditionRequired' },
-            }
-          : {}),
+          : sessionSuccessResponse(operationId, successStatus === '201'),
         ...(policy === 'public' ? publicErrors : sessionErrors),
       },
     }
@@ -553,7 +523,7 @@ function sessionRequestSchema(operationId: string) {
   return sessionRequestSchemaByOperation[operationId]
 }
 
-function sessionSuccessResponse(operationId: string, entityTagged: boolean, created: boolean) {
+function sessionSuccessResponse(operationId: string, created: boolean) {
   const name = sessionResponseSchemaByOperation[operationId]
   if (!name) throw new Error(`Missing OpenAPI response schema for ${operationId}`)
   const ref = `#/components/schemas/${name}`
@@ -567,7 +537,7 @@ function sessionSuccessResponse(operationId: string, entityTagged: boolean, crea
   if (['getResourceServer', 'getServiceHealth', 'getOpenApiDocument'].includes(operationId)) {
     return publicSuccess(ref)
   }
-  const response = entityTagged ? successWithEntityTag(ref) : success(ref)
+  const response = success(ref)
   return created
     ? { ...response, headers: { ...response.headers, Location: { $ref: '#/components/headers/Location' } } }
     : response
@@ -725,14 +695,12 @@ function managedDownloadOperation(operationId: string, successStatus: '200' | '2
     summary: operationId,
     tags: ['downloads'],
     security: secured(operationId),
-    parameters: [...parameters, pathParameter('downloadId'), { $ref: '#/components/parameters/IfMatch' }],
+    parameters: [...parameters, pathParameter('downloadId')],
     responses: {
       [successStatus]:
         successStatus === '204'
           ? { description: 'Resource deleted', headers: headers() }
           : success('#/components/schemas/Download'),
-      '412': { $ref: '#/components/responses/PreconditionFailed' },
-      '428': { $ref: '#/components/responses/PreconditionRequired' },
       ...errors,
     },
   }
@@ -750,19 +718,53 @@ function managedSingletonPath(schema: 'DownloadSuspension' | 'DownloadCancellati
     put: {
       ...managedDownloadOperation(`create${schema}`, '200'),
       responses: {
+        '200': success(`#/components/schemas/${schema}`),
         '201': {
           ...success(`#/components/schemas/${schema}`),
           description: 'Resource created',
           headers: { ...headers(), Location: { $ref: '#/components/headers/Location' } },
         },
-        '412': { $ref: '#/components/responses/PreconditionFailed' },
-        '428': { $ref: '#/components/responses/PreconditionRequired' },
         ...errors,
       },
     },
   } as Record<string, object>
   if (removable) path.delete = managedDownloadOperation('deleteDownloadSuspension', '204')
   return path
+}
+function musicContentPath() {
+  const parameters = [
+    pathParameter('id'),
+    { name: 'key', in: 'query', required: true, schema: { type: 'string', minLength: 32, maxLength: 256 } },
+  ]
+  return {
+    get: {
+      operationId: 'getSignedMusicContent',
+      summary: 'Read music track content with a one-time key',
+      tags: ['downloads'],
+      security: [],
+      parameters,
+      responses: {
+        '200': {
+          description: 'Music content returned directly',
+          headers: headers(),
+          content: { 'audio/mpeg': { schema: { type: 'string', format: 'binary' } } },
+        },
+        '307': {
+          description: 'Temporary redirect to music content',
+          headers: { ...headers(), Location: { $ref: '#/components/headers/Location' } },
+        },
+        ...publicErrors,
+      },
+    },
+    head: {
+      operationId: 'headSignedMusicContent',
+      summary: 'Inspect music track content with a one-time key',
+      tags: ['downloads'],
+      security: [],
+      parameters,
+      responses: { '200': { description: 'Music content metadata', headers: headers() }, ...publicErrors },
+    },
+  }
 }
 function pathParameter(name: string, schema: object = { type: 'string', format: 'uuid' }) {
   return { name, in: 'path', required: true, schema }
@@ -777,7 +779,7 @@ function baseHeaders() {
   }
 }
 function headers() {
-  return { ...baseHeaders(), 'API-Version': { $ref: '#/components/headers/ApiVersion' } }
+  return baseHeaders()
 }
 function success(schema: string) {
   return { description: 'Successful response', headers: headers(), content: json({ $ref: schema }) }
@@ -785,18 +787,11 @@ function success(schema: string) {
 function publicSuccess(schema: string) {
   return { description: 'Successful response', headers: baseHeaders(), content: json({ $ref: schema }) }
 }
-function successWithEntityTag(schema: string) {
-  return {
-    description: 'Successful response',
-    headers: { ...headers(), ETag: { $ref: '#/components/headers/ETag' } },
-    content: json({ $ref: schema }),
-  }
-}
-function problemResponse(description: string, authenticate = false, versioned = true) {
+function problemResponse(description: string, authenticate = false) {
   return {
     description,
     headers: {
-      ...(versioned ? headers() : baseHeaders()),
+      ...headers(),
       ...(authenticate ? { 'WWW-Authenticate': { $ref: '#/components/headers/WwwAuthenticate' } } : {}),
     },
     content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } } },

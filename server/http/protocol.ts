@@ -1,4 +1,4 @@
-import { API_VERSION, readConfig } from '@server/config'
+import { readConfig } from '@server/config'
 import { startTrace } from '@server/observability/trace'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -88,19 +88,6 @@ export const normalizeProblemMiddleware: MiddlewareHandler<AppEnv> = async (c, n
   )
 }
 
-export const apiVersionMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const queryVersioned =
-    (c.req.method === 'GET' || c.req.method === 'HEAD') && /^\/api\/music\/tracks\/[^/]+\/content$/.test(c.req.path)
-  const version = queryVersioned ? c.req.query('apiVersion') : c.req.header('API-Version')
-  if (version !== API_VERSION) {
-    return problem(c, 400, 'unsupported-api-version', `API-Version must be ${API_VERSION}`)
-  }
-  await next()
-  c.header('API-Version', API_VERSION)
-  const vary = c.res.headers.get('Vary')
-  c.header('Vary', vary ? `${vary}, API-Version` : 'API-Version')
-}
-
 export function problem(
   c: Context<AppEnv>,
   status: ContentfulStatusCode,
@@ -120,16 +107,6 @@ export function problem(
     status,
     { 'Content-Type': 'application/problem+json', 'Request-Id': requestId },
   )
-}
-
-export function entityTag(updatedAt: string) {
-  return `"${updatedAt}"`
-}
-
-export function ifMatchRevision(c: Context<AppEnv>) {
-  const value = c.req.header('If-Match')
-  const match = value?.match(/^"([^"\\]+)"$/)
-  return match?.[1] ?? null
 }
 
 export function requireMergePatch(c: Context<AppEnv>) {

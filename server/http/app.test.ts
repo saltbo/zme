@@ -1,5 +1,4 @@
 import { app } from '@server/app'
-import { API_VERSION } from '@server/config'
 import type { Env } from '@server/env'
 import { describe, expect, it } from 'vitest'
 
@@ -24,7 +23,6 @@ const env = {
 
 function request(path: string, init?: RequestInit) {
   const headers = new Headers(init?.headers)
-  if (path.startsWith('/api/')) headers.set('API-Version', API_VERSION)
   return app.fetch(new Request(`https://zme.test${path}`, { ...init, headers }), env)
 }
 
@@ -69,17 +67,17 @@ describe('http wiring', () => {
     expect(await response.json()).toEqual({ ok: true, name: 'zme' })
   })
 
-  it('rejects missing API versions with Problem Details', async () => {
+  it('uses authentication rather than a protocol version header for protected routes', async () => {
     const response = await app.fetch(new Request('https://zme.test/api/library'), env)
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(401)
     expect(await response.json()).toMatchObject({
-      type: 'https://zme.test/problems/unsupported-api-version',
-      status: 400,
+      type: 'https://zme.test/problems/authentication-required',
+      status: 401,
     })
   })
 
   it('keeps keyed music downloads outside the session auth wall', async () => {
-    const response = await request(`/api/music/tracks/track-1/content?apiVersion=${API_VERSION}`)
+    const response = await request('/api/music/tracks/track-1/content')
     expect(response.status).toBe(422)
     expect(response.headers.get('content-type')).toContain('application/problem+json')
     expect(await response.json()).toMatchObject({

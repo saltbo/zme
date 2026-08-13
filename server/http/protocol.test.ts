@@ -3,14 +3,7 @@ import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { describe, expect, it, vi } from 'vitest'
 import type { AppEnv } from './context'
-import {
-  entityTag,
-  ifMatchRevision,
-  normalizeProblemMiddleware,
-  problem,
-  requestBoundaryMiddleware,
-  setPageLinks,
-} from './protocol'
+import { normalizeProblemMiddleware, problem, requestBoundaryMiddleware, setPageLinks } from './protocol'
 
 const env = {
   PUBLIC_APP_ORIGIN: 'https://zme.test',
@@ -42,7 +35,6 @@ function protocolApp() {
   app.get('/validation/unparseable', (c) => c.json({ success: false, error: { message: 'not-json' } }, 400))
   app.get('/plain', (c) => c.text('plain failure', 502))
   app.get('/invalid-json', (_c) => new Response('{', { status: 502, headers: { 'Content-Type': 'application/json' } }))
-  app.get('/revision', (c) => c.json({ revision: ifMatchRevision(c) }))
   return app
 }
 
@@ -90,17 +82,6 @@ describe('HTTP protocol helpers', () => {
     const app = protocolApp()
     expect((await app.request('/plain', undefined, env)).headers.get('content-type')).toContain('text/plain')
     expect(await (await app.request('/invalid-json', undefined, env)).text()).toBe('{')
-  })
-
-  it('creates and parses strict strong entity tags', async () => {
-    const app = protocolApp()
-    expect(entityTag('2026-08-04T00:00:00.000Z')).toBe('"2026-08-04T00:00:00.000Z"')
-    expect(
-      await (await app.request('/revision', { headers: { 'If-Match': '"2026-08-04T00:00:00.000Z"' } }, env)).json(),
-    ).toEqual({ revision: '2026-08-04T00:00:00.000Z' })
-    expect(await (await app.request('/revision', { headers: { 'If-Match': '*' } }, env)).json()).toEqual({
-      revision: null,
-    })
   })
 
   it('correlates request logs with W3C trace and span identifiers', async () => {

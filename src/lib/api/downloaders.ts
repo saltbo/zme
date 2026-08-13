@@ -13,17 +13,15 @@ export async function getDownloader(id: string) {
   return apiRequest<{ item: DownloaderDetails }>(`/api/downloaders/${id}`, 'Failed to load downloader.')
 }
 
-export async function updateDownloader(id: string, input: DownloaderInput, expectedUpdatedAt: string) {
+export async function updateDownloader(id: string, input: DownloaderInput) {
   return apiRequest<{ item: DownloaderSummary }>(`/api/downloaders/${id}`, 'Failed to update downloader.', {
     ...mergePatch(input),
-    headers: { ...mergePatch(input).headers, 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 
-export async function deleteDownloader(id: string, expectedUpdatedAt: string) {
+export async function deleteDownloader(id: string) {
   return apiRequest<void>(`/api/downloaders/${id}`, 'Failed to delete downloader.', {
     method: 'DELETE',
-    headers: { 'If-Match': `"${expectedUpdatedAt}"` },
   })
 }
 

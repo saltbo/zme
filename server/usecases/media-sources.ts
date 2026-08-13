@@ -26,7 +26,6 @@ export async function updateMediaSource(
   deps: Deps,
   id: string,
   input: Partial<MediaSourceInput>,
-  expectedUpdatedAt: string,
 ): Promise<MediaSourceSummary | null> {
   const current = await deps.mediaSourcesRepo.get(id)
   if (!current) return null
@@ -37,13 +36,15 @@ export async function updateMediaSource(
     options: input.options ?? current.options,
     enabled: input.enabled ?? current.enabled,
   }
-  const record = await deps.mediaSourcesRepo.update(id, merged, expectedUpdatedAt)
+  const record = await deps.mediaSourcesRepo.update(id, merged, current.updatedAt)
   if (!record) throw new StaleWriteError()
   return record ? toSummary(record) : null
 }
 
-export async function deleteMediaSource(deps: Deps, id: string, expectedUpdatedAt: string): Promise<boolean> {
-  const deleted = await deps.mediaSourcesRepo.delete(id, expectedUpdatedAt)
+export async function deleteMediaSource(deps: Deps, id: string): Promise<boolean> {
+  const current = await deps.mediaSourcesRepo.get(id)
+  if (!current) return false
+  const deleted = await deps.mediaSourcesRepo.delete(id, current.updatedAt)
   if (!deleted && (await deps.mediaSourcesRepo.get(id))) throw new StaleWriteError()
   return deleted
 }

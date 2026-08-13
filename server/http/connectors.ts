@@ -21,7 +21,7 @@ import {
 import type { Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
-import { entityTag, ifMatchRevision, problem, requireMergePatch } from './protocol'
+import { problem, requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
 const connectorCreateSchema = z.object({
@@ -101,26 +101,15 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
     async (c) => {
       const unsupported = requireMergePatch(c)
       if (unsupported) return unsupported
-      const expectedUpdatedAt = ifMatchRevision(c)
-      if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-      const item = await updateConnector(
-        c.get('deps'),
-        c.get('user').id,
-        c.req.valid('param').id,
-        c.req.valid('json'),
-        expectedUpdatedAt,
-      )
+      const item = await updateConnector(c.get('deps'), c.get('user').id, c.req.valid('param').id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Connector not found.' }, 404)
-      c.header('ETag', entityTag(item.updatedAt))
       return c.json({ item })
     },
   )
 
   routes.delete('/connectors/:id', zValidator('param', idParamsSchema), async (c) => {
     const { id } = c.req.valid('param')
-    const expectedUpdatedAt = ifMatchRevision(c)
-    if (!expectedUpdatedAt) return problem(c, 428, 'precondition-required', 'If-Match is required')
-    const deleted = await deleteConnector(c.get('deps'), c.get('user').id, id, expectedUpdatedAt)
+    const deleted = await deleteConnector(c.get('deps'), c.get('user').id, id)
     if (!deleted) return c.json({ error: 'Connector not found.' }, 404)
     return c.body(null, 204)
   })

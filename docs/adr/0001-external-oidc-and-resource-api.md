@@ -3,13 +3,13 @@
 - Status: accepted
 - Date: 2026-08-04
 - Decision owners: ZME maintainers
-- Release impact: breaking (`API-Version: 2026-08-04`)
+- Release impact: breaking authentication and Resource API migration
 
 ## Outcome and release baseline
 
 ZME must authenticate people only through one deployment-configured, standards-compliant OIDC provider and must never become an account, password, registration, or identity-provider service. A DPoP client representing the same `iss`/`sub` must resolve to the same local ZME authorization projection and complete media search, release selection, and downloader submission with least-privilege access.
 
-The release baseline is the public `1.0.0` application and its unversioned browser API. That API exposed provider/action-shaped routes and a local credential account system. The identity semantics, database schema, session format, and Agent-facing API all change, so a silent compatibility layer would preserve unsafe identity behavior and two conflicting API models. This release deliberately rejects the old routes and requires `API-Version: 2026-08-04` on API calls.
+The release baseline is the public `1.0.0` application and its unversioned browser API. That API exposed provider/action-shaped routes and a local credential account system. The identity semantics, database schema, session format, and Agent-facing API all change, so a silent compatibility layer would preserve unsafe identity behavior and two conflicting API models. This release deliberately rejects the old routes. The current SPA and Realmroot-only deployment does not negotiate API versions at request time.
 
 Observable acceptance criteria are:
 

@@ -50,7 +50,7 @@ describe('getActiveTmdbSource', () => {
   })
 })
 
-it('applies media-source mutations with the expected revision', async () => {
+it('applies media-source mutations against the latest record', async () => {
   const input = { kind: 'tmdb' as const, credentials: { apiKey: 'key' }, options: {}, enabled: true }
   const updates: unknown[][] = []
   const deletes: unknown[][] = []
@@ -68,14 +68,14 @@ it('applies media-source mutations with the expected revision', async () => {
     },
   } as never as Deps
 
-  await expect(updateMediaSource(deps, 'media-source-1', input, 'revision-1')).resolves.toMatchObject({
+  await expect(updateMediaSource(deps, 'media-source-1', input)).resolves.toMatchObject({
     id: 'media-source-1',
   })
-  await expect(deleteMediaSource(deps, 'media-source-1', 'revision-2')).resolves.toBe(true)
+  await expect(deleteMediaSource(deps, 'media-source-1')).resolves.toBe(true)
   expect(updates).toEqual([
-    ['media-source-1', { ...input, description: sourceRecord().description ?? undefined }, 'revision-1'],
+    ['media-source-1', { ...input, description: sourceRecord().description ?? undefined }, sourceRecord().updatedAt],
   ])
-  expect(deletes).toEqual([['media-source-1', 'revision-2']])
+  expect(deletes).toEqual([['media-source-1', sourceRecord().updatedAt]])
 })
 
 describe('checkMediaSourceHealth', () => {
