@@ -153,6 +153,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
   const downloaderId = crypto.randomUUID()
   const agentUserId = crypto.randomUUID()
   const now = new Date().toISOString()
+  let indexerSearchRequests = 0
   const submitted: unknown[] = []
   fixture.setUpstreamFetch(async (request) => {
     const url = new URL(request.url)
@@ -174,6 +175,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       })
     }
     if (url.origin === 'https://prowlarr.test' && url.pathname === '/api/v1/search') {
+      indexerSearchRequests += 1
       return json([
         {
           guid: 'release-1',
@@ -341,11 +343,13 @@ it('completes the least-privilege Agent media, release-candidate, and download f
   expect(fullResults.items[0]).not.toHaveProperty('infoHash')
 
   const candidateUrl = new URL(results.items[0].links.self)
+  const searchRequestsBeforeCandidateGet = indexerSearchRequests
   const candidateResponse = await app.fetch(
     await fixture.signedRequest(`${candidateUrl.pathname}${candidateUrl.search}`, ['release-candidates:read']),
     fixture.env,
   )
   expect(candidateResponse.status).toBe(200)
+  expect(indexerSearchRequests).toBe(searchRequestsBeforeCandidateGet)
   const candidate = (await candidateResponse.json()) as { resourceRef: string; resourceRefExpiresAt: string }
   expect(candidate).toMatchObject({
     resourceRef: expect.stringMatching(/^release-ref:v1:/),

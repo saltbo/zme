@@ -25,6 +25,7 @@ import type {
   MusicConnectorModule,
   MusicDownloadKeysRepo,
   MusicProvider,
+  ReleaseCandidateSnapshotsRepo,
 } from './ports'
 
 export interface Deps {
@@ -46,6 +47,7 @@ export interface Deps {
   downloadDispatchQueue: DownloadDispatchQueue
   downloadersRepo: DownloadersRepo
   indexersRepo: IndexersRepo
+  releaseCandidateSnapshotsRepo: ReleaseCandidateSnapshotsRepo
   mediaSourcesRepo: MediaSourcesRepo
   downloaderGateways: Record<DownloaderKind, DownloaderGateway>
   downloadTaskGateways: Partial<Record<DownloaderKind, DownloadTaskGateway>>

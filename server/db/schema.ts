@@ -129,6 +129,24 @@ export const downloaders = sqliteTable('downloaders', {
   updatedAt: text('updated_at').notNull(),
 })
 
+export const releaseCandidateSnapshots = sqliteTable(
+  'release_candidate_snapshots',
+  {
+    id: text('id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    mediaKey: text('media_key').notNull(),
+    itemJson: text('item_json').notNull(),
+    createdAt: text('created_at').notNull(),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('release_candidate_snapshots_user_id_idx').on(table.userId, table.id),
+    index('release_candidate_snapshots_expires_idx').on(table.expiresAt),
+  ],
+)
+
 export const indexers = sqliteTable('indexers', {
   id: text('id').primaryKey(),
   description: text('description'),
@@ -506,6 +524,8 @@ export const dispatchLanes = sqliteTable('dispatch_lanes', {
 export type User = typeof user.$inferSelect
 export type Downloader = typeof downloaders.$inferSelect
 export type NewDownloader = typeof downloaders.$inferInsert
+export type ReleaseCandidateSnapshot = typeof releaseCandidateSnapshots.$inferSelect
+export type NewReleaseCandidateSnapshot = typeof releaseCandidateSnapshots.$inferInsert
 export type Indexer = typeof indexers.$inferSelect
 export type NewIndexer = typeof indexers.$inferInsert
 export type MediaSource = typeof mediaSources.$inferSelect

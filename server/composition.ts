@@ -22,6 +22,7 @@ import {
 import { createMediaSourcesRepo } from './adapters/repos/media-sources'
 import { createMusicCollectionsRepo } from './adapters/repos/music-collections'
 import { createMusicDownloadKeysRepo } from './adapters/repos/music-download-keys'
+import { createReleaseCandidateSnapshotsRepo } from './adapters/repos/release-candidate-snapshots'
 import { readConfig } from './config'
 import { createDb } from './db/client'
 import type { Env } from './env'
@@ -73,6 +74,7 @@ export function createDeps(env: Env, trace?: TraceContext): Deps {
     },
     downloadersRepo: createDownloadersRepo(db),
     indexersRepo: createIndexersRepo(db),
+    releaseCandidateSnapshotsRepo: createReleaseCandidateSnapshotsRepo(db),
     mediaSourcesRepo: createMediaSourcesRepo(db),
     downloaderGateways,
     downloadTaskGateways,

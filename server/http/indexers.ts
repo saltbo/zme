@@ -35,6 +35,7 @@ const indexerSearchQuerySchema = releaseCandidateQuerySchema.extend({
 const releaseCandidateParamsSchema = z.object({
   id: z.string().regex(/^release-candidate:[0-9a-f]{64}$/),
 })
+const releaseCandidateSnapshotLifetimeMs = 60 * 60 * 1000
 
 const indexerSchema = z.object({
   description: z.string().trim().optional(),
@@ -65,21 +66,23 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
     }
   })
 
-  routes.get(
-    '/release-candidates/:id',
-    zValidator('param', releaseCandidateParamsSchema),
-    zValidator('query', releaseCandidateQuerySchema),
-    async (c) => {
-      try {
-        const candidates = await releaseCandidates(c, c.req.valid('query'), { includeResourceRef: true })
-        const item = candidates.find((candidate) => candidate.id === c.req.valid('param').id)
-        if (!item) return c.json({ code: 'RELEASE_CANDIDATE_NOT_FOUND', error: 'Release candidate not found.' }, 404)
-        return c.json(item)
-      } catch (error) {
-        return indexerSearchError(error)
-      }
-    },
-  )
+  routes.get('/release-candidates/:id', zValidator('param', releaseCandidateParamsSchema), async (c) => {
+    const snapshot = await c
+      .get('deps')
+      .releaseCandidateSnapshotsRepo.get(c.get('principal').userId, c.req.valid('param').id, new Date().toISOString())
+    if (!snapshot) return c.json({ code: 'RELEASE_CANDIDATE_NOT_FOUND', error: 'Release candidate not found.' }, 404)
+    return c.json(
+      await serializeReleaseCandidate(
+        requiredResourceRefSecret(readConfig(c.env).downloadResourceRefSecret),
+        c.get('principal').userId,
+        snapshot.mediaKey,
+        snapshot.item,
+        undefined,
+        'compact',
+        { includeResourceRef: true, selfHref: (candidateId) => releaseCandidateHref(c, candidateId) },
+      ),
+    )
+  })
 
   routes.get('/indexers', async (c) => {
     const items = await listIndexers(c.get('deps'))
@@ -156,28 +159,32 @@ async function releaseCandidates(
   const secret = requiredResourceRefSecret(configured.downloadResourceRefSecret)
   const principal = c.get('principal')
   const downloadable = results.filter((item) => item.magnetUrl || item.downloadUrl)
-  return Promise.all(
+  const candidates = await Promise.all(
     downloadable.map((item) =>
       serializeReleaseCandidate(secret, principal.userId, input.mediaKey, item, input.target, input.view, {
         includeResourceRef: options.includeResourceRef,
-        selfHref: (candidateId) => releaseCandidateHref(c, input, candidateId),
+        selfHref: (candidateId) => releaseCandidateHref(c, candidateId),
       }),
     ),
   )
+  const now = new Date()
+  const createdAt = now.toISOString()
+  const expiresAt = new Date(now.getTime() + releaseCandidateSnapshotLifetimeMs).toISOString()
+  await c.get('deps').releaseCandidateSnapshotsRepo.saveMany(
+    candidates.map((candidate, index) => ({
+      id: candidate.id,
+      userId: principal.userId,
+      mediaKey: input.mediaKey,
+      item: input.target ? { ...downloadable[index], downloadTarget: input.target } : downloadable[index],
+      createdAt,
+      expiresAt,
+    })),
+  )
+  return candidates
 }
 
-function releaseCandidateHref(
-  c: Context<AppEnv>,
-  input: z.infer<typeof releaseCandidateQuerySchema>,
-  candidateId: string,
-): string {
-  const url = new URL(`/api/release-candidates/${encodeURIComponent(candidateId)}`, c.req.url)
-  url.searchParams.set('mediaKey', input.mediaKey)
-  url.searchParams.set('query', input.query)
-  if (input.searchType) url.searchParams.set('searchType', input.searchType)
-  if (input.categories) url.searchParams.set('categories', input.categories)
-  if (input.target) url.searchParams.set('target', input.target)
-  return url.toString()
+function releaseCandidateHref(c: Context<AppEnv>, candidateId: string): string {
+  return new URL(`/api/release-candidates/${encodeURIComponent(candidateId)}`, c.req.url).toString()
 }
 
 function indexerSearchError(error: unknown): Response {

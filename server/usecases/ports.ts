@@ -210,6 +210,21 @@ export interface DownloadsRepo {
   delete(userId: string, id: string, expectedUpdatedAt: string): Promise<boolean>
 }
 
+export interface ReleaseCandidateSnapshotRecord {
+  id: string
+  userId: string
+  mediaKey: string
+  item: IndexerSearchItem
+  createdAt: string
+  expiresAt: string
+}
+
+export interface ReleaseCandidateSnapshotsRepo {
+  saveMany(records: ReleaseCandidateSnapshotRecord[]): Promise<void>
+  get(userId: string, id: string, now: string): Promise<ReleaseCandidateSnapshotRecord | null>
+  deleteExpired(now: string, limit: number): Promise<number>
+}
+
 export interface IndexerSearchInput {
   query: string
   searchType?: 'search' | 'audiosearch' | 'booksearch'

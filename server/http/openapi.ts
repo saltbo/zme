@@ -117,8 +117,8 @@ export function openapiDocument(config: AppConfig) {
           tags: ['release-acquisition'],
           security: secured('getReleaseCandidate'),
           parameters: [
+            ...parameters,
             pathParameter('releaseCandidateId', { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' }),
-            ...releaseCandidateQueryParameters({ includeView: false }),
           ],
           responses: { '200': success('#/components/schemas/ReleaseCandidateResourceRef'), ...errors },
         },

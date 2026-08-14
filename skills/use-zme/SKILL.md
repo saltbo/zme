@@ -82,12 +82,12 @@ results.
      "<media-key>" "<query>" --retry 0 --timeout 150s --no-cache --json
    ```
 
-3. Retrieve the selected candidate with the same media key and query, then use
-   the returned opaque `resourceRef` only for the immediate download creation:
+3. Retrieve the selected candidate by ID, then use the returned opaque
+   `resourceRef` only for the immediate download creation:
 
    ```bash
    realmroot toolbox zme release-acquisition get-release-candidate \
-     "<release-candidate-id>" "<media-key>" "<query>" --json
+     "<release-candidate-id>" --json
    ```
 
 4. List safe downloader choices and select an enabled downloader ID:

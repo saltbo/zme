@@ -113,6 +113,7 @@ async function runScheduled(env: Env): Promise<void> {
   await syncEnabledConnectors(deps, env)
   await recoverDownloadDispatches(deps)
   await recoverDownloadReconciliations(deps)
+  await deps.releaseCandidateSnapshotsRepo.deleteExpired(new Date().toISOString(), 1_000)
 }
 
 function isConnectorSyncMessage(

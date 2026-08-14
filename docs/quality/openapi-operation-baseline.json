@@ -6464,71 +6464,18 @@
         ],
         "parameters": [
           {
-            "name": "releaseCandidateId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^release-candidate:[0-9a-f]{64}$"
-            }
-          },
-          {
             "$ref": "#/components/parameters/Traceparent"
           },
           {
             "$ref": "#/components/parameters/Tracestate"
           },
           {
-            "name": "mediaKey",
-            "in": "query",
+            "name": "releaseCandidateId",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "minLength": 1
-            }
-          },
-          {
-            "name": "query",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          {
-            "name": "searchType",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "search",
-                "audiosearch",
-                "booksearch"
-              ]
-            }
-          },
-          {
-            "name": "categories",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "Comma- or pipe-separated positive category identifiers."
-            }
-          },
-          {
-            "name": "target",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "music",
-                "ebook",
-                "audiobook"
-              ]
+              "pattern": "^release-candidate:[0-9a-f]{64}$"
             }
           }
         ],
