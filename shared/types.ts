@@ -680,8 +680,11 @@ export interface ReleaseCandidate {
   availability: {
     tier: 'high' | 'medium' | 'low' | 'none' | 'unknown'
   }
-  resourceRef: string
-  resourceRefExpiresAt: string
+  links: {
+    self: string
+  }
+  resourceRef?: string
+  resourceRefExpiresAt?: string
 }
 
 export interface ReleaseCandidateFull extends ReleaseCandidate {

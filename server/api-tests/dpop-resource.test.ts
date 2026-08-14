@@ -294,8 +294,9 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       title: string
       quality: unknown
       availability: unknown
-      resourceRef: string
-      resourceRefExpiresAt: string
+      links: { self: string }
+      resourceRef?: string
+      resourceRefExpiresAt?: string
     }>
   }
   expect(results.items[0]).toMatchObject({
@@ -310,9 +311,10 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       warnings: [],
     },
     availability: { tier: 'high' },
-    resourceRef: expect.stringMatching(/^release-ref:v1:/),
-    resourceRefExpiresAt: expect.any(String),
+    links: { self: expect.stringContaining('/api/release-candidates/release-candidate%3A') },
   })
+  expect(results.items[0]).not.toHaveProperty('resourceRef')
+  expect(results.items[0]).not.toHaveProperty('resourceRefExpiresAt')
   expect(results.items[0]).not.toHaveProperty('magnetUrl')
   expect(results.items[0]).not.toHaveProperty('downloadUrl')
   expect(results.items[0]).not.toHaveProperty('infoHash')
@@ -333,9 +335,22 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     leechers: 3,
     sourceType: 'magnet',
   })
+  expect(fullResults.items[0]).not.toHaveProperty('resourceRef')
   expect(fullResults.items[0]).not.toHaveProperty('magnetUrl')
   expect(fullResults.items[0]).not.toHaveProperty('downloadUrl')
   expect(fullResults.items[0]).not.toHaveProperty('infoHash')
+
+  const candidateUrl = new URL(results.items[0].links.self)
+  const candidateResponse = await app.fetch(
+    await fixture.signedRequest(`${candidateUrl.pathname}${candidateUrl.search}`, ['release-candidates:read']),
+    fixture.env,
+  )
+  expect(candidateResponse.status).toBe(200)
+  const candidate = (await candidateResponse.json()) as { resourceRef: string; resourceRefExpiresAt: string }
+  expect(candidate).toMatchObject({
+    resourceRef: expect.stringMatching(/^release-ref:v1:/),
+    resourceRefExpiresAt: expect.any(String),
+  })
 
   const taskResponse = await app.fetch(
     await fixture.signedRequest(
@@ -343,7 +358,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       ['downloads:write'],
       'different-user',
       'POST',
-      { resourceRef: results.items[0].resourceRef, downloaderId: destinations.items[0].id },
+      { resourceRef: candidate.resourceRef, downloaderId: destinations.items[0].id },
       'download-flow-1',
     ),
     fixture.env,
@@ -357,7 +372,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       ['downloads:write'],
       'different-user',
       'POST',
-      { resourceRef: results.items[0].resourceRef, downloaderId: destinations.items[0].id },
+      { resourceRef: candidate.resourceRef, downloaderId: destinations.items[0].id },
       'download-flow-1',
     ),
     fixture.env,
@@ -370,7 +385,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       ['downloads:write'],
       'different-user',
       'POST',
-      { resourceRef: results.items[0].resourceRef, downloaderId: crypto.randomUUID() },
+      { resourceRef: candidate.resourceRef, downloaderId: crypto.randomUUID() },
       'download-flow-1',
     ),
     fixture.env,

@@ -41,7 +41,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
-import { createDownload } from '@/lib/api'
+import { createDownload, getReleaseCandidateResourceRef } from '@/lib/api'
 import type { ReleaseSearchProgress } from '@/lib/release-search'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -1015,17 +1015,13 @@ function ReleaseRow({
   const title = item.fileName || item.title
 
   async function handleDownload(downloader: DownloaderSummary) {
-    if (!item.resourceRef) {
-      toast.error(t('releaseMissingUrl'))
-      return
-    }
-
     setSubmittingDownloaderId(downloader.id)
     try {
-      if (!item.resourceRef) throw new Error('Release candidate has no resource reference.')
+      const candidate = item.resourceRef ? item : await getReleaseCandidateResourceRef(item.links.self)
+      if (!candidate.resourceRef) throw new Error('Release candidate has no resource reference.')
       await createDownload({
         downloaderId: downloader.id,
-        resourceRef: item.resourceRef,
+        resourceRef: candidate.resourceRef,
       })
       toast.success(t('downloadSubmitted'))
     } catch (error) {
@@ -1036,8 +1032,7 @@ function ReleaseRow({
   }
 
   const submitting = Boolean(submittingDownloaderId)
-  const hasSource = Boolean(item.resourceRef)
-  const disabled = !hasSource || loadingDownloaders || downloaders.length === 0 || submitting
+  const disabled = loadingDownloaders || downloaders.length === 0 || submitting
   const downloadLabel = loadingDownloaders
     ? t('loadingDownloaders')
     : downloaders.length === 0

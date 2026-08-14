@@ -31,6 +31,10 @@ export async function searchIndexerOnce(input: {
   return { results: response.items }
 }
 
+export async function getReleaseCandidateResourceRef(self: string) {
+  return apiRequest<ReleaseCandidateFull>(self, 'Failed to load release candidate.')
+}
+
 export async function listIndexers() {
   return apiRequest<{ items: IndexerSummary[] }>('/api/indexers', 'Failed to load indexers.')
 }

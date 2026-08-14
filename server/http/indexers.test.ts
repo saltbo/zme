@@ -28,15 +28,27 @@ const item: IndexerSearchItem = {
 }
 
 describe('release candidate serialization', () => {
-  it('omits the indexer from the default compact view', async () => {
+  it('omits the indexer and resource reference from the default compact view', async () => {
     const candidate = await serializeReleaseCandidate(secret, 'user-1', 'tmdb:movie:123', item, undefined, 'compact')
 
     expect(candidate).not.toHaveProperty('indexer')
+    expect(candidate).not.toHaveProperty('resourceRef')
+    expect(candidate.links.self).toMatch(/^\/api\/release-candidates\/release-candidate:/)
   })
 
-  it('includes the indexer in the full view', async () => {
+  it('includes the indexer in the full view without exposing the resource reference', async () => {
     const candidate = await serializeReleaseCandidate(secret, 'user-1', 'tmdb:movie:123', item, undefined, 'full')
 
     expect(candidate).toHaveProperty('indexer', 'Private Indexer')
+    expect(candidate).not.toHaveProperty('resourceRef')
+  })
+
+  it('includes the resource reference only for direct candidate retrieval', async () => {
+    const candidate = await serializeReleaseCandidate(secret, 'user-1', 'tmdb:movie:123', item, undefined, 'compact', {
+      includeResourceRef: true,
+    })
+
+    expect(candidate.resourceRef).toMatch(/^release-ref:v1:/)
+    expect(candidate.resourceRefExpiresAt).toEqual(expect.any(String))
   })
 })

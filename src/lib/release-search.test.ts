@@ -145,6 +145,7 @@ function release(id: string, title: string): ReleaseCandidateFull {
     leechers: 0,
     files: 1,
     publishDate: null,
+    links: { self: `/api/release-candidates/${id}` },
     resourceRef: `release-ref:v1:${id}`,
     resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
     sourceType: 'torrent_url',

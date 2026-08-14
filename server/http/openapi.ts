@@ -35,6 +35,7 @@ const publicErrors = {
 }
 const operationSummaries: Record<string, string> = {
   listMedia: 'Search the configured media catalog',
+  getReleaseCandidate: 'Get an ephemeral release candidate',
   listDownloads: 'List downloads owned by the caller',
   createDownload: 'Create a download from an opaque resource reference',
   getDownload: 'Get an owned download',
@@ -105,21 +106,21 @@ export function openapiDocument(config: AppConfig) {
           summary: 'Search ephemeral release candidates',
           tags: ['release-acquisition'],
           security: secured('listReleaseCandidates'),
-          parameters: [
-            ...parameters,
-            { name: 'mediaKey', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
-            { name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
-            {
-              name: 'searchType',
-              in: 'query',
-              schema: { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] },
-            },
-            { name: 'categories', in: 'query', schema: { type: 'string' } },
-            { name: 'target', in: 'query', schema: { type: 'string', enum: ['music', 'ebook', 'audiobook'] } },
-            { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
-            { name: 'pageSize', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 50, default: 50 } },
-          ],
+          parameters: [...releaseCandidateQueryParameters(), ...paginationParameters()],
           responses: { '200': success('#/components/schemas/ReleaseCandidateCollection'), ...errors },
+        },
+      },
+      '/release-candidates/{releaseCandidateId}': {
+        get: {
+          operationId: 'getReleaseCandidate',
+          summary: operationSummaries.getReleaseCandidate,
+          tags: ['release-acquisition'],
+          security: secured('getReleaseCandidate'),
+          parameters: [
+            pathParameter('releaseCandidateId', { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' }),
+            ...releaseCandidateQueryParameters({ includeView: false }),
+          ],
+          responses: { '200': success('#/components/schemas/ReleaseCandidateResourceRef'), ...errors },
         },
       },
       '/downloads': {
@@ -651,6 +652,28 @@ function sessionQueryParameters(operationId: string): object[] {
 
 function queryParameter(name: string, schema: object, required = false) {
   return { name, in: 'query', required, schema }
+}
+
+function releaseCandidateQueryParameters({ includeView = false } = {}): object[] {
+  return [
+    ...parameters,
+    queryParameter('mediaKey', { type: 'string', minLength: 1 }, true),
+    queryParameter('query', { type: 'string', minLength: 1 }, true),
+    queryParameter('searchType', { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] }),
+    queryParameter('categories', {
+      type: 'string',
+      description: 'Comma- or pipe-separated positive category identifiers.',
+    }),
+    queryParameter('target', { type: 'string', enum: ['music', 'ebook', 'audiobook'] }),
+    ...(includeView ? [queryParameter('view', { type: 'string', enum: ['compact', 'full'], default: 'compact' })] : []),
+  ]
+}
+
+function paginationParameters(): object[] {
+  return [
+    queryParameter('page', { type: 'integer', minimum: 1, default: 1 }),
+    queryParameter('pageSize', { type: 'integer', minimum: 1, maximum: 50, default: 50 }),
+  ]
 }
 
 function createOperation(operationId: string, input: string, output: string) {
@@ -1818,6 +1841,12 @@ function schemas() {
     ReleaseCandidate: {
       type: 'object',
       additionalProperties: false,
+      required: ['id', 'title', 'size', 'publishDate', 'quality', 'availability', 'links'],
+      properties: releaseCandidateProperties(nullableDateTime),
+    },
+    ReleaseCandidateResourceRef: {
+      type: 'object',
+      additionalProperties: false,
       required: [
         'id',
         'title',
@@ -1825,16 +1854,12 @@ function schemas() {
         'publishDate',
         'quality',
         'availability',
+        'links',
         'resourceRef',
         'resourceRefExpiresAt',
       ],
       properties: {
-        id: { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' },
-        title: { type: 'string' },
-        size: { type: ['integer', 'null'], minimum: 0 },
-        publishDate: nullableDateTime,
-        quality: { $ref: '#/components/schemas/ReleaseCandidateQuality' },
-        availability: { $ref: '#/components/schemas/ReleaseCandidateAvailability' },
+        ...releaseCandidateProperties(nullableDateTime),
         resourceRef: { type: 'string', pattern: '^release-ref:v1:' },
         resourceRefExpiresAt: dateTime,
       },
@@ -1850,8 +1875,7 @@ function schemas() {
         'publishDate',
         'quality',
         'availability',
-        'resourceRef',
-        'resourceRefExpiresAt',
+        'links',
         'downloadTarget',
         'fileName',
         'seeders',
@@ -1867,15 +1891,8 @@ function schemas() {
         'tvdbId',
       ],
       properties: {
-        id: { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' },
-        title: { type: 'string' },
+        ...releaseCandidateProperties(nullableDateTime),
         indexer: { type: 'string' },
-        size: { type: ['integer', 'null'], minimum: 0 },
-        publishDate: nullableDateTime,
-        quality: { $ref: '#/components/schemas/ReleaseCandidateQuality' },
-        availability: { $ref: '#/components/schemas/ReleaseCandidateAvailability' },
-        resourceRef: { type: 'string', pattern: '^release-ref:v1:' },
-        resourceRefExpiresAt: dateTime,
         downloadTarget: { type: ['string', 'null'], enum: ['music', 'ebook', 'audiobook', null] },
         fileName: nullableString,
         seeders: { type: ['integer', 'null'], minimum: 0 },
@@ -2222,6 +2239,23 @@ function schemas() {
       additionalProperties: false,
       required: ['downloadId', 'createdAt', 'links'],
       properties: { downloadId: { type: 'string', format: 'uuid' }, createdAt: dateTime, links },
+    },
+  }
+}
+
+function releaseCandidateProperties(nullableDateTime: object) {
+  return {
+    id: { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' },
+    title: { type: 'string' },
+    size: { type: ['integer', 'null'], minimum: 0 },
+    publishDate: nullableDateTime,
+    quality: { $ref: '#/components/schemas/ReleaseCandidateQuality' },
+    availability: { $ref: '#/components/schemas/ReleaseCandidateAvailability' },
+    links: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['self'],
+      properties: { self: { type: 'string', format: 'uri' } },
     },
   }
 }

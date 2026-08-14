@@ -14,21 +14,26 @@ import {
 import { IndexerNotConfiguredError, IndexerSearchError } from '@server/usecases/ports'
 import { analyzeIndexerRelease, getReleaseAvailabilityTier } from '@shared/release-analysis'
 import type { DownloadSearchTarget, IndexerSearchItem, ReleaseCandidate, ReleaseCandidateFull } from '@shared/types'
-import type { Hono } from 'hono'
+import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
 import { requireMergePatch } from './protocol'
 import { idParamsSchema } from './schemas'
 
-const indexerSearchQuerySchema = z.object({
+const releaseCandidateQuerySchema = z.object({
   mediaKey: z.string().trim().min(1).max(300),
   query: z.string().trim().min(1).max(300),
   searchType: z.enum(['search', 'audiosearch', 'booksearch']).optional(),
   categories: z.string().trim().optional(),
   target: z.enum(['music', 'ebook', 'audiobook']).optional(),
   view: z.enum(['compact', 'full']).default('compact'),
+})
+const indexerSearchQuerySchema = releaseCandidateQuerySchema.extend({
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(50),
+})
+const releaseCandidateParamsSchema = z.object({
+  id: z.string().regex(/^release-candidate:[0-9a-f]{64}$/),
 })
 
 const indexerSchema = z.object({
@@ -42,49 +47,39 @@ const indexerSchema = z.object({
 const indexerPatchSchema = indexerSchema.partial().refine((value) => Object.keys(value).length > 0)
 export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   routes.get('/release-candidates', zValidator('query', indexerSearchQuerySchema), async (c) => {
-    const { mediaKey, query, searchType, categories, target, view, page, pageSize } = c.req.valid('query')
+    const { page, pageSize, ...input } = c.req.valid('query')
     try {
-      const deps = c.get('deps')
-      const results = await searchIndexers(deps, {
-        query,
-        searchType,
-        categories: parseNumberList(categories),
-      })
-      const configured = readConfig(c.env)
-      const principal = c.get('principal')
-      const downloadable = results.filter((item) => item.magnetUrl || item.downloadUrl)
-      const withRefs = await Promise.all(
-        downloadable.map((item) =>
-          serializeReleaseCandidate(
-            requiredResourceRefSecret(configured.downloadResourceRefSecret),
-            principal.userId,
-            mediaKey,
-            item,
-            target,
-            view,
-          ),
-        ),
-      )
+      const candidates = await releaseCandidates(c, input, { includeResourceRef: false })
       const start = (page - 1) * pageSize
       return c.json({
-        items: withRefs.slice(start, start + pageSize),
+        items: candidates.slice(start, start + pageSize),
         pagination: {
           page,
           pageSize,
-          totalItems: withRefs.length,
-          totalPages: Math.ceil(withRefs.length / pageSize),
+          totalItems: candidates.length,
+          totalPages: Math.ceil(candidates.length / pageSize),
         },
       })
     } catch (error) {
-      if (error instanceof IndexerNotConfiguredError) {
-        return c.json({ code: 'INDEXER_NOT_CONFIGURED', error: error.message }, 503)
-      }
-      if (error instanceof IndexerSearchError) {
-        return c.json({ code: 'INDEXER_SEARCH_FAILED', error: error.message }, 502)
-      }
-      throw error
+      return indexerSearchError(error)
     }
   })
+
+  routes.get(
+    '/release-candidates/:id',
+    zValidator('param', releaseCandidateParamsSchema),
+    zValidator('query', releaseCandidateQuerySchema),
+    async (c) => {
+      try {
+        const candidates = await releaseCandidates(c, c.req.valid('query'), { includeResourceRef: true })
+        const item = candidates.find((candidate) => candidate.id === c.req.valid('param').id)
+        if (!item) return c.json({ code: 'RELEASE_CANDIDATE_NOT_FOUND', error: 'Release candidate not found.' }, 404)
+        return c.json(item)
+      } catch (error) {
+        return indexerSearchError(error)
+      }
+    },
+  )
 
   routes.get('/indexers', async (c) => {
     const items = await listIndexers(c.get('deps'))
@@ -147,6 +142,54 @@ export function registerIndexerRoutes(routes: Hono<AppEnv>) {
   })
 }
 
+async function releaseCandidates(
+  c: Context<AppEnv>,
+  input: z.infer<typeof releaseCandidateQuerySchema>,
+  options: { includeResourceRef: boolean },
+): Promise<Array<ReleaseCandidate | ReleaseCandidateFull>> {
+  const results = await searchIndexers(c.get('deps'), {
+    query: input.query,
+    searchType: input.searchType,
+    categories: parseNumberList(input.categories),
+  })
+  const configured = readConfig(c.env)
+  const secret = requiredResourceRefSecret(configured.downloadResourceRefSecret)
+  const principal = c.get('principal')
+  const downloadable = results.filter((item) => item.magnetUrl || item.downloadUrl)
+  return Promise.all(
+    downloadable.map((item) =>
+      serializeReleaseCandidate(secret, principal.userId, input.mediaKey, item, input.target, input.view, {
+        includeResourceRef: options.includeResourceRef,
+        selfHref: (candidateId) => releaseCandidateHref(c, input, candidateId),
+      }),
+    ),
+  )
+}
+
+function releaseCandidateHref(
+  c: Context<AppEnv>,
+  input: z.infer<typeof releaseCandidateQuerySchema>,
+  candidateId: string,
+): string {
+  const url = new URL(`/api/release-candidates/${encodeURIComponent(candidateId)}`, c.req.url)
+  url.searchParams.set('mediaKey', input.mediaKey)
+  url.searchParams.set('query', input.query)
+  if (input.searchType) url.searchParams.set('searchType', input.searchType)
+  if (input.categories) url.searchParams.set('categories', input.categories)
+  if (input.target) url.searchParams.set('target', input.target)
+  return url.toString()
+}
+
+function indexerSearchError(error: unknown): Response {
+  if (error instanceof IndexerNotConfiguredError) {
+    return Response.json({ code: 'INDEXER_NOT_CONFIGURED', error: error.message }, { status: 503 })
+  }
+  if (error instanceof IndexerSearchError) {
+    return Response.json({ code: 'INDEXER_SEARCH_FAILED', error: error.message }, { status: 502 })
+  }
+  throw error
+}
+
 export async function serializeReleaseCandidate(
   secret: string,
   userId: string,
@@ -154,10 +197,14 @@ export async function serializeReleaseCandidate(
   item: IndexerSearchItem,
   target: DownloadSearchTarget | undefined,
   view: 'compact' | 'full',
+  options: { includeResourceRef?: boolean; selfHref?: (candidateId: string) => string } = {},
 ): Promise<ReleaseCandidate | ReleaseCandidateFull> {
   const normalized = target ? { ...item, downloadTarget: target } : item
   const issued = await issueReleaseResourceRef(secret, userId, mediaKey, normalized)
   const analysis = analyzeIndexerRelease(item)
+  const resourceRef = options.includeResourceRef
+    ? { resourceRef: issued.resourceRef, resourceRefExpiresAt: issued.resourceRefExpiresAt }
+    : {}
   const compact: ReleaseCandidate = {
     id: issued.candidateId,
     title: item.title,
@@ -173,8 +220,8 @@ export async function serializeReleaseCandidate(
       warnings: analysis.warnings,
     },
     availability: { tier: getReleaseAvailabilityTier(item.seeders) },
-    resourceRef: issued.resourceRef,
-    resourceRefExpiresAt: issued.resourceRefExpiresAt,
+    links: { self: options.selfHref?.(issued.candidateId) ?? `/api/release-candidates/${issued.candidateId}` },
+    ...resourceRef,
   }
   if (view === 'compact') return compact
 

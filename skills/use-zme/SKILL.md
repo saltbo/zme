@@ -71,23 +71,32 @@ results.
    ```
 
 2. Search release candidates with that exact key and select an opaque
-   `resourceRef`. Present materially different release choices to the user when
+   candidate `id`. Present materially different release choices to the user when
    quality, language, edition, or size preferences are unresolved. Indexers can
    take up to two minutes to answer, so allow one long request instead of restarting
-   the complete search on transient responses:
+   the complete search on transient responses. Candidate lists intentionally omit
+   the downloader `resourceRef`:
 
    ```bash
    realmroot toolbox zme release-acquisition list-release-candidates \
      "<media-key>" "<query>" --retry 0 --timeout 150s --no-cache --json
    ```
 
-3. List safe downloader choices and select an enabled downloader ID:
+3. Retrieve the selected candidate with the same media key and query, then use
+   the returned opaque `resourceRef` only for the immediate download creation:
+
+   ```bash
+   realmroot toolbox zme release-acquisition get-release-candidate \
+     "<release-candidate-id>" "<media-key>" "<query>" --json
+   ```
+
+4. List safe downloader choices and select an enabled downloader ID:
 
    ```bash
    realmroot toolbox zme downloads list-downloaders --json
    ```
 
-4. Create the download with a new unique idempotency key. Preserve the same key
+5. Create the download with a new unique idempotency key. Preserve the same key
    only when retrying the identical request after an uncertain transport result:
 
    ```bash
@@ -97,14 +106,15 @@ results.
      --json
    ```
 
-5. Read the created download back and report its current state:
+6. Read the created download back and report its current state:
 
    ```bash
    realmroot toolbox zme release-acquisition get-download "<download-id>" --json
    ```
 
-Never reconstruct, edit, or persist an opaque `resourceRef`; use the exact
-value returned by the current candidate search.
+Never reconstruct, edit, or persist an opaque `resourceRef`; retrieve it through
+`get-release-candidate` for the selected candidate and use the exact current
+value returned by ZME.
 
 ## Inspect Or Manage Downloads
 

@@ -6336,6 +6336,7 @@
           {
             "name": "searchType",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string",
               "enum": [
@@ -6348,13 +6349,16 @@
           {
             "name": "categories",
             "in": "query",
+            "required": false,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "description": "Comma- or pipe-separated positive category identifiers."
             }
           },
           {
             "name": "target",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "string",
               "enum": [
@@ -6367,6 +6371,7 @@
           {
             "name": "page",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1,
@@ -6376,6 +6381,7 @@
           {
             "name": "pageSize",
             "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "minimum": 1,
@@ -6399,6 +6405,148 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReleaseCandidateCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/release-candidates/{releaseCandidateId}": {
+      "get": {
+        "operationId": "getReleaseCandidate",
+        "summary": "Get an ephemeral release candidate",
+        "tags": [
+          "release-acquisition"
+        ],
+        "security": [
+          {
+            "oidcSession": []
+          },
+          {
+            "oidcDpop": [
+              "release-candidates:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "releaseCandidateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^release-candidate:[0-9a-f]{64}$"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Tracestate"
+          },
+          {
+            "name": "mediaKey",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "searchType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "search",
+                "audiosearch",
+                "booksearch"
+              ]
+            }
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Comma- or pipe-separated positive category identifiers."
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "music",
+                "ebook",
+                "audiobook"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseCandidateResourceRef"
                 }
               }
             }
@@ -10469,6 +10617,62 @@
           "publishDate",
           "quality",
           "availability",
+          "links"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^release-candidate:[0-9a-f]{64}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "size": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "publishDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/ReleaseCandidateQuality"
+          },
+          "availability": {
+            "$ref": "#/components/schemas/ReleaseCandidateAvailability"
+          },
+          "links": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "self"
+            ],
+            "properties": {
+              "self": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        }
+      },
+      "ReleaseCandidateResourceRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title",
+          "size",
+          "publishDate",
+          "quality",
+          "availability",
+          "links",
           "resourceRef",
           "resourceRefExpiresAt"
         ],
@@ -10500,6 +10704,19 @@
           "availability": {
             "$ref": "#/components/schemas/ReleaseCandidateAvailability"
           },
+          "links": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "self"
+            ],
+            "properties": {
+              "self": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          },
           "resourceRef": {
             "type": "string",
             "pattern": "^release-ref:v1:"
@@ -10521,8 +10738,7 @@
           "publishDate",
           "quality",
           "availability",
-          "resourceRef",
-          "resourceRefExpiresAt",
+          "links",
           "downloadTarget",
           "fileName",
           "seeders",
@@ -10545,9 +10761,6 @@
           "title": {
             "type": "string"
           },
-          "indexer": {
-            "type": "string"
-          },
           "size": {
             "type": [
               "integer",
@@ -10568,13 +10781,21 @@
           "availability": {
             "$ref": "#/components/schemas/ReleaseCandidateAvailability"
           },
-          "resourceRef": {
-            "type": "string",
-            "pattern": "^release-ref:v1:"
+          "links": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "self"
+            ],
+            "properties": {
+              "self": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
           },
-          "resourceRefExpiresAt": {
-            "type": "string",
-            "format": "date-time"
+          "indexer": {
+            "type": "string"
           },
           "downloadTarget": {
             "type": [

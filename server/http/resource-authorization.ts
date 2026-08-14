@@ -16,6 +16,7 @@ type AgentScope = (typeof agentScope)[keyof typeof agentScope]
 export const AGENT_OPERATION_POLICIES = [
   policy('listMedia', 'GET', '/media', agentScope.mediaRead),
   policy('listReleaseCandidates', 'GET', '/release-candidates', agentScope.releaseCandidatesRead),
+  policy('getReleaseCandidate', 'GET', '/release-candidates/{releaseCandidateId}', agentScope.releaseCandidatesRead),
   policy('listDownloaders', 'GET', '/downloaders', agentScope.downloadersRead),
   policy('getDownloader', 'GET', '/downloaders/{id}', agentScope.downloadersRead),
   policy('listDownloads', 'GET', '/downloads', agentScope.downloadsRead),

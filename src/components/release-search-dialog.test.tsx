@@ -251,6 +251,7 @@ const release: ReleaseCandidateFull = {
   leechers: 0,
   files: 1,
   publishDate: null,
+  links: { self: '/api/release-candidates/release-1' },
   resourceRef: 'release-ref:v1:test',
   resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
   sourceType: 'torrent_url',
