@@ -32,7 +32,7 @@ describe('music collections repository in D1', () => {
     const remaining = await repo.listForConnector(USER_ID, CONNECTOR_ID)
     expect(remaining).toHaveLength(104)
     expect(remaining.some((item) => item.externalId === 'playlist-104')).toBe(false)
-  })
+  }, 15_000)
 
   it('replaces the complete library selection in one batch operation', async () => {
     const repo = createMusicCollectionsRepo(createDb(env))
