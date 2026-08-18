@@ -11,6 +11,8 @@ import {
 } from 'jose'
 import * as oauth from 'oauth4webapi'
 
+const realmrootCliClientId = 'realmroot-cli'
+
 const discoveryCache = new Map<string, { metadata: oauth.AuthorizationServer; expiresAt: number }>()
 const jwksCaches = new Map<string, oauth.JWKSCacheInput>()
 const accessTokenJwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
@@ -128,9 +130,11 @@ export async function validateDpopRequest(config: AppConfig, request: Request): 
     }
     requireDpopBinding(verified.payload.cnf)
     if (
+      verified.payload.client_id !== realmrootCliClientId ||
       !verified.payload.act ||
       typeof verified.payload.act !== 'object' ||
-      typeof (verified.payload.act as Record<string, unknown>).sub !== 'string'
+      typeof (verified.payload.act as Record<string, unknown>).sub !== 'string' ||
+      (verified.payload.act as Record<string, unknown>).iss !== config.oidc.issuer
     ) {
       throw new Error('Missing acting Agent subject.')
     }
@@ -157,9 +161,11 @@ export async function validateDpopRequest(config: AppConfig, request: Request): 
     throw new Error('The DPoP access token has an invalid issued-at claim.')
   }
   if (
+    claims.client_id !== realmrootCliClientId ||
     !claims.act ||
     typeof claims.act !== 'object' ||
-    typeof (claims.act as Record<string, unknown>).sub !== 'string'
+    typeof (claims.act as Record<string, unknown>).sub !== 'string' ||
+    (claims.act as Record<string, unknown>).iss !== config.oidc.issuer
   ) {
     throw new Error('The resource token omitted the acting Agent subject.')
   }

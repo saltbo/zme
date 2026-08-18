@@ -113,6 +113,14 @@ describe('Standard OIDC DPoP resource token validation', () => {
       kind: 'invalid_token',
     })
   })
+
+  it('rejects a resource token issued to a different client', async () => {
+    const fixture = await dpopFixture({ clientId: 'another-client' })
+    vi.stubGlobal('fetch', fixture.fetch)
+    await expect(validateDpopRequest(fixture.config, fixture.request)).rejects.toMatchObject({
+      kind: 'invalid_token',
+    })
+  })
 })
 
 async function dpopFixture(
@@ -128,6 +136,7 @@ async function dpopFixture(
     omitActor?: boolean
     omitProofJti?: boolean
     omitProofIat?: boolean
+    clientId?: string
     authorizationScheme?: string
     confirmation?: Record<string, unknown>
   } = {},
@@ -144,8 +153,8 @@ async function dpopFixture(
   const accessToken = await new SignJWT({
     scope: 'media:read release-search-jobs:write media:read',
     cnf: override.confirmation ?? { jkt: boundThumbprint },
-    ...(override.omitActor ? {} : { act: { sub: 'agent-456' } }),
-    client_id: 'dpop-agent',
+    ...(override.omitActor ? {} : { act: { iss: issuer, sub: 'agent-456' } }),
+    client_id: override.clientId ?? 'realmroot-cli',
   })
     .setProtectedHeader({ alg: 'ES256', kid: issuerKey.kid, typ: override.accessType ?? 'at+jwt' })
     .setIssuer(issuer)
