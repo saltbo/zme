@@ -508,8 +508,8 @@ async function dpopFixture() {
       const accessToken = await new SignJWT({
         scope: scopes.join(' '),
         cnf: { jkt: thumbprint },
-        act: { sub: 'agent-e2e' },
-        client_id: 'dpop-agent',
+        act: { sub: 'agent-e2e', iss: issuer },
+        client_id: 'realmroot-cli',
       })
         .setProtectedHeader({ alg: 'ES256', kid: 'dpop-signing-key', typ: 'at+jwt' })
         .setIssuer(issuer)
