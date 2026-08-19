@@ -199,7 +199,7 @@ export async function dispatchMusicDownloadRecord(
       title: filename,
       category: 'zme:music',
       targetSubdirectory,
-      tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
+      tags: emptyDownloadTags(),
     })
     const acceptedAt = new Date().toISOString()
     await deps.downloadRecordsRepo.update(record.id, record.generation, {
@@ -229,7 +229,7 @@ export async function dispatchMusicDownloadRecord(
           ]
             .filter(Boolean)
             .join('/'),
-          tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
+          tags: emptyDownloadTags(),
         },
       })
       if (updated?.externalTaskId) {
@@ -265,7 +265,7 @@ async function ensureCanonicalDownload(
       uri: `internal:music-track:${track.id}`,
       title: track.title,
       category: 'zme:music',
-      tags: [`mediaKey=${track.mediaKey}`, 'kind=music'],
+      tags: emptyDownloadTags(),
     },
     status: 'resolving',
     stage: null,
@@ -406,6 +406,10 @@ async function resolvePreferredTrackResource(
 
 function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
+}
+
+function emptyDownloadTags(): string[] {
+  return []
 }
 
 function parseResolvedMusicResource(value: unknown): ResolvedMusicResource {

@@ -1,19 +1,19 @@
-import type { DownloadTaskPage } from '@shared/types'
+import type { DownloadPage } from '@shared/types'
 import { apiRequest, jsonBody, query } from './client'
 
 export async function listDownloadTasks(input: {
   status?: string
   page: number
   pageSize: number
-}): Promise<DownloadTaskPage> {
+}): Promise<DownloadPage> {
   const result = await apiRequest<{
     items: Array<
       Omit<
-        DownloadTaskPage['items'][number],
+        DownloadPage['items'][number],
         'downloadedBytes' | 'storageUploadedBytes' | 'totalBytes' | 'downloadBps' | 'storageUploadBps' | 'errorMessage'
       > & {
         progress: Pick<
-          DownloadTaskPage['items'][number],
+          DownloadPage['items'][number],
           'downloadedBytes' | 'storageUploadedBytes' | 'totalBytes' | 'downloadBps' | 'storageUploadBps'
         >
         result: { objectId: string | null } | null

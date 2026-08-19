@@ -67,14 +67,14 @@ export async function createDownload(
         uri: release.uri,
         title: release.title,
         category: release.category,
-        tags: release.tags,
+        tags: emptyDownloadTags(),
       }
     : {
         sourceType: 'http' as const,
         uri: `internal:music-track:${track?.id}`,
         title: track?.title,
         category: 'zme:music',
-        tags: [`mediaKey=${musicKey}`, 'kind=music'],
+        tags: emptyDownloadTags(),
       }
   const resolvedInput = await resolveDownloadInput(deps, { downloaderId: input.downloaderId, ...unresolvedSpec })
   const spec = {
@@ -359,6 +359,10 @@ function isTerminal(status: DownloadRecord['status']): boolean {
 function requiredResourceRefSecret(value: string | undefined): string {
   if (!value) throw new Error('DOWNLOAD_RESOURCE_REF_SECRET is required.')
   return value
+}
+
+function emptyDownloadTags(): string[] {
+  return []
 }
 
 function downloadTargetFolder(root: string | undefined, category: string | undefined): string {

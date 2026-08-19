@@ -858,6 +858,18 @@ export interface DownloadTaskPage {
   pageSize: number
 }
 
+export interface DownloadSummary extends DownloadTaskSummary {
+  resourceKey: string
+  resourceKind: 'release' | 'music_track'
+}
+
+export interface DownloadPage {
+  items: DownloadSummary[]
+  total: number
+  page: number
+  pageSize: number
+}
+
 export interface CreateDownloadInput {
   downloaderId: string
   uri: string

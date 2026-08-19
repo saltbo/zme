@@ -1,4 +1,4 @@
-import type { DownloadTaskPage, DownloadTaskSummary } from '@shared/types'
+import type { DownloadPage, DownloadSummary } from '@shared/types'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -54,13 +54,15 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-function page(items: DownloadTaskSummary[]): DownloadTaskPage {
+function page(items: DownloadSummary[]): DownloadPage {
   return { items, total: items.length, page: 1, pageSize: 20 }
 }
 
-function task(status: DownloadTaskSummary['status']): DownloadTaskSummary {
+function task(status: DownloadSummary['status']): DownloadSummary {
   return {
     id: 'download-1',
+    resourceKey: 'tmdb:movie:550',
+    resourceKind: 'release',
     downloaderId: 'zpan-1',
     downloaderName: 'ZPan',
     downloaderKind: 'zpan',

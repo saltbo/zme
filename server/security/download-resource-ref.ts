@@ -12,7 +12,6 @@ export interface ResolvedReleaseRef {
   title: string
   mediaKey: string
   category: string
-  tags: string[]
 }
 
 interface ReleaseRefClaims {
@@ -23,7 +22,6 @@ interface ReleaseRefClaims {
   title: string
   mediaKey: string
   category: string
-  tags: string[]
 }
 
 export class InvalidDownloadResourceRefError extends Error {
@@ -55,7 +53,6 @@ export async function issueReleaseResourceRef(
     title: item.title,
     mediaKey,
     category: releaseCategory(mediaKey, item),
-    tags: releaseTags(mediaKey, item),
   }
   const token = await new EncryptJWT({ ...claims })
     .setProtectedHeader({ alg: 'dir', enc: 'A256GCM', typ: 'zme-release-ref+jwt' })
@@ -89,9 +86,7 @@ export async function resolveReleaseResourceRef(
       typeof payload.uri !== 'string' ||
       typeof payload.title !== 'string' ||
       typeof payload.mediaKey !== 'string' ||
-      typeof payload.category !== 'string' ||
-      !Array.isArray(payload.tags) ||
-      !payload.tags.every((tag) => typeof tag === 'string')
+      typeof payload.category !== 'string'
     ) {
       throw new InvalidDownloadResourceRefError()
     }
@@ -102,7 +97,6 @@ export async function resolveReleaseResourceRef(
       title: payload.title,
       mediaKey: payload.mediaKey,
       category: payload.category,
-      tags: payload.tags as string[],
     }
   } catch (error) {
     if (error instanceof InvalidDownloadResourceRefError) throw error
@@ -130,17 +124,6 @@ function releaseCategory(mediaKey: string, item: IndexerSearchItem): string {
   if (mediaKey.startsWith('tmdb:tv:')) return 'zme:series'
   if (mediaKey.startsWith('tmdb:movie:')) return 'zme:movie'
   throw new InvalidDownloadResourceRefError('The release candidate media type is unsupported.')
-}
-
-function releaseTags(mediaKey: string, item: IndexerSearchItem): string[] {
-  const kind = mediaKey.startsWith('tmdb:tv:') ? 'series' : mediaKey.startsWith('tmdb:movie:') ? 'movie' : null
-  return [
-    `mediaKey=${mediaKey}`,
-    `kind=${item.downloadTarget ?? kind}`,
-    item.tmdbId ? `tmdbId=${item.tmdbId}` : null,
-    item.imdbId ? `imdbId=${item.imdbId}` : null,
-    item.tvdbId ? `tvdbId=${item.tvdbId}` : null,
-  ].filter((tag): tag is string => Boolean(tag))
 }
 
 async function encryptionKey(secret: string): Promise<Uint8Array<ArrayBuffer>> {

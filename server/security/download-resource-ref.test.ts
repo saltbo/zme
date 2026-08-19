@@ -45,7 +45,6 @@ describe('download resource references', () => {
       uri: item.magnetUrl,
       category: 'zme:series',
       mediaKey: 'tmdb:tv:44652',
-      tags: expect.arrayContaining(['mediaKey=tmdb:tv:44652', 'tmdbId=44652']),
     })
   })
 

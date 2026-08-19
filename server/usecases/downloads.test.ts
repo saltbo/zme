@@ -1,10 +1,58 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { IndexerSearchItem } from '../../shared/types'
+import type { Env } from '../env'
+import { issueReleaseResourceRef } from '../security/download-resource-ref'
 import type { Deps } from './deps'
-import { deleteDownload, processDownloadReconciliation, suspendDownload } from './downloads'
+import { createDownload, deleteDownload, processDownloadReconciliation, suspendDownload } from './downloads'
 import type { DownloadRecord } from './ports'
 import { DownloadManagementUnsupportedError, DownloadNotTerminalError } from './resource-errors'
 
 describe('unified download management', () => {
+  it('submits a canonical release without redundant identity tags', async () => {
+    const secret = 'download-test-resource-reference-secret'
+    const issued = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:movie:550', releaseCandidate())
+    const submissions: Array<{ tags?: string[] }> = []
+    let stored: DownloadRecord | null = null
+    const downloader = {
+      id: 'downloader-1',
+      userId: 'user-1',
+      description: 'ZPan',
+      kind: 'zpan' as const,
+      config: { endpoint: 'https://zpan.test', credentials: {}, options: { targetFolder: '/media' } },
+    }
+    const deps = {
+      downloadsRepo: {
+        findByIdempotency: async () => null,
+        create: async (record: DownloadRecord) => {
+          stored = record
+          return true
+        },
+        update: async (_userId: string, _id: string, _revision: string, patch: Partial<DownloadRecord>) => {
+          stored = { ...(stored as DownloadRecord), ...patch }
+          return stored
+        },
+      },
+      downloadersRepo: { getEnabled: async () => downloader },
+      downloaderGateways: {
+        zpan: {
+          supportedSourceTypes: ['magnet'],
+          submit: async (_config: unknown, input: { tags?: string[] }) => {
+            submissions.push(input)
+            return { externalTaskId: 'zpan-task-1' }
+          },
+        },
+      },
+    } as never as Deps
+
+    const created = await createDownload(deps, testEnv(secret), 'user-1', 'request-1', {
+      downloaderId: downloader.id,
+      resourceRef: issued.resourceRef,
+    })
+
+    expect(submissions).toEqual([expect.objectContaining({ tags: [] })])
+    expect(created.spec.tags).toEqual([])
+  })
+
   it('pauses a ZPan task without a caller-supplied revision', async () => {
     const current = download()
     const setStatus = vi.fn(async () => snapshot('paused'))
@@ -153,4 +201,40 @@ function snapshot(status: 'paused') {
     storageUploadBps: 0,
     errorMessage: null,
   }
+}
+
+function releaseCandidate(): IndexerSearchItem {
+  return {
+    id: 'candidate-1',
+    downloadTarget: null,
+    title: 'Fight Club 1999',
+    fileName: null,
+    indexer: 'test',
+    size: 1,
+    seeders: 1,
+    leechers: 0,
+    files: 1,
+    protocol: 'torrent',
+    publishDate: null,
+    downloadUrl: null,
+    magnetUrl: 'magnet:?xt=urn:btih:abc',
+    infoUrl: null,
+    infoHash: 'abc',
+    categories: [],
+    categoryIds: [],
+    indexerFlags: [],
+    imdbId: 137523,
+    tmdbId: 550,
+    tvdbId: null,
+  }
+}
+
+function testEnv(secret: string): Env {
+  return {
+    PUBLIC_APP_ORIGIN: 'https://zme.test',
+    OIDC_ISSUER: 'https://id.test',
+    OIDC_CLIENT_ID: 'zme',
+    OIDC_ADMIN_SUBJECTS: 'admin',
+    DOWNLOAD_RESOURCE_REF_SECRET: secret,
+  } as Env
 }

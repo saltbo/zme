@@ -47,7 +47,6 @@ import { cn, formatBytes } from '@/lib/utils'
 
 export interface ReleaseSearchMedia extends MediaSearchItem {
   downloadCategory?: string
-  downloadTags?: string[]
 }
 
 export interface ReleaseSearchError {

@@ -1,5 +1,4 @@
-import { parseZmeDownloadCategory } from '@shared/download-metadata'
-import type { DownloadTaskStatus, DownloadTaskSummary, MediaKind } from '@shared/types'
+import type { DownloadSummary, DownloadTaskStatus, MediaKind } from '@shared/types'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -21,6 +20,7 @@ import { useDownloadTasks } from '@/hooks/use-download-task-queries'
 import { useMediaDetails } from '@/hooks/use-media-queries'
 import { useBookDetails, useMusicAlbumDetails } from '@/hooks/use-resource-queries'
 import { getTmdbLanguage } from '@/i18n'
+import { getDownloadCatalogResource, getDownloadMedia } from '@/lib/download-resource'
 import { cn, formatBytes } from '@/lib/utils'
 
 const activeStatuses = new Set<DownloadTaskStatus>([
@@ -38,7 +38,6 @@ const activeStatuses = new Set<DownloadTaskStatus>([
 const statusFilters: DownloadTaskStatus[] = ['running', 'paused', 'completed', 'failed', 'canceled']
 const skeletonKeys = ['download-skeleton-1', 'download-skeleton-2', 'download-skeleton-3', 'download-skeleton-4']
 type StatusFilter = 'all' | DownloadTaskStatus
-type TaggedResource = { kind: 'music' | 'book'; mediaKey: string }
 
 export function DownloadsPage() {
   const { t } = useTranslation()
@@ -140,19 +139,18 @@ function SummaryTile({ icon: Icon, label, value }: { icon: typeof DownloadCloud;
   )
 }
 
-function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
+function DownloadTaskCard({ task }: { task: DownloadSummary }) {
   const { t, i18n } = useTranslation()
-  const taggedMedia = getTaggedMedia(task)
-  const taggedResource = getTaggedResource(task)
+  const media = getDownloadMedia(task)
+  const resource = getDownloadCatalogResource(task)
   const language = getTmdbLanguage(i18n.language)
-  const mediaDetails = useMediaDetails(taggedMedia?.kind ?? 'movie', taggedMedia?.tmdbId ?? 0, language)
-  const resourceDetails = useDownloadResourceDetails(taggedResource)
+  const mediaDetails = useMediaDetails(media?.kind ?? 'movie', media?.tmdbId ?? 0, language)
+  const resourceDetails = useDownloadResourceDetails(resource)
   const posterMedia = mediaDetails.data ?? null
   const imageUrl = resourceDetails.imageUrl ?? posterMedia?.backdropUrl ?? posterMedia?.posterUrl
   const displayTitle = resourceDetails.title ?? posterMedia?.title ?? getDisplayTitle(task.name)
   const mediaMeta =
-    resourceDetails.meta ??
-    getMediaMeta(posterMedia?.kind ?? taggedMedia?.kind ?? null, posterMedia?.releaseYear ?? null, t)
+    resourceDetails.meta ?? getMediaMeta(posterMedia?.kind ?? media?.kind ?? null, posterMedia?.releaseYear ?? null, t)
   const overview = resourceDetails.description ?? posterMedia?.overview ?? null
   const progress = getProgress(task)
   const status = getStatusMeta(task.status, t)
@@ -210,20 +208,7 @@ function DownloadTaskCard({ task }: { task: DownloadTaskSummary }) {
   )
 }
 
-function getTaggedMedia(task: DownloadTaskSummary): { kind: MediaKind; tmdbId: number } | null {
-  const kind = parseZmeDownloadCategory(task.category)
-  const tmdbId = getTagNumber(task.tags, 'tmdbId')
-  return kind && tmdbId ? { kind, tmdbId } : null
-}
-
-function getTaggedResource(task: DownloadTaskSummary): TaggedResource | null {
-  const kind = getTagValue(task.tags, 'kind')
-  const mediaKey = getTagValue(task.tags, 'mediaKey')
-  if ((kind === 'music' || kind === 'book') && mediaKey) return { kind, mediaKey }
-  return null
-}
-
-function useDownloadResourceDetails(resource: TaggedResource | null) {
+function useDownloadResourceDetails(resource: ReturnType<typeof getDownloadCatalogResource>) {
   const music = useMusicAlbumDetails(resource?.mediaKey ?? '', { enabled: resource?.kind === 'music' })
   const book = useBookDetails(resource?.mediaKey ?? '', { enabled: resource?.kind === 'book' })
 
@@ -256,21 +241,6 @@ function useDownloadResourceDetails(resource: TaggedResource | null) {
   }
 }
 
-function getTagNumber(tags: string[], key: string): number | null {
-  const tagValue = getTagValue(tags, key)
-  if (!tagValue) return null
-  const value = Number(tagValue)
-  return Number.isInteger(value) && value > 0 ? value : null
-}
-
-function getTagValue(tags: string[], key: string): string | null {
-  const prefix = `${key}=`
-  const tag = tags.find((value) => value.startsWith(prefix))
-  if (!tag) return null
-  const value = tag.slice(prefix.length).trim()
-  return value || null
-}
-
 function getStatusMeta(status: DownloadTaskStatus, t: (key: string) => string) {
   if (status === 'completed') {
     return { label: getStatusLabel(status, t), icon: CheckCircle2, className: 'text-emerald-100' }
@@ -292,7 +262,7 @@ function getStatusLabel(status: DownloadTaskStatus, t: (key: string) => string) 
   return status === 'completed' ? t('downloadStatusCompleted') : t(`downloadStatus_${status}`)
 }
 
-function getProgress(task: DownloadTaskSummary) {
+function getProgress(task: DownloadSummary) {
   return {
     download: getByteProgress(task.downloadedBytes, task.totalBytes),
     upload: getByteProgress(task.storageUploadedBytes, task.totalBytes),
@@ -306,7 +276,7 @@ function getPrimaryProgress(
   return status === 'completed' ? progress.upload : progress.download
 }
 
-function getStageMetric(task: DownloadTaskSummary, progress: { value: number; label: string }) {
+function getStageMetric(task: DownloadSummary, progress: { value: number; label: string }) {
   if (task.status === 'running' && task.stage !== 'uploading') {
     return {
       icon: DownloadCloud,

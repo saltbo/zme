@@ -131,7 +131,6 @@ function getSearchFingerprint(context: Omit<ReleaseSearchContext, 'fingerprint'>
       title: context.media.title,
       year: context.media.releaseYear,
       category: context.media.downloadCategory,
-      tags: context.media.downloadTags,
     },
   })
 }
@@ -149,7 +148,6 @@ function toBookReleaseMedia(book: BookDetails, target: 'ebook' | 'audiobook'): R
     rating: null,
     genres: book.languages,
     downloadCategory: `zme:${target}`,
-    downloadTags: [`mediaKey=${book.mediaKey}`, 'kind=book', `target=${target}`],
   }
 }
 

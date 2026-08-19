@@ -402,7 +402,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       targetFolder: '/media/Movies',
       name: 'Fight.Club.1999.1080p.BluRay.x265.DTS',
       category: 'zme:movie',
-      tags: expect.arrayContaining(['mediaKey=tmdb:movie:550', 'kind=movie']),
+      tags: [],
     }),
   ])
 

@@ -55,7 +55,6 @@ describe('resource release search inputs', () => {
     expect(input.item).toMatchObject({
       title: 'Matilda',
       downloadCategory: 'zme:ebook',
-      downloadTags: ['mediaKey=isbn:book:9780140328721', 'kind=book', 'target=ebook'],
     })
   })
 
@@ -73,7 +72,6 @@ describe('resource release search inputs', () => {
     expect(input.item).toMatchObject({
       title: 'Matilda',
       downloadCategory: 'zme:audiobook',
-      downloadTags: ['mediaKey=isbn:book:9780140328721', 'kind=book', 'target=audiobook'],
     })
   })
 })
