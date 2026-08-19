@@ -1,3 +1,4 @@
+import { parseTmdbMediaKey } from '@shared/media-key'
 import type { IndexerSearchItem } from '@shared/types'
 import { EncryptJWT, jwtDecrypt } from 'jose'
 
@@ -12,6 +13,7 @@ export interface ResolvedReleaseRef {
   title: string
   mediaKey: string
   category: string
+  tags: string[]
 }
 
 interface ReleaseRefClaims {
@@ -22,6 +24,7 @@ interface ReleaseRefClaims {
   title: string
   mediaKey: string
   category: string
+  tags?: string[]
 }
 
 export class InvalidDownloadResourceRefError extends Error {
@@ -53,6 +56,7 @@ export async function issueReleaseResourceRef(
     title: item.title,
     mediaKey,
     category: releaseCategory(mediaKey, item),
+    tags: releaseTags(mediaKey, item),
   }
   const token = await new EncryptJWT({ ...claims })
     .setProtectedHeader({ alg: 'dir', enc: 'A256GCM', typ: 'zme-release-ref+jwt' })
@@ -86,7 +90,9 @@ export async function resolveReleaseResourceRef(
       typeof payload.uri !== 'string' ||
       typeof payload.title !== 'string' ||
       typeof payload.mediaKey !== 'string' ||
-      typeof payload.category !== 'string'
+      typeof payload.category !== 'string' ||
+      (payload.tags !== undefined &&
+        (!Array.isArray(payload.tags) || !payload.tags.every((tag) => typeof tag === 'string')))
     ) {
       throw new InvalidDownloadResourceRefError()
     }
@@ -97,6 +103,7 @@ export async function resolveReleaseResourceRef(
       title: payload.title,
       mediaKey: payload.mediaKey,
       category: payload.category,
+      tags: normalizeReleaseTags(payload.mediaKey, payload.tags),
     }
   } catch (error) {
     if (error instanceof InvalidDownloadResourceRefError) throw error
@@ -124,6 +131,25 @@ function releaseCategory(mediaKey: string, item: IndexerSearchItem): string {
   if (mediaKey.startsWith('tmdb:tv:')) return 'zme:series'
   if (mediaKey.startsWith('tmdb:movie:')) return 'zme:movie'
   throw new InvalidDownloadResourceRefError('The release candidate media type is unsupported.')
+}
+
+function releaseTags(mediaKey: string, item: IndexerSearchItem): string[] {
+  return normalizeReleaseTags(mediaKey, [
+    item.imdbId ? `imdbId=${item.imdbId}` : null,
+    item.tvdbId ? `tvdbId=${item.tvdbId}` : null,
+  ])
+}
+
+function normalizeReleaseTags(mediaKey: string, tags: unknown): string[] {
+  const tmdb = parseTmdbMediaKey(mediaKey)
+  const externalIds = Array.isArray(tags)
+    ? tags.filter(
+        (tag): tag is string => typeof tag === 'string' && (tag.startsWith('imdbId=') || tag.startsWith('tvdbId=')),
+      )
+    : []
+  return [
+    ...new Set([tmdb ? `tmdbId=${tmdb.tmdbId}` : null, ...externalIds].filter((tag): tag is string => Boolean(tag))),
+  ]
 }
 
 async function encryptionKey(secret: string): Promise<Uint8Array<ArrayBuffer>> {

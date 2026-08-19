@@ -8,7 +8,7 @@ import type { DownloadRecord } from './ports'
 import { DownloadManagementUnsupportedError, DownloadNotTerminalError } from './resource-errors'
 
 describe('unified download management', () => {
-  it('submits a canonical release without redundant identity tags', async () => {
+  it('submits a canonical release with only external ID tags', async () => {
     const secret = 'download-test-resource-reference-secret'
     const issued = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:movie:550', releaseCandidate())
     const submissions: Array<{ tags?: string[] }> = []
@@ -49,8 +49,8 @@ describe('unified download management', () => {
       resourceRef: issued.resourceRef,
     })
 
-    expect(submissions).toEqual([expect.objectContaining({ tags: [] })])
-    expect(created.spec.tags).toEqual([])
+    expect(submissions).toEqual([expect.objectContaining({ tags: ['tmdbId=550', 'imdbId=137523'] })])
+    expect(created.spec.tags).toEqual(['tmdbId=550', 'imdbId=137523'])
   })
 
   it('pauses a ZPan task without a caller-supplied revision', async () => {

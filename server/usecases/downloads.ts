@@ -67,14 +67,14 @@ export async function createDownload(
         uri: release.uri,
         title: release.title,
         category: release.category,
-        tags: emptyDownloadTags(),
+        tags: downloadTags(release.tags),
       }
     : {
         sourceType: 'http' as const,
         uri: `internal:music-track:${track?.id}`,
         title: track?.title,
         category: 'zme:music',
-        tags: emptyDownloadTags(),
+        tags: downloadTags([]),
       }
   const resolvedInput = await resolveDownloadInput(deps, { downloaderId: input.downloaderId, ...unresolvedSpec })
   const spec = {
@@ -361,8 +361,8 @@ function requiredResourceRefSecret(value: string | undefined): string {
   return value
 }
 
-function emptyDownloadTags(): string[] {
-  return []
+function downloadTags(tags: readonly string[]): string[] {
+  return [...tags]
 }
 
 function downloadTargetFolder(root: string | undefined, category: string | undefined): string {

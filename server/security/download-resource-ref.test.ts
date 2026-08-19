@@ -45,6 +45,20 @@ describe('download resource references', () => {
       uri: item.magnetUrl,
       category: 'zme:series',
       mediaKey: 'tmdb:tv:44652',
+      tags: ['tmdbId=44652'],
+    })
+  })
+
+  it('derives the TMDB tag from the canonical media key and keeps only external IDs', async () => {
+    const issued = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:tv:44652', {
+      ...item,
+      tmdbId: null,
+      imdbId: 123,
+      tvdbId: 456,
+    })
+
+    await expect(resolveReleaseResourceRef(secret, 'user-1', issued.resourceRef)).resolves.toMatchObject({
+      tags: ['tmdbId=44652', 'imdbId=123', 'tvdbId=456'],
     })
   })
 
