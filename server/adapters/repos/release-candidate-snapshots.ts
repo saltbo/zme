@@ -5,23 +5,32 @@ import type { IndexerSearchItem } from '@shared/types'
 import { and, eq, gt, lt, sql } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
+const D1_MAX_BOUND_PARAMETERS = 100
+const RELEASE_CANDIDATE_SNAPSHOT_PARAMETERS = 6
+const RELEASE_CANDIDATE_SNAPSHOT_CHUNK_SIZE = Math.floor(
+  D1_MAX_BOUND_PARAMETERS / RELEASE_CANDIDATE_SNAPSHOT_PARAMETERS,
+)
 
 export function createReleaseCandidateSnapshotsRepo(db: Db): ReleaseCandidateSnapshotsRepo {
   return {
     async saveMany(records) {
       if (records.length === 0) return
-      await db
-        .insert(releaseCandidateSnapshots)
-        .values(records.map(toRow))
-        .onConflictDoUpdate({
-          target: [releaseCandidateSnapshots.userId, releaseCandidateSnapshots.id],
-          set: {
-            mediaKey: sql.raw(`excluded.${releaseCandidateSnapshots.mediaKey.name}`),
-            itemJson: sql.raw(`excluded.${releaseCandidateSnapshots.itemJson.name}`),
-            createdAt: sql.raw(`excluded.${releaseCandidateSnapshots.createdAt.name}`),
-            expiresAt: sql.raw(`excluded.${releaseCandidateSnapshots.expiresAt.name}`),
-          },
-        })
+      const statements = chunks(records, RELEASE_CANDIDATE_SNAPSHOT_CHUNK_SIZE).map((batch) =>
+        db
+          .insert(releaseCandidateSnapshots)
+          .values(batch.map(toRow))
+          .onConflictDoUpdate({
+            target: [releaseCandidateSnapshots.userId, releaseCandidateSnapshots.id],
+            set: {
+              mediaKey: sql.raw(`excluded.${releaseCandidateSnapshots.mediaKey.name}`),
+              itemJson: sql.raw(`excluded.${releaseCandidateSnapshots.itemJson.name}`),
+              createdAt: sql.raw(`excluded.${releaseCandidateSnapshots.createdAt.name}`),
+              expiresAt: sql.raw(`excluded.${releaseCandidateSnapshots.expiresAt.name}`),
+            },
+          }),
+      )
+      const [first, ...rest] = statements
+      await db.batch([first, ...rest])
     },
 
     async get(userId, id, now) {
@@ -66,4 +75,10 @@ function toRecord(row: typeof releaseCandidateSnapshots.$inferSelect): ReleaseCa
 function toRow(record: ReleaseCandidateSnapshotRecord): typeof releaseCandidateSnapshots.$inferInsert {
   const { item, ...row } = record
   return { ...row, itemJson: JSON.stringify(item) }
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = []
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size))
+  return result
 }

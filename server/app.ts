@@ -15,7 +15,7 @@ import { requireAdminMiddleware, requireAuthMiddleware } from './http/middleware
 import { registerMusicRoutes } from './http/music'
 import { registerPublicMusicDownloadRoutes } from './http/music-downloads'
 import { registerMusicLibraryRoutes } from './http/music-library'
-import { normalizeProblemMiddleware, problem, requestBoundaryMiddleware } from './http/protocol'
+import { logRequestFailure, normalizeProblemMiddleware, problem, requestBoundaryMiddleware } from './http/protocol'
 import { registerPublicContractRoutes, registerResourceApiRoutes } from './http/resource-api'
 import { PROTECTED_RESOURCE_METADATA_PATH, protectedResourceMetadata } from './http/resource-authorization'
 import { StaleWriteError } from './usecases/ports'
@@ -56,7 +56,8 @@ registerDownloadRoutes(routes)
 app.route('/api', routes)
 app.notFound((c) => problem(c, 404, 'not-found', 'Resource not found'))
 app.onError((error, c) => {
-  console.error(JSON.stringify({ event: 'http.request.failed', errorClass: error.name, requestId: c.get('requestId') }))
+  const status = error instanceof StaleWriteError ? 412 : 500
+  logRequestFailure(error, c, status)
   if (error instanceof StaleWriteError) {
     return problem(c, 412, 'precondition-failed', 'Precondition failed', error.message)
   }

@@ -39,6 +39,32 @@ export const requestBoundaryMiddleware: MiddlewareHandler<AppEnv> = async (c, ne
   }
 }
 
+export function logRequestFailure(error: unknown, c: Context<AppEnv>, status: number): void {
+  const trace = c.get('trace')
+  const cause = error instanceof Error ? error.cause : undefined
+  console.error(
+    JSON.stringify({
+      event: 'http.request.failed',
+      requestId: c.get('requestId'),
+      method: c.req.method,
+      path: c.req.path,
+      status,
+      traceId: trace?.traceId,
+      spanId: trace?.spanId,
+      errorClass: error instanceof Error ? error.name : 'UnknownError',
+      errorMessage: safeErrorMessage(error instanceof Error ? error.message : String(error)),
+      causeClass: cause instanceof Error ? cause.name : undefined,
+      causeMessage: cause instanceof Error ? safeErrorMessage(cause.message) : undefined,
+    }),
+  )
+}
+
+function safeErrorMessage(message: string): string {
+  if (message.startsWith('Failed query:')) return 'Database query failed.'
+  const redacted = message.replace(/\b(https?:\/\/[^\s?]+)\?[^\s]*/gu, '$1?[redacted]')
+  return redacted.length > 1_000 ? `${redacted.slice(0, 1_000)}…` : redacted
+}
+
 async function claimFingerprint(value: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
   return btoa(String.fromCharCode(...digest))

@@ -3,7 +3,13 @@ import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { describe, expect, it, vi } from 'vitest'
 import type { AppEnv } from './context'
-import { normalizeProblemMiddleware, problem, requestBoundaryMiddleware, setPageLinks } from './protocol'
+import {
+  logRequestFailure,
+  normalizeProblemMiddleware,
+  problem,
+  requestBoundaryMiddleware,
+  setPageLinks,
+} from './protocol'
 
 const env = {
   PUBLIC_APP_ORIGIN: 'https://zme.test',
@@ -119,5 +125,43 @@ describe('HTTP protocol helpers', () => {
     expect(page.headers.get('link')).toContain('status=running&page=3&pageSize=20>; rel="next"')
     expect(page.headers.get('link')).toContain('status=running&page=1&pageSize=20>; rel="first"')
     log.mockRestore()
+  })
+
+  it('logs unexpected request errors with operation, trace, and cause context', async () => {
+    const app = new Hono<AppEnv>()
+    app.use('*', requestBoundaryMiddleware)
+    app.get('/failure', () => {
+      throw new Error('Failed query: INSERT INTO snapshots\nparams: private-release-title', {
+        cause: new Error('D1_ERROR: too many SQL variables'),
+      })
+    })
+    app.onError((error, c) => {
+      logRequestFailure(error, c, 500)
+      return problem(c, 500, 'internal-error', 'The request could not be completed')
+    })
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const response = await app.request('/failure', undefined, env)
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).not.toHaveProperty('errorMessage')
+    const entry = JSON.parse(String(error.mock.calls.at(-1)?.[0]))
+    expect(entry).toMatchObject({
+      event: 'http.request.failed',
+      requestId: expect.any(String),
+      method: 'GET',
+      path: '/failure',
+      status: 500,
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
+      spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
+      errorClass: 'Error',
+      errorMessage: 'Database query failed.',
+      causeClass: 'Error',
+      causeMessage: 'D1_ERROR: too many SQL variables',
+    })
+    expect(JSON.stringify(entry)).not.toContain('private-release-title')
+    info.mockRestore()
+    error.mockRestore()
   })
 })
