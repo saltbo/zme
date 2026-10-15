@@ -1,16 +1,113 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { IndexerSearchItem } from '../../shared/types'
 import type { Env } from '../env'
-import { issueReleaseResourceRef } from '../security/download-resource-ref'
+import { issueTorrentResourceRef } from '../security/download-resource-ref'
 import type { Deps } from './deps'
-import { createDownload, deleteDownload, processDownloadReconciliation, suspendDownload } from './downloads'
-import type { DownloadRecord } from './ports'
+import {
+  createDownload,
+  deleteDownload,
+  processDownloadReconciliation,
+  recoverDownloadReconciliations,
+  suspendDownload,
+} from './downloads'
+import { type DownloadRecord, DownloadSubmissionRejectedError, DownloadSubmissionUnknownError } from './ports'
 import { DownloadManagementUnsupportedError, DownloadNotTerminalError } from './resource-errors'
 
 describe('unified download management', () => {
+  it('marks an explicit downstream rejection failed without retrying it as uncertain', async () => {
+    const secret = 'download-test-resource-reference-secret'
+    const issued = await issueTorrentResourceRef(secret, 'user-1', 'tmdb:movie:550', torrent())
+    const f = submissionFixture(true)
+    f.deps.downloaderGateways.zpan.submit = async () => {
+      throw new DownloadSubmissionRejectedError('Rejected')
+    }
+    await expect(
+      createDownload(f.deps, testEnv(secret), 'user-1', 'rejected', {
+        downloaderId: 'downloader-1',
+        resourceRef: issued.resourceRef,
+      }),
+    ).rejects.toThrow('rejected the download submission')
+    expect(await f.deps.downloadsRepo.get('user-1', 'download-1')).toMatchObject({
+      status: 'failed',
+      completedAt: expect.any(String),
+    })
+  })
+
+  it('recovers interrupted submissions through reconciliation and respects concurrent recovery leases', async () => {
+    const secret = 'download-test-resource-reference-secret'
+    const issued = await issueTorrentResourceRef(secret, 'user-1', 'tmdb:movie:550', torrent())
+    const f = submissionFixture(true)
+    const first = await createDownload(f.deps, testEnv(secret), 'user-1', 'recover', {
+      downloaderId: 'downloader-1',
+      resourceRef: issued.resourceRef,
+    })
+    f.deps.dispatchLanesRepo.acquire = async () => ({
+      acquired: false,
+      lane: { key: 'test', leaseOwner: null, leaseExpiresAt: null, nextAllowedAt: null, updatedAt: 'now' },
+    })
+    const message = { type: 'download_reconciliation' as const, userId: 'user-1', downloadId: first.id }
+    expect(await processDownloadReconciliation(f.deps, message)).toBeNull()
+    expect(f.keys).toHaveLength(1)
+    f.deps.dispatchLanesRepo.acquire = async () => ({
+      acquired: true,
+      lane: { key: 'test', leaseOwner: null, leaseExpiresAt: null, nextAllowedAt: null, updatedAt: 'now' },
+    })
+    f.deps.downloaderGateways.zpan.submit = async () => {
+      throw new Error('Still uncertain')
+    }
+    expect(await processDownloadReconciliation(f.deps, message)).toBeNull()
+    expect(await f.deps.downloadsRepo.get('user-1', first.id)).toMatchObject({ status: 'submissionUnknown' })
+    f.deps.downloaderGateways.zpan.submit = async () => {
+      throw new DownloadSubmissionRejectedError('Rejected by remote')
+    }
+    expect(await processDownloadReconciliation(f.deps, message)).toBeNull()
+    expect(await f.deps.downloadsRepo.get('user-1', first.id)).toMatchObject({ status: 'failed' })
+  })
+
+  it('queues persisted recovery candidates and deletes a terminal downstream task before its record', async () => {
+    const current = { ...download(), status: 'completed' as const }
+    const removeRemote = vi.fn(async () => undefined)
+    const removeRecord = vi.fn(async () => true)
+    const enqueue = vi.fn(async () => undefined)
+    const deps = managedDeps(current, { delete: removeRemote })
+    deps.downloadsRepo.delete = removeRecord
+    deps.downloadsRepo.listReconciliationCandidates = async () => [current]
+    deps.downloadReconciliationQueue = { enqueue }
+    await recoverDownloadReconciliations(deps)
+    expect(enqueue).toHaveBeenCalledWith({ userId: current.userId, downloadId: current.id })
+    await deleteDownload(deps, current.userId, current.id)
+    expect(removeRemote).toHaveBeenCalledWith(expect.anything(), current.externalTaskId)
+    expect(removeRecord).toHaveBeenCalledWith(current.userId, current.id, current.updatedAt)
+  })
+  it('recovers an uncertain submission using the original downstream idempotency key', async () => {
+    const secret = 'download-recovery-test-secret'
+    const issued = await issueTorrentResourceRef(secret, 'user-1', 'tmdb:movie:550', torrent())
+    const f = submissionFixture(true)
+    const input = { downloaderId: 'downloader-1', resourceRef: issued.resourceRef }
+    const first = await createDownload(f.deps, testEnv(secret), 'user-1', 'same-request', input)
+    expect(first.status).toBe('submissionUnknown')
+    const recovered = await createDownload(f.deps, testEnv(secret), 'user-1', 'same-request', input)
+    expect(recovered).toMatchObject({ id: first.id, status: 'submitted', externalTaskId: 'remote-task-1', error: null })
+    expect(f.keys).toEqual([first.id, first.id])
+    expect(f.creations()).toBe(1)
+  })
+
+  it('keeps unsafe-to-retry submissions explicitly uncertain without creating another remote task', async () => {
+    const secret = 'download-recovery-test-secret'
+    const issued = await issueTorrentResourceRef(secret, 'user-1', 'tmdb:movie:550', torrent())
+    const f = submissionFixture(false)
+    const input = { downloaderId: 'downloader-1', resourceRef: issued.resourceRef }
+    const first = await createDownload(f.deps, testEnv(secret), 'user-1', 'same-request', input)
+    expect(first.status).toBe('submissionUnknown')
+    expect((await createDownload(f.deps, testEnv(secret), 'user-1', 'same-request', input)).status).toBe(
+      'submissionUnknown',
+    )
+    expect(f.keys).toEqual([first.id])
+  })
+
   it('submits a canonical release with only external ID tags', async () => {
     const secret = 'download-test-resource-reference-secret'
-    const issued = await issueReleaseResourceRef(secret, 'user-1', 'tmdb:movie:550', releaseCandidate())
+    const issued = await issueTorrentResourceRef(secret, 'user-1', 'tmdb:movie:550', torrent())
     const submissions: Array<{ tags?: string[] }> = []
     let stored: DownloadRecord | null = null
     const downloader = {
@@ -112,6 +209,42 @@ describe('unified download management', () => {
   })
 })
 
+function submissionFixture(recoverable: boolean) {
+  let record: DownloadRecord | null = null
+  let created = 0
+  const keys: string[] = []
+  const deps = {
+    downloadsRepo: {
+      findByIdempotency: async () => record,
+      get: async () => record,
+      create: async (value: DownloadRecord) => {
+        record = value
+        created += 1
+        return true
+      },
+      update: async (_user: string, _id: string, _revision: string, patch: Partial<DownloadRecord>) => {
+        record = { ...(record as DownloadRecord), ...patch }
+        return record
+      },
+    },
+    downloadersRepo: { getEnabled: async () => ({ kind: 'zpan', config: { options: {} } }) },
+    downloaderGateways: {
+      zpan: {
+        supportedSourceTypes: ['magnet'],
+        supportsIdempotentSubmission: recoverable,
+        submit: async (_config: unknown, _input: unknown, key: string) => {
+          keys.push(key)
+          if (keys.length === 1) throw new DownloadSubmissionUnknownError('Uncertain upstream transport')
+          return { externalTaskId: 'remote-task-1' }
+        },
+      },
+    },
+    dispatchLanesRepo: { acquire: async () => ({ acquired: true }), release: async () => undefined },
+    downloadReconciliationQueue: { enqueue: async () => undefined },
+  } as unknown as Deps
+  return { deps, keys, creations: () => created }
+}
+
 function managedDeps(
   current: DownloadRecord,
   gateway: Record<string, unknown> = {},
@@ -152,7 +285,7 @@ function download(): DownloadRecord {
     userId: 'user-1',
     idempotencyKey: 'request-1',
     requestHash: 'hash-1',
-    resourceRef: 'release-ref:v1:opaque',
+    resourceRef: 'torrent-ref:v1:opaque',
     resourceKind: 'release',
     resourceKey: 'tmdb:movie:550',
     downloaderId: 'downloader-1',
@@ -203,7 +336,7 @@ function snapshot(status: 'paused') {
   }
 }
 
-function releaseCandidate(): IndexerSearchItem {
+function torrent(): IndexerSearchItem {
   return {
     id: 'candidate-1',
     downloadTarget: null,

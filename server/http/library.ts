@@ -12,7 +12,7 @@ import type { Hono } from 'hono'
 import { z } from 'zod'
 import { mediaKeyParamsSchema } from './books'
 import type { AppEnv } from './context'
-import { setPageLinks } from './protocol'
+import { pageRepresentation, setPageLinks } from './protocol'
 
 const libraryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -26,10 +26,10 @@ const libraryResourceStateSchema = z.object({
   status: z.enum(['saved', 'watched']).default('saved'),
 })
 export function registerLibraryRoutes(routes: Hono<AppEnv>) {
-  routes.get('/library', zValidator('query', libraryQuerySchema), async (c) => {
+  routes.get('/library/items', zValidator('query', libraryQuerySchema), async (c) => {
     const page = await listLibrary(c.get('deps'), c.get('user').id, c.req.valid('query'))
     setPageLinks(c, c.req.valid('query'), page.totalResults)
-    return c.json(page)
+    return c.json(pageRepresentation(page.items, page.page, page.pageSize, page.totalResults, page.totalPages))
   })
 
   routes.get('/library/states', async (c) => {
@@ -38,7 +38,7 @@ export function registerLibraryRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.put(
-    '/library/resources/:mediaKey',
+    '/library/items/:mediaKey',
     zValidator('param', mediaKeyParamsSchema),
     zValidator('json', libraryResourceStateSchema),
     async (c) => {
@@ -55,11 +55,11 @@ export function registerLibraryRoutes(routes: Hono<AppEnv>) {
 
       if (!row) return c.json({ error: 'Library item not found.' }, 404)
 
-      return c.json({ item: toLibraryStateResponse(row) })
+      return c.json(toLibraryStateResponse(row))
     },
   )
 
-  routes.delete('/library/resources/:mediaKey', zValidator('param', mediaKeyParamsSchema), async (c) => {
+  routes.delete('/library/items/:mediaKey', zValidator('param', mediaKeyParamsSchema), async (c) => {
     const mediaKey = decodeRouteMediaKey(c.req.valid('param').mediaKey)
     const kind = getMediaKeyLibraryKind(mediaKey)
     if (!kind) return c.json({ error: 'Library media key is invalid.' }, 422)

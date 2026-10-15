@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { expect, type Locator, type Page, test } from '@playwright/test'
 
 const DESKTOP_VIEWPORT = { width: 1280, height: 900 }
@@ -43,7 +44,7 @@ test.describe('mobile search regressions', () => {
         await expect(page.getByText(RELEASE_SEARCH_CONTEXT)).toBeVisible()
         expect(await visibleLocator(page.getByPlaceholder('Filter titles or indexers'))).toBeNull()
         await expect(page.getByText('Roald Dahl Matilda 1988 EPUB')).toBeVisible()
-        await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
+        await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled()
         await expectNoHorizontalOverflow(page)
 
         const filtersButton = page.getByRole('button', { name: 'Filters' })
@@ -74,7 +75,7 @@ test.describe('mobile search regressions', () => {
     if (!resultSummary) throw new Error('Expected a visible result summary in the page toolbar.')
     await expect(resultSummary).toBeVisible()
     await expect(page.getByText('Roald Dahl Matilda 1988 EPUB')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'No downloaders' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled()
     await expectNoHorizontalOverflow(page)
   })
 
@@ -135,6 +136,118 @@ test.describe('mobile search regressions', () => {
   })
 })
 
+test('local files and magnets work without remote downloaders on desktop and mobile', async ({ page }) => {
+  await signIn(page)
+  await stubReleaseSearchApis(page)
+  const inputs: unknown[] = []
+  let useMagnet = false
+  let remoteSubmissions = 0
+  await page.route('**/api/downloads', async (route) => {
+    const input = route.request().postDataJSON()
+    if (input.downloaderId !== undefined) {
+      remoteSubmissions += 1
+      await route.abort()
+      return
+    }
+    inputs.push(input)
+    await route.fulfill({
+      status: 201,
+      json: {
+        id: 'local-fixture',
+        kind: useMagnet ? 'magnet' : 'file',
+        mediaType: 'application/x-bittorrent',
+        href: useMagnet
+          ? 'magnet:?xt=urn:btih:local-fixture'
+          : `${new URL(page.url()).origin}/api/downloads/local-fixture/content`,
+        filename: 'Matilda.torrent',
+        expiresAt: new Date(Date.now() + 300_000).toISOString(),
+        links: { self: '/api/downloads/local-fixture' },
+      },
+    })
+  })
+  await page.route('**/api/downloads/local-fixture/content', async (route) => {
+    await route.fulfill({
+      body: 'd4:infod4:name7:Matildaee',
+      headers: {
+        'content-type': 'application/x-bittorrent',
+        'content-disposition': 'attachment; filename="Matilda.torrent"',
+      },
+    })
+  })
+  for (const viewport of [DESKTOP_VIEWPORT, MOBILE_VIEWPORTS[0]]) {
+    await page.setViewportSize(viewport)
+    await page.goto(BOOK_RELEASE_PATH)
+    const trigger = page.getByRole('button', { name: 'Download', exact: true })
+    await trigger.focus()
+    await trigger.press('Enter')
+    const local = page.getByRole('menuitem', { name: 'Download locally' })
+    await expect(local).toBeVisible()
+    const downloaded = page.waitForEvent('download')
+    await local.focus()
+    await local.press('Enter')
+    const file = await downloaded
+    expect(file.suggestedFilename()).toBe('Matilda.torrent')
+    expect(await readFile(await file.path(), 'utf8')).toBe('d4:infod4:name7:Matildaee')
+    await expectNoHorizontalOverflow(page)
+    await page.screenshot({ path: test.info().outputPath(`local-download-${viewport.width}.png`) })
+  }
+  useMagnet = true
+  await page.evaluate(() => {
+    document.addEventListener(
+      'click',
+      (event) => {
+        const anchor = event.target instanceof Element ? event.target.closest('a') : null
+        if (anchor?.href.startsWith('magnet:')) {
+          document.documentElement.dataset.localMagnet = anchor.href
+          event.preventDefault()
+        }
+      },
+      true,
+    )
+  })
+  await page.getByRole('button', { name: 'Download', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Download locally' }).click()
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.dataset.localMagnet))
+    .toBe('magnet:?xt=urn:btih:local-fixture')
+  expect(inputs).toEqual(Array.from({ length: 3 }, () => ({ resourceRef: 'torrent-ref:v1:e2e-opaque' })))
+  expect(remoteSubmissions).toBe(0)
+})
+
+test('local and ZPan choices share a menu and the remote choice still submits a task', async ({ page }) => {
+  await signIn(page)
+  await stubReleaseSearchApis(page)
+  const downloaderId = '90000000-0000-4000-8000-000000000001'
+  await page.route('**/api/downloaders', async (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: downloaderId,
+            kind: 'zpan',
+            description: 'ZPan',
+            enabled: true,
+            supportedSourceTypes: ['torrent_url', 'magnet', 'http'],
+          },
+        ],
+      },
+    }),
+  )
+  const submitted: unknown[] = []
+  await page.route('**/api/downloads', async (route) => {
+    submitted.push(route.request().postDataJSON())
+    await route.fulfill({ status: 201, json: { id: 'remote-task', status: 'submitted' } })
+  })
+  await page.goto(BOOK_RELEASE_PATH)
+  await page.getByRole('button', { name: 'Download', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'Download locally' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'ZPan' })).toBeVisible()
+  await page.screenshot({ path: test.info().outputPath('download-menu.png') })
+  await page.getByRole('menuitem', { name: 'ZPan' }).click()
+  await expect.poll(() => submitted.length).toBe(1)
+  expect(submitted).toEqual([{ downloaderId, resourceRef: 'torrent-ref:v1:e2e-opaque' }])
+})
+
 async function signIn(page: Page) {
   await page.addInitScript(() => window.localStorage.setItem('zme.language', 'en-US'))
   await page.goto('/login')
@@ -146,10 +259,13 @@ async function stubResourceSearchApis(page: Page) {
   await page.route(/\/api\/library\/states(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { items: [] } })
   })
-  await page.route(/\/api\/(?:music|music-recommendations)(?:\?.*)?$/, async (route) => {
-    await route.fulfill({ json: emptyResourcePage() })
-  })
-  await page.route(/\/api\/(?:books|book-recommendations)(?:\?.*)?$/, async (route) => {
+  await page.route(
+    /\/api\/(?:catalog\/albums|charts\/(?:album-editions-popular|recordings-popular)\/entries)(?:\?.*)?$/,
+    async (route) => {
+      await route.fulfill({ json: emptyResourcePage() })
+    },
+  )
+  await page.route(/\/api\/(?:catalog\/books|charts\/books-trending\/entries)(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: emptyResourcePage() })
   })
 }
@@ -161,17 +277,17 @@ async function stubReleaseSearchApis(page: Page, getSearchGate: () => Promise<vo
   await page.route(/\/api\/downloaders(?:\?.*)?$/, async (route) => {
     await route.fulfill({ json: { items: [] } })
   })
-  await page.route(`**/api/books/${encodeURIComponent(BOOK_RELEASE_KEY)}*`, async (route) => {
-    await route.fulfill({ json: { item: bookDetails() } })
+  await page.route(`**/api/catalog/books/${encodeURIComponent(BOOK_RELEASE_KEY)}*`, async (route) => {
+    await route.fulfill({ json: bookDetails() })
   })
-  await page.route(/\/api\/release-candidates(?:\?.*)?$/, async (route) => {
+  await page.route(/\/api\/torrents(?:\?.*)?$/, async (route) => {
     await getSearchGate()
     await route.fulfill({
       json: {
         items: [
           {
             ...indexerRelease(),
-            resourceRef: 'release-ref:v1:e2e-opaque',
+            resourceRef: 'torrent-ref:v1:e2e-opaque',
             resourceRefExpiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           },
         ],
@@ -229,10 +345,8 @@ function bookDetailHeading(page: Page) {
 
 function emptyResourcePage() {
   return {
-    results: [],
-    page: 1,
-    totalPages: 1,
-    totalResults: 0,
+    items: [],
+    pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 },
   }
 }
 
@@ -256,7 +370,7 @@ function bookDetails() {
     covers: [],
     workKey: BOOK_RELEASE_KEY,
     editionKey: 'openlibrary:edition:OL7353617M',
-    editionCandidates: [],
+    editions: [],
   }
 }
 

@@ -1,5 +1,12 @@
-import type { AppConfig } from '@server/config'
-import { agentScopeForOperation, ZME_RESOURCE_DESCRIPTION, ZME_RESOURCE_NAME } from './resource-authorization'
+import type { readOpenApiConfig } from '@server/config'
+import { catalogOperations } from './catalog-contract'
+import { catalogPathParameter, catalogQueryParameters, catalogSchemas } from './catalog-openapi'
+import {
+  agentScopeForOperation,
+  agentScopeForRequest,
+  ZME_RESOURCE_DESCRIPTION,
+  ZME_RESOURCE_NAME,
+} from './resource-authorization'
 
 const resourceInfo = {
   title: ZME_RESOURCE_NAME,
@@ -35,28 +42,38 @@ const publicErrors = {
 }
 const operationSummaries: Record<string, string> = {
   listMedia: 'Search the configured media catalog',
-  getReleaseCandidate: 'Get an ephemeral release candidate',
-  listDownloads: 'List downloads owned by the caller',
+  getTorrent: 'Get an available torrent',
+  listDownloads: 'List remote downloads owned by the caller',
   createDownload: 'Create a download from an opaque resource reference',
   getDownload: 'Get an owned download',
 }
 
-export function openapiDocument(config: AppConfig) {
+export function openapiDocument(config: ReturnType<typeof readOpenApiConfig>) {
   const sessionPaths = sessionApiPaths()
   return {
     openapi: '3.1.0',
     info: {
       ...resourceInfo,
-      version: '1.0.0',
+      version: '2.0.0',
       license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
     },
     servers: [{ url: config.resourceUrl }],
     tags: [
-      { name: 'media-catalog', description: 'Search the configured media metadata catalog.' },
-      { name: 'release-acquisition', description: 'Search releases and submit selected candidates to downloaders.' },
+      {
+        name: 'catalog',
+        description: 'Read catalog titles, editions, recordings, and their parent-scoped relationships.',
+      },
+      { name: 'charts', description: 'Read chart definitions, supported periods, and ranked catalog entries.' },
+      {
+        name: 'torrents',
+        description: 'Query and inspect available BitTorrent resources before choosing a download destination.',
+      },
       { name: 'library', description: 'Operate the signed-in user library and music collections.' },
       { name: 'connectors', description: 'Operate signed-in user connector projections.' },
-      { name: 'configuration', description: 'Administrator-only indexer, source, and downloader configuration.' },
+      {
+        name: 'configuration',
+        description: 'Manage connection settings; indexers and media sources require administrator access.',
+      },
       { name: 'downloads', description: 'Create, inspect, and manage owned downloads.' },
       { name: 'system', description: 'Public service metadata and health.' },
     ],
@@ -68,7 +85,7 @@ export function openapiDocument(config: AppConfig) {
         get: {
           operationId: 'listDownloaders',
           summary: 'List safe downloader choices',
-          tags: ['downloads'],
+          tags: ['configuration'],
           security: secured('listDownloaders'),
           parameters,
           responses: { '200': success('#/components/schemas/DownloaderCollection'), ...errors },
@@ -79,48 +96,38 @@ export function openapiDocument(config: AppConfig) {
         get: {
           operationId: 'getDownloader',
           summary: 'Get a safe downloader choice',
-          tags: ['downloads'],
+          tags: ['configuration'],
           security: secured('getDownloader'),
           parameters: [...parameters, pathParameter('id')],
-          responses: { '200': success('#/components/schemas/DownloaderEnvelope'), ...errors },
+          responses: { '200': success('#/components/schemas/Downloader'), ...errors },
         },
       },
-      '/media': {
+      '/torrents': {
         get: {
-          operationId: 'listMedia',
-          summary: operationSummaries.listMedia,
-          tags: ['media-catalog'],
-          security: secured('listMedia'),
+          operationId: 'listTorrents',
+          summary: 'Query available BitTorrent resources',
+          tags: ['torrents'],
+          security: secured('listTorrents'),
+          parameters: [...torrentQueryParameters(), ...paginationParameters()],
+          responses: { '200': success('#/components/schemas/TorrentCollection'), ...errors },
+        },
+      },
+      '/torrents/{torrentId}': {
+        get: {
+          operationId: 'getTorrent',
+          summary: 'Get a cached torrent and a user-bound download reference',
+          tags: ['torrents'],
+          security: secured('getTorrent'),
           parameters: [
             ...parameters,
-            { name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1 } },
-            { name: 'kind', in: 'query', schema: { type: 'string', enum: ['movie', 'tv'] } },
-            { name: 'language', in: 'query', schema: { type: 'string' } },
+            pathParameter('torrentId', {
+              type: 'string',
+              pattern: '^torrent:[0-9a-f]{64}$',
+            }),
+            queryParameter('mediaKey', { type: 'string', maxLength: 300 }),
+            queryParameter('target', { type: 'string', enum: ['music', 'ebook', 'audiobook'] }),
           ],
-          responses: { '200': success('#/components/schemas/MediaCollection'), ...errors },
-        },
-      },
-      '/release-candidates': {
-        get: {
-          operationId: 'listReleaseCandidates',
-          summary: 'Search ephemeral release candidates',
-          tags: ['release-acquisition'],
-          security: secured('listReleaseCandidates'),
-          parameters: [...releaseCandidateQueryParameters(), ...paginationParameters()],
-          responses: { '200': success('#/components/schemas/ReleaseCandidateCollection'), ...errors },
-        },
-      },
-      '/release-candidates/{releaseCandidateId}': {
-        get: {
-          operationId: 'getReleaseCandidate',
-          summary: operationSummaries.getReleaseCandidate,
-          tags: ['release-acquisition'],
-          security: secured('getReleaseCandidate'),
-          parameters: [
-            ...parameters,
-            pathParameter('releaseCandidateId', { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' }),
-          ],
-          responses: { '200': success('#/components/schemas/ReleaseCandidateResourceRef'), ...errors },
+          responses: { '200': success('#/components/schemas/TorrentResourceRef'), ...errors },
         },
       },
       '/downloads': {
@@ -136,8 +143,53 @@ export function openapiDocument(config: AppConfig) {
         post: createOperation('createDownload', '#/components/schemas/CreateDownload', '#/components/schemas/Download'),
       },
       '/downloads/{downloadId}': {
-        get: getOperation('getDownload', 'downloadId', '#/components/schemas/Download'),
+        get: {
+          ...getOperation('getDownload', 'downloadId', '#/components/schemas/Download'),
+          description:
+            'Read an owned remote task or an unexpired local download. Local downloads are temporary and are not included in the remote task collection.',
+          parameters: [...parameters, pathParameter('downloadId', { type: 'string', minLength: 1 })],
+          responses: {
+            '200': success('#/components/schemas/Download'),
+            '410': {
+              description: 'Local download expired or invalid',
+              content: json({ $ref: '#/components/schemas/Problem' }),
+            },
+            ...errors,
+          },
+        },
         delete: managedDownloadOperation('deleteDownload', '204'),
+      },
+      '/downloads/{downloadId}/content': {
+        get: {
+          operationId: 'getLocalDownloadContent',
+          summary: 'Read a file using a temporary local download capability',
+          description:
+            'Use the exact href returned by createDownload when downloaderId is omitted. Possession of the unexpired encrypted ID authorizes this file read without cookies or DPoP credentials. Do not send ZME credentials to any other origin. Magnet sources have no file content.',
+          tags: ['downloads'],
+          security: [],
+          parameters: [...parameters, pathParameter('downloadId', { type: 'string', minLength: 1 })],
+          responses: {
+            '200': {
+              description: 'File attachment; upstream URLs and headers are not exposed',
+              headers: { ...headers(), 'Content-Disposition': { schema: { type: 'string' } } },
+              content: {
+                'application/x-bittorrent': { schema: { type: 'string', format: 'binary' } },
+                'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
+                'audio/mpeg': { schema: { type: 'string', format: 'binary' } },
+              },
+            },
+            '404': {
+              description: 'Source has no file content',
+              content: json({ $ref: '#/components/schemas/Problem' }),
+            },
+            '410': {
+              description: 'Source expired or invalid',
+              content: json({ $ref: '#/components/schemas/Problem' }),
+            },
+            '502': { description: 'Source file unavailable', content: json({ $ref: '#/components/schemas/Problem' }) },
+            ...publicErrors,
+          },
+        },
       },
       '/downloads/{downloadId}/suspension': managedSingletonPath('DownloadSuspension'),
       '/downloads/{downloadId}/cancellation': managedSingletonPath('DownloadCancellation', false),
@@ -151,8 +203,12 @@ export function openapiDocument(config: AppConfig) {
           description: 'Secure local session established by external OIDC.',
         },
         oidcDpop: {
-          type: 'openIdConnect',
-          openIdConnectUrl: `${config.oidc.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
+          ...(config.oidc
+            ? {
+                type: 'openIdConnect',
+                openIdConnectUrl: `${config.oidc.issuer.replace(/\/$/, '')}/.well-known/openid-configuration`,
+              }
+            : { type: 'http', scheme: 'DPoP' }),
           description: 'OIDC-issued DPoP-bound resource token. Bearer tokens are rejected.',
           'x-dpop-required': true,
         },
@@ -219,7 +275,7 @@ type SessionOperation = readonly [
   path: string,
   operationId: string,
   summary: string,
-  tag: 'media-catalog' | 'library' | 'connectors' | 'configuration' | 'downloads' | 'system',
+  tag: 'catalog' | 'charts' | 'torrents' | 'library' | 'connectors' | 'configuration' | 'downloads' | 'system',
   policy?: 'admin' | 'public',
 ]
 
@@ -227,26 +283,14 @@ const sessionOperations: SessionOperation[] = [
   ['get', '/', 'getResourceServer', 'Get Resource Server discovery metadata', 'system', 'public'],
   ['get', '/health', 'getServiceHealth', 'Get service health', 'system', 'public'],
   ['get', '/openapi.json', 'getOpenApiDocument', 'Get the complete OpenAPI document', 'system', 'public'],
-  ['get', '/media-trends', 'listMediaTrends', 'List trending media', 'media-catalog'],
-  ['get', '/popular-media', 'listPopularMedia', 'List popular media', 'media-catalog'],
-  ['get', '/media-recommendations', 'listMediaRecommendations', 'List media recommendations', 'media-catalog'],
-  ['get', '/media-genres', 'listMediaGenres', 'List media genres', 'media-catalog'],
-  ['get', '/people/{id}/credits', 'getPersonCredits', 'Get person credits', 'media-catalog'],
-  ['get', '/movies/{id}/watch-clickouts', 'getMovieWatchClickouts', 'Get movie watch links', 'media-catalog'],
-  ['get', '/series/{id}/watch-clickouts', 'getSeriesWatchClickouts', 'Get series watch links', 'media-catalog'],
-  ['get', '/movies/{id}', 'getMovie', 'Get a movie', 'media-catalog'],
-  ['get', '/series/{id}/seasons/{seasonNumber}', 'getSeriesSeason', 'Get a series season', 'media-catalog'],
-  ['get', '/series/{id}', 'getSeries', 'Get a series', 'media-catalog'],
-  ['get', '/books', 'listBooks', 'Search books', 'media-catalog'],
-  ['get', '/book-recommendations', 'listBookRecommendations', 'List book recommendations', 'media-catalog'],
-  ['get', '/books/{mediaKey}', 'getBook', 'Get a book', 'media-catalog'],
-  ['get', '/music', 'listMusic', 'Search music', 'media-catalog'],
-  ['get', '/music-recommendations', 'listMusicRecommendations', 'List music recommendations', 'media-catalog'],
-  ['get', '/music/{mediaKey}', 'getMusic', 'Get music details', 'media-catalog'],
-  ['get', '/library', 'listLibraryResources', 'List library resources', 'library'],
+  ['get', '/docs', 'getApiReference', 'View the interactive API reference', 'system', 'public'],
+  ...catalogOperations.map(
+    ([path, operationId, summary, _schema, tag]) => ['get', path, operationId, summary, tag] as const,
+  ),
+  ['get', '/library/items', 'listLibraryResources', 'List library resources', 'library'],
   ['get', '/library/states', 'listLibraryStates', 'List library resource states', 'library'],
-  ['put', '/library/resources/{mediaKey}', 'putLibraryResource', 'Create or replace a library resource', 'library'],
-  ['delete', '/library/resources/{mediaKey}', 'deleteLibraryResource', 'Delete a library resource', 'library'],
+  ['put', '/library/items/{mediaKey}', 'putLibraryResource', 'Create or replace a library resource', 'library'],
+  ['delete', '/library/items/{mediaKey}', 'deleteLibraryResource', 'Delete a library resource', 'library'],
   ['get', '/library/music/collections', 'listMusicCollections', 'List music collections', 'library'],
   ['get', '/library/music/collections/{id}', 'getMusicCollection', 'Get a music collection', 'library'],
   [
@@ -265,8 +309,21 @@ const sessionOperations: SessionOperation[] = [
   ],
   ['delete', '/library/music/collections/{id}', 'deleteMusicCollection', 'Delete a music collection', 'library'],
   ['post', '/library/music/albums', 'createLibraryMusicAlbum', 'Create a library music album', 'library'],
-  ['get', '/library/music/favorites', 'listFavoriteMusicTracks', 'List favorite music tracks', 'library'],
-  ['put', '/library/music/favorites', 'putFavoriteMusicTrack', 'Create or replace a favorite track', 'library'],
+  ['get', '/library/music/favorites', 'getFavoriteMusicCollection', 'List favorite music tracks', 'library'],
+  [
+    'put',
+    '/library/music/favorites/tracks/{mediaKey}',
+    'putFavoriteMusicTrack',
+    'Create a favorite track membership',
+    'library',
+  ],
+  [
+    'delete',
+    '/library/music/favorites/tracks/{mediaKey}',
+    'deleteFavoriteMusicTrack',
+    'Delete a favorite track membership',
+    'library',
+  ],
   ['get', '/connectors/providers', 'listConnectorProviders', 'List connector providers', 'connectors'],
   ['get', '/connectors', 'listConnectors', 'List connectors', 'connectors'],
   ['post', '/connectors', 'createConnector', 'Create a connector', 'connectors'],
@@ -280,9 +337,16 @@ const sessionOperations: SessionOperation[] = [
   ['get', '/connector-login-attempts/{id}', 'getConnectorLoginAttempt', 'Get a connector login attempt', 'connectors'],
   [
     'put',
-    '/connector-login-attempts/{id}/response',
-    'putConnectorLoginResponse',
+    '/connector-login-attempts/{id}/challenge-response',
+    'putConnectorChallengeResponse',
     'Replace a connector login challenge response',
+    'connectors',
+  ],
+  [
+    'get',
+    '/connector-login-attempts/{id}/challenge-response',
+    'getConnectorChallengeResponse',
+    'Read an accepted form challenge response',
     'connectors',
   ],
   ['patch', '/connectors/{id}', 'updateConnector', 'Update a connector', 'connectors'],
@@ -290,91 +354,50 @@ const sessionOperations: SessionOperation[] = [
   ['post', '/connector-sync-jobs', 'createConnectorSyncJob', 'Create a connector sync job', 'connectors'],
   ['get', '/connector-sync-jobs/{id}', 'getConnectorSyncJob', 'Get a connector sync job', 'connectors'],
   ['get', '/connectors/{id}/playlists', 'listConnectorPlaylists', 'List connector playlists', 'connectors'],
-  ['put', '/connectors/{id}/playlists', 'putConnectorPlaylists', 'Replace selected connector playlists', 'connectors'],
+  [
+    'put',
+    '/connectors/{id}/playlist-selection',
+    'putConnectorPlaylistSelection',
+    'Replace the selected-playlist policy',
+    'connectors',
+  ],
+  [
+    'get',
+    '/connectors/{id}/playlist-selection',
+    'getConnectorPlaylistSelection',
+    'Read the selected-playlist policy',
+    'connectors',
+  ],
   ['get', '/indexers', 'listIndexers', 'List indexers', 'configuration', 'admin'],
   ['get', '/indexers/{id}', 'getIndexer', 'Get an indexer', 'configuration', 'admin'],
   ['post', '/indexers', 'createIndexer', 'Create an indexer', 'configuration', 'admin'],
   ['patch', '/indexers/{id}', 'updateIndexer', 'Update an indexer', 'configuration', 'admin'],
   ['delete', '/indexers/{id}', 'deleteIndexer', 'Delete an indexer', 'configuration', 'admin'],
-  [
-    'get',
-    '/indexers/{id}/health-observations',
-    'listIndexerHealthObservations',
-    'List indexer health observations',
-    'configuration',
-    'admin',
-  ],
-  [
-    'post',
-    '/indexers/{id}/health-observations',
-    'createIndexerHealthObservation',
-    'Create an indexer health observation',
-    'configuration',
-    'admin',
-  ],
-  [
-    'get',
-    '/indexers/{id}/health-observations/{checkedAt}',
-    'getIndexerHealthObservation',
-    'Get an indexer health observation',
-    'configuration',
-    'admin',
-  ],
+
+  ['get', '/indexers/{id}/health', 'getIndexerHealth', 'Read current connection health', 'configuration', 'admin'],
+
   ['get', '/media-sources', 'listMediaSources', 'List media sources', 'configuration', 'admin'],
   ['get', '/media-sources/{id}', 'getMediaSource', 'Get a media source', 'configuration', 'admin'],
   ['post', '/media-sources', 'createMediaSource', 'Create a media source', 'configuration', 'admin'],
   ['patch', '/media-sources/{id}', 'updateMediaSource', 'Update a media source', 'configuration', 'admin'],
   ['delete', '/media-sources/{id}', 'deleteMediaSource', 'Delete a media source', 'configuration', 'admin'],
+
   [
     'get',
-    '/media-sources/{id}/health-observations',
-    'listMediaSourceHealthObservations',
-    'List media-source health observations',
+    '/media-sources/{id}/health',
+    'getMediaSourceHealth',
+    'Read current connection health',
     'configuration',
     'admin',
   ],
-  [
-    'post',
-    '/media-sources/{id}/health-observations',
-    'createMediaSourceHealthObservation',
-    'Create a media-source health observation',
-    'configuration',
-    'admin',
-  ],
-  [
-    'get',
-    '/media-sources/{id}/health-observations/{checkedAt}',
-    'getMediaSourceHealthObservation',
-    'Get a media-source health observation',
-    'configuration',
-    'admin',
-  ],
+
   ['get', '/downloaders', 'listDownloaders', 'List downloaders', 'configuration'],
   ['get', '/downloaders/{id}', 'getDownloader', 'Get a downloader', 'configuration'],
   ['post', '/downloaders', 'createDownloader', 'Create a downloader', 'configuration'],
   ['patch', '/downloaders/{id}', 'updateDownloader', 'Update a downloader', 'configuration'],
   ['delete', '/downloaders/{id}', 'deleteDownloader', 'Delete a downloader', 'configuration'],
-  [
-    'get',
-    '/downloaders/{id}/health-observations',
-    'listDownloaderHealthObservations',
-    'List downloader health observations',
-    'configuration',
-  ],
-  [
-    'post',
-    '/downloaders/{id}/health-observations',
-    'createDownloaderHealthObservation',
-    'Create a downloader health observation',
-    'configuration',
-  ],
-  [
-    'get',
-    '/downloaders/{id}/health-observations/{checkedAt}',
-    'getDownloaderHealthObservation',
-    'Get a downloader health observation',
-    'configuration',
-  ],
+
+  ['get', '/downloaders/{id}/health', 'getDownloaderHealth', 'Read current connection health', 'configuration'],
 ]
 
 function sessionApiPaths() {
@@ -383,7 +406,8 @@ function sessionApiPaths() {
     const pathParameters = [...path.matchAll(/\{([^}]+)\}/g)].map((match) =>
       sessionPathParameter(operationId, match[1] as string),
     )
-    const security = policy === 'public' ? [] : [{ oidcSession: [] }]
+    const agentScope = agentScopeForRequest(method.toUpperCase(), path.replaceAll(/\{[^}]+\}/g, 'resource-id'))
+    const security = policy === 'public' ? [] : agentScope ? secured(operationId) : [{ oidcSession: [] }]
     const successStatus = sessionSuccessStatus(operationId, method)
     const noContent = successStatus === '204'
     const operation: Record<string, unknown> = {
@@ -401,14 +425,30 @@ function sessionApiPaths() {
         [successStatus]: noContent
           ? { description: 'Resource deleted', headers: headers() }
           : sessionSuccessResponse(operationId, successStatus === '201'),
-        ...(policy === 'public' ? publicErrors : sessionErrors),
+        ...(policy === 'public' ? publicErrors : agentScope ? errors : sessionErrors),
       },
     }
-    if (policy === 'admin') operation['x-zme-local-role'] = 'admin'
-    if (operationId === 'listMusic') {
-      operation.description = 'At least one of q, artist, or title is required.'
-      operation['x-zme-query-constraint'] = { atLeastOne: ['q', 'artist', 'title'] }
+    if (operationId === 'putConnectorChallengeResponse') {
+      ;(operation.responses as Record<string, unknown>)['201'] = {
+        ...success('#/components/schemas/ConnectorChallengeResponse'),
+        description: 'Challenge response accepted',
+        headers: { ...headers(), Location: { $ref: '#/components/headers/Location' } },
+      }
     }
+    if (policy === 'admin') operation['x-zme-local-role'] = 'admin'
+    if (operationId === 'listAlbums') {
+      operation.description =
+        'At least one of q, artist, title, genre, or year is required. Returns albums, independently of their release editions.'
+      operation['x-zme-query-constraint'] = { atLeastOne: ['q', 'artist', 'title', 'genre', 'year'] }
+    }
+    if (operationId === 'listBooks')
+      operation.description = 'Provide exactly one of q or subject. Returns book works, not ISBN editions.'
+    if (operationId === 'listChartEntries')
+      operation.description =
+        'Choose chartId and period from listCharts. Screen charts use pageSize=20. Unsupported periods and irrelevant filters return 422. Totals are omitted when the provider does not report exact counts.'
+    if (operationId === 'listMovies' || operationId === 'listSeries')
+      operation.description =
+        'Keyword search and browse filters are separate query modes; combining q with orderBy, genreId, originCountry, year, or ratingGte returns 422. Page size is 20.'
     const requestSchema = sessionRequestSchema(operationId)
     if (requestSchema) {
       operation.requestBody = {
@@ -427,80 +467,63 @@ function sessionApiPaths() {
 
 function sessionSuccessStatus(operationId: string, method: SessionOperation[0]) {
   const overrides: Record<string, string> = {
-    putConnectorPlaylists: '202',
+    putConnectorPlaylistSelection: '200',
     putMusicCollectionSubscription: '202',
     deleteConnector: '204',
     deleteIndexer: '204',
     deleteMediaSource: '204',
     deleteDownloader: '204',
+    putFavoriteMusicTrack: '204',
+    deleteFavoriteMusicTrack: '204',
   }
   return overrides[operationId] ?? (method === 'post' ? '201' : '200')
 }
 
 const sessionResponseSchemaByOperation: Record<string, string> = {
+  getMediaSourceHealth: 'Health',
+  getIndexerHealth: 'Health',
+  getDownloaderHealth: 'Health',
   getResourceServer: 'ResourceServerDiscovery',
   getServiceHealth: 'ServiceHealth',
   getOpenApiDocument: 'OpenApiDocument',
-  listMediaTrends: 'MediaResults',
-  listPopularMedia: 'MediaResults',
-  listMediaRecommendations: 'MediaDiscoverPage',
-  listMediaGenres: 'MediaGenreResults',
-  getPersonCredits: 'MediaPersonCredits',
-  getMovieWatchClickouts: 'MediaWatchClickoutsEnvelope',
-  getSeriesWatchClickouts: 'MediaWatchClickoutsEnvelope',
-  getMovie: 'MediaDetailsEnvelope',
-  getSeriesSeason: 'MediaSeasonEnvelope',
-  getSeries: 'MediaDetailsEnvelope',
-  listBooks: 'BookPage',
-  listBookRecommendations: 'BookPage',
-  getBook: 'BookEnvelope',
-  listMusic: 'MusicPage',
-  listMusicRecommendations: 'MusicPage',
-  getMusic: 'MusicAlbumEnvelope',
+  ...Object.fromEntries(catalogOperations.map(([, operationId, , schema]) => [operationId, schema])),
   listLibraryResources: 'LibraryPage',
   listLibraryStates: 'LibraryStateCollection',
-  putLibraryResource: 'LibraryStateEnvelope',
+  putLibraryResource: 'LibraryState',
   deleteLibraryResource: 'DeletedLibraryResource',
   listMusicCollections: 'MusicCollectionCollection',
-  getMusicCollection: 'MusicCollectionEnvelope',
-  putMusicCollectionSubscription: 'MusicSubscriptionMutationEnvelope',
-  deleteMusicCollectionSubscription: 'MusicSubscriptionMutationEnvelope',
+  getMusicCollection: 'MusicCollection',
+  putMusicCollectionSubscription: 'MusicSubscriptionUpdate',
+  deleteMusicCollectionSubscription: 'MusicSubscriptionUpdate',
   deleteMusicCollection: 'DeletedId',
-  createLibraryMusicAlbum: 'MusicCollectionEnvelope',
-  listFavoriteMusicTracks: 'MusicCollectionEnvelope',
-  putFavoriteMusicTrack: 'MusicCollectionEnvelope',
+  createLibraryMusicAlbum: 'MusicCollection',
+  getFavoriteMusicCollection: 'MusicCollection',
+  putFavoriteMusicTrack: 'MusicCollection',
   listConnectorProviders: 'ConnectorProviderCollection',
   listConnectors: 'ConnectorCollection',
-  createConnector: 'ConnectorEnvelope',
-  createConnectorLoginAttempt: 'ConnectorLoginResult',
-  getConnectorLoginAttempt: 'ConnectorLoginResult',
-  putConnectorLoginResponse: 'ConnectorLoginResult',
-  updateConnector: 'ConnectorEnvelope',
+  createConnector: 'Connector',
+  createConnectorLoginAttempt: 'ConnectorLoginAttempt',
+  getConnectorLoginAttempt: 'ConnectorLoginAttempt',
+  putConnectorChallengeResponse: 'ConnectorChallengeResponse',
+  getConnectorChallengeResponse: 'ConnectorChallengeResponse',
+  updateConnector: 'Connector',
   createConnectorSyncJob: 'ConnectorSyncJobEnvelope',
   getConnectorSyncJob: 'ConnectorSyncJobEnvelope',
   listConnectorPlaylists: 'MusicCollectionCollection',
-  putConnectorPlaylists: 'PlaylistSelectionResult',
+  putConnectorPlaylistSelection: 'PlaylistSelection',
+  getConnectorPlaylistSelection: 'PlaylistSelection',
   listIndexers: 'IndexerCollection',
-  getIndexer: 'IndexerEnvelope',
-  createIndexer: 'IndexerEnvelope',
-  updateIndexer: 'IndexerEnvelope',
-  listIndexerHealthObservations: 'HealthCollection',
-  createIndexerHealthObservation: 'HealthEnvelope',
-  getIndexerHealthObservation: 'HealthEnvelope',
+  getIndexer: 'Indexer',
+  createIndexer: 'Indexer',
+  updateIndexer: 'Indexer',
   listMediaSources: 'MediaSourceCollection',
-  getMediaSource: 'MediaSourceEnvelope',
-  createMediaSource: 'MediaSourceEnvelope',
-  updateMediaSource: 'MediaSourceEnvelope',
-  listMediaSourceHealthObservations: 'HealthCollection',
-  createMediaSourceHealthObservation: 'HealthEnvelope',
-  getMediaSourceHealthObservation: 'HealthEnvelope',
+  getMediaSource: 'MediaSource',
+  createMediaSource: 'MediaSource',
+  updateMediaSource: 'MediaSource',
   listDownloaders: 'DownloaderCollection',
-  getDownloader: 'DownloaderEnvelope',
-  createDownloader: 'DownloaderEnvelope',
-  updateDownloader: 'DownloaderEnvelope',
-  listDownloaderHealthObservations: 'HealthCollection',
-  createDownloaderHealthObservation: 'HealthEnvelope',
-  getDownloaderHealthObservation: 'HealthEnvelope',
+  getDownloader: 'Downloader',
+  createDownloader: 'Downloader',
+  updateDownloader: 'Downloader',
 }
 
 const sessionRequestSchemaByOperation: Record<string, string> = {
@@ -510,10 +533,10 @@ const sessionRequestSchemaByOperation: Record<string, string> = {
   putFavoriteMusicTrack: '#/components/schemas/FavoriteTrackMutation',
   createConnector: '#/components/schemas/ConnectorInput',
   createConnectorLoginAttempt: '#/components/schemas/ConnectorLoginStartInput',
-  putConnectorLoginResponse: '#/components/schemas/ConnectorLoginResponseInput',
+  putConnectorChallengeResponse: '#/components/schemas/ConnectorLoginResponseInput',
   updateConnector: '#/components/schemas/ConnectorPatch',
   createConnectorSyncJob: '#/components/schemas/ConnectorSyncJobInput',
-  putConnectorPlaylists: '#/components/schemas/PlaylistSelectionInput',
+  putConnectorPlaylistSelection: '#/components/schemas/PlaylistSelectionInput',
   createIndexer: '#/components/schemas/IndexerInput',
   updateIndexer: '#/components/schemas/IndexerPatch',
   createMediaSource: '#/components/schemas/MediaSourceInput',
@@ -527,6 +550,13 @@ function sessionRequestSchema(operationId: string) {
 }
 
 function sessionSuccessResponse(operationId: string, created: boolean) {
+  if (operationId === 'getApiReference') {
+    return {
+      description: 'Interactive Scalar API reference',
+      headers: baseHeaders(),
+      content: { 'text/html': { schema: { type: 'string' } } },
+    }
+  }
   const name = sessionResponseSchemaByOperation[operationId]
   if (!name) throw new Error(`Missing OpenAPI response schema for ${operationId}`)
   const ref = `#/components/schemas/${name}`
@@ -547,13 +577,21 @@ function sessionSuccessResponse(operationId: string, created: boolean) {
 }
 
 function sessionPathParameter(operationId: string, name: string) {
+  const catalog = catalogPathParameter(operationId, name)
+  if (catalog) return catalog
+  if (name === 'discNumber' || name === 'trackNumber' || name === 'episodeNumber')
+    return pathParameter(name, { type: 'integer', minimum: 1 })
   if (name === 'seasonNumber') return pathParameter(name, { type: 'integer', minimum: 0 })
   if (
     name === 'id' &&
     [
-      'getPersonCredits',
-      'getMovieWatchClickouts',
-      'getSeriesWatchClickouts',
+      'getPerson',
+      'listPersonCredits',
+      'listSeriesSeasons',
+      'listSeasonEpisodes',
+      'getSeriesEpisode',
+      'listMovieWatchLinks',
+      'listSeriesWatchLinks',
       'getMovie',
       'getSeriesSeason',
       'getSeries',
@@ -565,67 +603,11 @@ function sessionPathParameter(operationId: string, name: string) {
 }
 
 function sessionQueryParameters(operationId: string): object[] {
+  const catalog = catalogQueryParameters(operationId)
+  if (catalog) return catalog
   const language = queryParameter('language', { type: 'string', minLength: 2 })
   const page = queryParameter('page', { type: 'integer', minimum: 1, default: 1 })
-  const pageSize60 = queryParameter('pageSize', { type: 'integer', minimum: 1, maximum: 60, default: 20 })
   const byOperation: Record<string, object[]> = {
-    listMediaTrends: [language],
-    listPopularMedia: [queryParameter('kind', { type: 'string', enum: ['movie', 'tv'] }, true), language],
-    listMediaRecommendations: [
-      queryParameter('kind', { type: 'string', enum: ['movie', 'tv'] }, true),
-      language,
-      page,
-      queryParameter('sortBy', {
-        type: 'string',
-        enum: ['popularity.desc', 'vote_average.desc', 'primary_release_date.desc', 'first_air_date.desc'],
-        default: 'popularity.desc',
-      }),
-      queryParameter('genreId', { type: 'integer', minimum: 1 }),
-      queryParameter('originCountry', { type: 'string', pattern: '^[A-Z]{2}$' }),
-      queryParameter('year', { type: 'integer', minimum: 1900, maximum: new Date().getUTCFullYear() + 2 }),
-      queryParameter('ratingGte', { type: 'number', minimum: 0, maximum: 10 }),
-    ],
-    listMediaGenres: [queryParameter('kind', { type: 'string', enum: ['movie', 'tv'] }, true), language],
-    getPersonCredits: [language],
-    getMovieWatchClickouts: [
-      language,
-      queryParameter('watchRegion', { type: 'string', pattern: '^[A-Z]{2}$', default: 'US' }),
-    ],
-    getSeriesWatchClickouts: [
-      language,
-      queryParameter('watchRegion', { type: 'string', pattern: '^[A-Z]{2}$', default: 'US' }),
-    ],
-    getMovie: [language, queryParameter('watchRegion', { type: 'string', pattern: '^[A-Z]{2}$', default: 'US' })],
-    getSeries: [language, queryParameter('watchRegion', { type: 'string', pattern: '^[A-Z]{2}$', default: 'US' })],
-    getSeriesSeason: [language],
-    listBooks: [queryParameter('q', { type: 'string', minLength: 1 }, true), page, pageSize60],
-    listBookRecommendations: [
-      queryParameter('mode', { type: 'string', enum: ['trending', 'subject'], default: 'trending' }),
-      queryParameter('period', { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], default: 'daily' }),
-      queryParameter('subject', { type: 'string', minLength: 1 }),
-      page,
-      pageSize60,
-    ],
-    listMusic: [
-      queryParameter('q', { type: 'string', minLength: 1 }),
-      queryParameter('artist', { type: 'string', minLength: 1 }),
-      queryParameter('title', { type: 'string', minLength: 1 }),
-      page,
-      pageSize60,
-    ],
-    listMusicRecommendations: [
-      queryParameter('mode', { type: 'string', enum: ['popular', 'genre'], default: 'popular' }),
-      queryParameter('range', { type: 'string', enum: ['week', 'month', 'year', 'all_time'], default: 'all_time' }),
-      queryParameter('chartType', { type: 'string', enum: ['albums', 'tracks'], default: 'albums' }),
-      queryParameter('genre', {
-        type: 'string',
-        enum: ['rock', 'jazz', 'electronic', 'hip-hop', 'classical', 'pop', 'metal'],
-      }),
-      queryParameter('releaseType', { type: 'string', enum: ['album', 'ep', 'single'], default: 'album' }),
-      queryParameter('year', { type: 'string', pattern: '^(19|20)\\d{2}$' }),
-      page,
-      pageSize60,
-    ],
     listLibraryResources: [
       page,
       queryParameter('pageSize', { type: 'integer', minimum: 1, maximum: 60, default: 36 }),
@@ -634,18 +616,6 @@ function sessionQueryParameters(operationId: string): object[] {
       queryParameter('status', { type: 'string', enum: ['all', 'unwatched', 'watched'], default: 'all' }),
     ],
     listMusicCollections: [queryParameter('kind', { type: 'string', enum: ['playlist', 'album'] }, true)],
-    listReleaseCandidates: [
-      queryParameter('mediaKey', { type: 'string', minLength: 1 }, true),
-      queryParameter('query', { type: 'string', minLength: 1 }, true),
-      queryParameter('searchType', { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] }),
-      queryParameter('categories', {
-        type: 'string',
-        description: 'Comma- or pipe-separated positive category identifiers.',
-      }),
-      queryParameter('target', { type: 'string', enum: ['music', 'ebook', 'audiobook'] }),
-      page,
-      queryParameter('pageSize', { type: 'integer', minimum: 1, maximum: 50, default: 50 }),
-    ],
   }
   return byOperation[operationId] ?? []
 }
@@ -654,18 +624,18 @@ function queryParameter(name: string, schema: object, required = false) {
   return { name, in: 'query', required, schema }
 }
 
-function releaseCandidateQueryParameters({ includeView = false } = {}): object[] {
+function torrentQueryParameters(): object[] {
   return [
     ...parameters,
-    queryParameter('mediaKey', { type: 'string', minLength: 1 }, true),
-    queryParameter('query', { type: 'string', minLength: 1 }, true),
-    queryParameter('searchType', { type: 'string', enum: ['search', 'audiosearch', 'booksearch'] }),
-    queryParameter('categories', {
-      type: 'string',
-      description: 'Comma- or pipe-separated positive category identifiers.',
-    }),
+    queryParameter('q', { type: 'string', minLength: 1, maxLength: 300 }, true),
+    queryParameter('mediaKey', { type: 'string', minLength: 1, maxLength: 300 }),
     queryParameter('target', { type: 'string', enum: ['music', 'ebook', 'audiobook'] }),
-    ...(includeView ? [queryParameter('view', { type: 'string', enum: ['compact', 'full'], default: 'compact' })] : []),
+    queryParameter('view', { type: 'string', enum: ['compact', 'full'], default: 'compact' }),
+    {
+      ...queryParameter('snapshotId', { type: 'string', format: 'uuid' }),
+      description:
+        'Follow the returned pagination links. Required after page 1; binds pagination to the original owned query snapshot.',
+    },
   ]
 }
 
@@ -680,9 +650,21 @@ function createOperation(operationId: string, input: string, output: string) {
   return {
     operationId,
     summary: operationSummaries[operationId],
-    tags: ['release-acquisition'],
+    description:
+      'Supply downloaderId to create a remote task (Idempotency-Key required). Omit downloaderId to prepare a local download without creating a remote task. For kind=magnet open href through the system; for kind=file save the proxied attachment and let the system open it. File href values hide the original torrent site. Local metadata and file capabilities expire after five minutes; the magnet URI itself does not. A local response does not imply that a client started or finished. Local downloads are not included in the remote task list.',
+    tags: ['downloads'],
     security: secured(operationId),
-    parameters: [...parameters, { $ref: '#/components/parameters/IdempotencyKey' }],
+    parameters: [
+      ...parameters,
+      {
+        name: 'Idempotency-Key',
+        in: 'header',
+        required: false,
+        description:
+          'Required when downloaderId is supplied. Reuse only for the identical remote request. Omit for local preparation; local calls issue a fresh temporary capability.',
+        schema: { type: 'string', minLength: 1, maxLength: 200 },
+      },
+    ],
     requestBody: { required: true, content: json({ $ref: input }) },
     responses: {
       '201': {
@@ -698,7 +680,7 @@ function listOperation(operationId: string, schema: string) {
   return {
     operationId,
     summary: operationSummaries[operationId],
-    tags: ['release-acquisition'],
+    tags: ['downloads'],
     security: secured(operationId),
     parameters: [...parameters, { $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }],
     responses: { '200': success(schema), ...errors },
@@ -708,7 +690,7 @@ function getOperation(operationId: string, name: string, schema: string) {
   return {
     operationId,
     summary: operationSummaries[operationId],
-    tags: ['release-acquisition'],
+    tags: ['downloads'],
     security: secured(operationId),
     parameters: [...parameters, pathParameter(name)],
     responses: { '200': success(schema), ...errors },
@@ -764,7 +746,7 @@ function musicContentPath() {
   return {
     get: {
       operationId: 'getSignedMusicContent',
-      summary: 'Read music track content with a one-time key',
+      summary: 'Read music track content with a temporary access key',
       tags: ['downloads'],
       security: [],
       parameters,
@@ -783,7 +765,7 @@ function musicContentPath() {
     },
     head: {
       operationId: 'headSignedMusicContent',
-      summary: 'Inspect music track content with a one-time key',
+      summary: 'Inspect music track content with a temporary access key',
       tags: ['downloads'],
       security: [],
       parameters,
@@ -845,15 +827,10 @@ function schemas() {
     required: ['items'],
     properties: { items: { type: 'array', items: { $ref: item } } },
   })
-  const envelope = (name: string) => ({
-    type: 'object',
-    additionalProperties: false,
-    required: ['item'],
-    properties: { item: { $ref: `#/components/schemas/${name}` } },
-  })
   const nullableString = { type: ['string', 'null'] }
   const dateTime = { type: 'string', format: 'date-time' }
   const nullableDateTime = { type: ['string', 'null'], format: 'date-time' }
+  const stringMapPatch = { type: ['object', 'null'], additionalProperties: { type: ['string', 'null'] } }
   const stringMap = { type: 'object', additionalProperties: { type: 'string' } }
   const health = {
     type: 'object',
@@ -901,6 +878,7 @@ function schemas() {
       required: ['ok', 'name'],
       properties: { ok: { type: 'boolean', const: true }, name: { type: 'string', const: 'zme' } },
     },
+    ...catalogSchemas(),
     OpenApiDocument: {
       type: 'object',
       description: 'An OpenAPI 3.1 document whose recursive shape is defined by the OpenAPI specification.',
@@ -912,7 +890,7 @@ function schemas() {
       },
       additionalProperties: true,
     },
-    BrowserMedia: {
+    ScreenTitleSummary: {
       type: 'object',
       additionalProperties: false,
       required: [
@@ -928,6 +906,9 @@ function schemas() {
         'genres',
       ],
       properties: {
+        mediaKey: { type: 'string', pattern: '^tmdb:(movie|tv):[1-9][0-9]*$' },
+        links,
+
         id: { type: 'integer', minimum: 1 },
         kind: { type: 'string', enum: ['movie', 'tv'] },
         title: { type: 'string' },
@@ -940,35 +921,13 @@ function schemas() {
         genres: { type: 'array', items: { type: 'string' } },
       },
     },
-    MediaResults: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['results'],
-      properties: { results: { type: 'array', items: { $ref: '#/components/schemas/BrowserMedia' } } },
-    },
-    MediaDiscoverPage: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['results', 'page', 'totalPages', 'totalResults'],
-      properties: {
-        results: { type: 'array', items: { $ref: '#/components/schemas/BrowserMedia' } },
-        page: { type: 'integer', minimum: 1 },
-        totalPages: { type: 'integer', minimum: 0 },
-        totalResults: { type: 'integer', minimum: 0 },
-      },
-    },
     MediaGenre: {
       type: 'object',
       additionalProperties: false,
       required: ['id', 'name'],
       properties: { id: { type: 'integer', minimum: 1 }, name: { type: 'string' } },
     },
-    MediaGenreResults: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['genres'],
-      properties: { genres: { type: 'array', items: { $ref: '#/components/schemas/MediaGenre' } } },
-    },
+    MediaGenreResults: items('#/components/schemas/MediaGenre'),
     MediaPerson: {
       type: 'object',
       additionalProperties: false,
@@ -983,6 +942,8 @@ function schemas() {
         'portraitUrl',
       ],
       properties: {
+        links,
+
         id: { type: 'integer', minimum: 1 },
         name: { type: 'string' },
         biography: nullableString,
@@ -993,24 +954,16 @@ function schemas() {
         portraitUrl: { type: ['string', 'null'], format: 'uri' },
       },
     },
-    MediaPersonCredits: {
+    MediaWatchLink: {
       type: 'object',
       additionalProperties: false,
-      required: ['person', 'results'],
-      properties: {
-        person: { $ref: '#/components/schemas/MediaPerson' },
-        results: { type: 'array', items: { $ref: '#/components/schemas/BrowserMedia' } },
-      },
+      required: ['provider', 'href'],
+      properties: { provider: { type: 'string' }, href: { type: 'string', format: 'uri' } },
     },
-    MediaWatchClickoutsEnvelope: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['clickouts'],
-      properties: { clickouts: { type: 'object', additionalProperties: { type: 'string', format: 'uri' } } },
-    },
-    MediaDetails: {
+    MediaWatchLinkCollection: items('#/components/schemas/MediaWatchLink'),
+    ScreenTitleDetails: {
       allOf: [
-        { $ref: '#/components/schemas/BrowserMedia' },
+        { $ref: '#/components/schemas/ScreenTitleSummary' },
         {
           type: 'object',
           required: [
@@ -1049,9 +1002,9 @@ function schemas() {
             watch: { anyOf: [{ $ref: '#/components/schemas/MediaWatchInfo' }, { type: 'null' }] },
             videos: { type: 'array', items: { $ref: '#/components/schemas/MediaVideo' } },
             images: { type: 'array', items: { $ref: '#/components/schemas/MediaImage' } },
-            recommendations: { type: 'array', items: { $ref: '#/components/schemas/BrowserMedia' } },
-            similar: { type: 'array', items: { $ref: '#/components/schemas/BrowserMedia' } },
-            seasons: { type: 'array', items: { $ref: '#/components/schemas/MediaSeasonSummary' } },
+            recommendations: { type: 'array', items: { $ref: '#/components/schemas/ScreenTitleSummary' } },
+            similar: { type: 'array', items: { $ref: '#/components/schemas/ScreenTitleSummary' } },
+            seasons: { type: 'array', items: { $ref: '#/components/schemas/SeriesSeasonSummary' } },
             releaseInfo: { anyOf: [{ $ref: '#/components/schemas/MediaReleaseInfo' }, { type: 'null' }] },
             ids: {
               type: 'object',
@@ -1137,11 +1090,13 @@ function schemas() {
       required: ['certification', 'releaseDate'],
       properties: { certification: nullableString, releaseDate: nullableString },
     },
-    MediaSeasonSummary: {
+    SeriesSeasonSummary: {
       type: 'object',
       additionalProperties: false,
       required: ['id', 'seasonNumber', 'title', 'overview', 'posterUrl', 'airDate', 'episodeCount', 'rating'],
       properties: {
+        links,
+
         id: { type: 'integer' },
         seasonNumber: { type: 'integer', minimum: 0 },
         title: { type: 'string' },
@@ -1152,24 +1107,28 @@ function schemas() {
         rating: { type: ['number', 'null'] },
       },
     },
-    MediaSeasonDetails: {
+    SeriesSeason: {
       allOf: [
-        { $ref: '#/components/schemas/MediaSeasonSummary' },
+        { $ref: '#/components/schemas/SeriesSeasonSummary' },
         {
           type: 'object',
           required: ['seriesId', 'episodes'],
           properties: {
+            links,
+
             seriesId: { type: 'integer', minimum: 1 },
-            episodes: { type: 'array', items: { $ref: '#/components/schemas/MediaEpisode' } },
+            episodes: { type: 'array', items: { $ref: '#/components/schemas/SeriesEpisode' } },
           },
         },
       ],
     },
-    MediaEpisode: {
+    SeriesEpisode: {
       type: 'object',
       additionalProperties: false,
       required: ['id', 'episodeNumber', 'title', 'overview', 'stillUrl', 'airDate', 'runtime', 'rating'],
       properties: {
+        links,
+
         id: { type: 'integer' },
         episodeNumber: { type: 'integer', minimum: 0 },
         title: { type: 'string' },
@@ -1180,9 +1139,7 @@ function schemas() {
         rating: { type: ['number', 'null'] },
       },
     },
-    MediaDetailsEnvelope: envelope('MediaDetails'),
-    MediaSeasonEnvelope: envelope('MediaSeasonDetails'),
-    Book: {
+    BookMetadata: {
       type: 'object',
       additionalProperties: false,
       required: [
@@ -1197,6 +1154,8 @@ function schemas() {
         'aliases',
       ],
       properties: {
+        links,
+
         mediaKey: { type: 'string', minLength: 1 },
         title: { type: 'string' },
         authors: { type: 'array', items: { type: 'string' } },
@@ -1210,7 +1169,7 @@ function schemas() {
         covers: { type: 'array', items: { $ref: '#/components/schemas/BookCover' } },
         workKey: nullableString,
         editionKey: nullableString,
-        editionCandidates: { type: 'array', items: { $ref: '#/components/schemas/BookEditionCandidate' } },
+        editions: { type: 'array', items: { $ref: '#/components/schemas/BookEditionSummary' } },
       },
     },
     BookCover: {
@@ -1223,11 +1182,13 @@ function schemas() {
         url: { type: 'string', format: 'uri' },
       },
     },
-    BookEditionCandidate: {
+    BookEditionSummary: {
       type: 'object',
       additionalProperties: false,
       required: ['mediaKey', 'openLibraryId', 'title', 'publishYear', 'languages', 'isbnCandidates'],
       properties: {
+        links,
+
         mediaKey: { type: 'string' },
         openLibraryId: { type: 'string' },
         title: nullableString,
@@ -1236,19 +1197,8 @@ function schemas() {
         isbnCandidates: { type: 'array', items: { type: 'string' } },
       },
     },
-    BookPage: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['results', 'page', 'totalPages', 'totalResults'],
-      properties: {
-        results: { type: 'array', items: { $ref: '#/components/schemas/Book' } },
-        page: { type: 'integer' },
-        totalPages: { type: 'integer' },
-        totalResults: { type: 'integer' },
-      },
-    },
-    BookEnvelope: envelope('Book'),
-    MusicResource: {
+    BookPage: collection('#/components/schemas/BookSummary'),
+    MusicCatalogSummary: {
       type: 'object',
       required: ['mediaKey', 'provider', 'resourceType', 'title', 'artists', 'coverArt'],
       properties: {
@@ -1293,18 +1243,6 @@ function schemas() {
         scoreLabel: nullableString,
       },
     },
-    MusicPage: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['results', 'page', 'totalPages', 'totalResults'],
-      properties: {
-        results: { type: 'array', items: { $ref: '#/components/schemas/MusicResource' } },
-        page: { type: 'integer' },
-        totalPages: { type: 'integer' },
-        totalResults: { type: 'integer' },
-      },
-    },
-    MusicAlbumEnvelope: envelope('MusicResource'),
     MusicDownloadRecord: {
       type: 'object',
       additionalProperties: false,
@@ -1356,11 +1294,10 @@ function schemas() {
         updatedAt: dateTime,
       },
     },
-    LibraryStateEnvelope: envelope('LibraryState'),
     LibraryStateCollection: items('#/components/schemas/LibraryState'),
     LibraryMedia: {
       allOf: [
-        { $ref: '#/components/schemas/BrowserMedia' },
+        { $ref: '#/components/schemas/ScreenTitleSummary' },
         {
           type: 'object',
           required: ['mediaKey', 'libraryItemId', 'savedAt', 'watchedAt', 'updatedAt'],
@@ -1374,18 +1311,7 @@ function schemas() {
         },
       ],
     },
-    LibraryPage: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['items', 'page', 'pageSize', 'totalResults', 'totalPages'],
-      properties: {
-        items: { type: 'array', items: { $ref: '#/components/schemas/LibraryMedia' } },
-        page: { type: 'integer' },
-        pageSize: { type: 'integer' },
-        totalResults: { type: 'integer' },
-        totalPages: { type: 'integer' },
-      },
-    },
+    LibraryPage: collection('#/components/schemas/LibraryMedia'),
     DeletedLibraryResource: {
       type: 'object',
       additionalProperties: false,
@@ -1518,29 +1444,22 @@ function schemas() {
       },
     },
     MusicCollectionCollection: items('#/components/schemas/MusicCollection'),
-    MusicCollectionEnvelope: envelope('MusicCollection'),
     MusicSubscriptionInput: {
       type: 'object',
       additionalProperties: false,
       required: ['downloaderId'],
       properties: { downloaderId: { type: 'string', minLength: 1 } },
     },
-    MusicSubscriptionMutationEnvelope: {
+    MusicSubscriptionUpdate: {
       type: 'object',
       additionalProperties: false,
-      required: ['item'],
+      required: ['subscription', 'queued', 'waiting', 'skipped', 'canceled'],
       properties: {
-        item: {
-          type: 'object',
-          required: ['subscription', 'queued', 'waiting', 'skipped', 'canceled'],
-          properties: {
-            subscription: { $ref: '#/components/schemas/MusicSubscription' },
-            queued: { type: 'integer' },
-            waiting: { type: 'integer' },
-            skipped: { type: 'integer' },
-            canceled: { type: 'integer' },
-          },
-        },
+        subscription: { $ref: '#/components/schemas/MusicSubscription' },
+        queued: { type: 'integer' },
+        waiting: { type: 'integer' },
+        skipped: { type: 'integer' },
+        canceled: { type: 'integer' },
       },
     },
     MusicAlbumInput: {
@@ -1552,9 +1471,8 @@ function schemas() {
     FavoriteTrackMutation: {
       type: 'object',
       additionalProperties: false,
-      required: ['selected', 'track'],
+      required: ['track'],
       properties: {
-        selected: { type: 'boolean' },
         track: {
           type: 'object',
           required: [
@@ -1667,7 +1585,6 @@ function schemas() {
       ],
     },
     ConnectorCollection: items('#/components/schemas/Connector'),
-    ConnectorEnvelope: envelope('Connector'),
     ConnectorInput: {
       type: 'object',
       additionalProperties: false,
@@ -1688,30 +1605,35 @@ function schemas() {
         input: stringMap,
       },
     },
+    ConnectorChallengeResponse: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['attemptId', 'submittedAt', 'links'],
+      properties: {
+        attemptId: { type: 'string', format: 'uuid' },
+        submittedAt: dateTime,
+        links: { type: 'object', additionalProperties: { type: 'string', format: 'uri' } },
+      },
+    },
     ConnectorLoginResponseInput: {
       type: 'object',
       additionalProperties: false,
-      required: ['challenge', 'input'],
-      properties: { challenge: { type: 'string', minLength: 1 }, input: stringMap },
+      required: ['input'],
+      properties: { input: stringMap },
     },
-    ConnectorLoginResult: {
+    ConnectorLoginAttempt: {
       type: 'object',
       additionalProperties: false,
-      required: ['attempt', 'connector'],
+      required: ['id', 'kind', 'method', 'status', 'challenge', 'expiresAt', 'connector', 'links'],
       properties: {
-        attempt: {
-          type: 'object',
-          required: ['id', 'kind', 'method', 'status', 'challenge', 'expiresAt'],
-          properties: {
-            id: { type: 'string' },
-            kind: { type: 'string' },
-            method: { type: 'string' },
-            status: { type: 'string', enum: ['pending', 'connected', 'expired'] },
-            challenge: { anyOf: [{ $ref: '#/components/schemas/ConnectorAuthChallenge' }, { type: 'null' }] },
-            expiresAt: dateTime,
-          },
-        },
+        id: { type: 'string', format: 'uuid' },
+        kind: { type: 'string' },
+        method: { type: 'string' },
+        status: { type: 'string', enum: ['pending', 'connected', 'expired'] },
+        challenge: { anyOf: [{ $ref: '#/components/schemas/ConnectorAuthChallenge' }, { type: 'null' }] },
+        expiresAt: dateTime,
         connector: { anyOf: [{ $ref: '#/components/schemas/Connector' }, { type: 'null' }] },
+        links: { type: 'object', additionalProperties: { type: 'string', format: 'uri' } },
       },
     },
     ConnectorAuthChallenge: {
@@ -1790,12 +1712,7 @@ function schemas() {
         completedAt: nullableDateTime,
       },
     },
-    ConnectorSyncJobEnvelope: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['job'],
-      properties: { job: { $ref: '#/components/schemas/ConnectorSyncJob' } },
-    },
+    ConnectorSyncJobEnvelope: { $ref: '#/components/schemas/ConnectorSyncJob' },
     PlaylistSelectionInput: {
       type: 'object',
       additionalProperties: false,
@@ -1809,13 +1726,16 @@ function schemas() {
         },
       },
     },
-    PlaylistSelectionResult: {
+    PlaylistSelection: {
       type: 'object',
       additionalProperties: false,
-      required: ['selectedPlaylists'],
-      properties: { selectedPlaylists: { type: 'integer', minimum: 0 } },
+      required: ['selectedPlaylistIds', 'links'],
+      properties: {
+        selectedPlaylistIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+        links: { type: 'object', additionalProperties: { type: 'string', format: 'uri' } },
+      },
     },
-    ReleaseCandidateQuality: {
+    TorrentQuality: {
       type: 'object',
       additionalProperties: false,
       required: ['resolution', 'source', 'codec', 'hdr', 'audio', 'tier', 'warnings'],
@@ -1832,19 +1752,19 @@ function schemas() {
         },
       },
     },
-    ReleaseCandidateAvailability: {
+    TorrentAvailability: {
       type: 'object',
       additionalProperties: false,
       required: ['tier'],
       properties: { tier: { type: 'string', enum: ['high', 'medium', 'low', 'none', 'unknown'] } },
     },
-    ReleaseCandidate: {
+    Torrent: {
       type: 'object',
       additionalProperties: false,
       required: ['id', 'title', 'size', 'publishDate', 'quality', 'availability', 'links'],
-      properties: releaseCandidateProperties(nullableDateTime),
+      properties: torrentProperties(nullableDateTime),
     },
-    ReleaseCandidateResourceRef: {
+    TorrentResourceRef: {
       type: 'object',
       additionalProperties: false,
       required: [
@@ -1859,12 +1779,12 @@ function schemas() {
         'resourceRefExpiresAt',
       ],
       properties: {
-        ...releaseCandidateProperties(nullableDateTime),
-        resourceRef: { type: 'string', pattern: '^release-ref:v1:' },
+        ...torrentProperties(nullableDateTime),
+        resourceRef: { type: 'string', pattern: '^torrent-ref:v1:' },
         resourceRefExpiresAt: dateTime,
       },
     },
-    ReleaseCandidateFull: {
+    TorrentFull: {
       type: 'object',
       additionalProperties: false,
       required: [
@@ -1891,7 +1811,7 @@ function schemas() {
         'tvdbId',
       ],
       properties: {
-        ...releaseCandidateProperties(nullableDateTime),
+        ...torrentProperties(nullableDateTime),
         indexer: { type: 'string' },
         downloadTarget: { type: ['string', 'null'], enum: ['music', 'ebook', 'audiobook', null] },
         fileName: nullableString,
@@ -1908,21 +1828,23 @@ function schemas() {
         tvdbId: { type: ['integer', 'null'] },
       },
     },
-    ReleaseCandidateCollection: {
+    TorrentCollection: {
       type: 'object',
       additionalProperties: false,
       required: ['items', 'pagination'],
       properties: {
         items: {
           type: 'array',
-          items: releaseCandidateItemSchema(),
+          items: torrentItemSchema(),
         },
-        pagination,
+        pagination: {
+          ...pagination,
+          required: [...pagination.required, 'snapshotId', 'expiresAt'],
+          properties: { ...pagination.properties, snapshotId: { type: 'string', format: 'uuid' }, expiresAt: dateTime },
+        },
       },
     },
     Health: health,
-    HealthEnvelope: envelope('Health'),
-    HealthCollection: items('#/components/schemas/Health'),
     Indexer: {
       type: 'object',
       additionalProperties: false,
@@ -1954,7 +1876,6 @@ function schemas() {
       },
     },
     IndexerCollection: items('#/components/schemas/Indexer'),
-    IndexerEnvelope: envelope('Indexer'),
     IndexerInput: {
       type: 'object',
       additionalProperties: false,
@@ -1973,11 +1894,11 @@ function schemas() {
       additionalProperties: false,
       minProperties: 1,
       properties: {
-        description: { type: 'string' },
+        description: { type: ['string', 'null'] },
         kind: { type: 'string', const: 'prowlarr' },
         endpoint: { type: 'string', format: 'uri' },
-        credentials: stringMap,
-        options: stringMap,
+        credentials: stringMapPatch,
+        options: stringMapPatch,
         enabled: { type: 'boolean' },
       },
     },
@@ -2010,7 +1931,6 @@ function schemas() {
       },
     },
     MediaSourceCollection: items('#/components/schemas/MediaSource'),
-    MediaSourceEnvelope: envelope('MediaSource'),
     MediaSourceInput: {
       type: 'object',
       additionalProperties: false,
@@ -2028,10 +1948,10 @@ function schemas() {
       additionalProperties: false,
       minProperties: 1,
       properties: {
-        description: { type: 'string' },
+        description: { type: ['string', 'null'] },
         kind: { type: 'string', const: 'tmdb' },
-        credentials: stringMap,
-        options: stringMap,
+        credentials: stringMapPatch,
+        options: stringMapPatch,
         enabled: { type: 'boolean' },
       },
     },
@@ -2063,12 +1983,11 @@ function schemas() {
         healthCheckedAt: nullableDateTime,
         createdAt: dateTime,
         updatedAt: dateTime,
-        credentials: stringMap,
+        configuredCredentials: { type: 'array', items: { type: 'string' } },
         options: stringMap,
       },
     },
     DownloaderCollection: items('#/components/schemas/Downloader'),
-    DownloaderEnvelope: envelope('Downloader'),
     DownloaderInput: {
       type: 'object',
       additionalProperties: false,
@@ -2087,53 +2006,59 @@ function schemas() {
       additionalProperties: false,
       minProperties: 1,
       properties: {
-        description: { type: 'string' },
+        description: { type: ['string', 'null'] },
         kind: { type: 'string', enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] },
         endpoint: { type: 'string', format: 'uri' },
-        credentials: stringMap,
-        options: stringMap,
+        credentials: stringMapPatch,
+        options: stringMapPatch,
         enabled: { type: 'boolean' },
       },
     },
-    Media: {
-      type: 'object',
-      additionalProperties: false,
-      required: [
-        'id',
-        'mediaKey',
-        'kind',
-        'title',
-        'originalTitle',
-        'overview',
-        'posterUrl',
-        'backdropUrl',
-        'releaseYear',
-        'rating',
-        'genres',
-      ],
-      properties: {
-        id: { type: 'integer', minimum: 1 },
-        mediaKey: { type: 'string', pattern: '^tmdb:(movie|tv):[1-9][0-9]*$' },
-        kind: { type: 'string', enum: ['movie', 'tv'] },
-        title: { type: 'string' },
-        originalTitle: { type: 'string' },
-        overview: { type: 'string' },
-        posterUrl: { type: ['string', 'null'], format: 'uri' },
-        backdropUrl: { type: ['string', 'null'], format: 'uri' },
-        releaseYear: { type: ['string', 'null'] },
-        rating: { type: ['number', 'null'], minimum: 0, maximum: 10 },
-        genres: { type: 'array', items: { type: 'string' } },
-      },
-    },
-    MediaCollection: collection('#/components/schemas/Media'),
     CreateDownload: {
       type: 'object',
       additionalProperties: false,
-      required: ['resourceRef', 'downloaderId'],
+      required: ['resourceRef'],
       properties: {
         resourceRef: { type: 'string', minLength: 1, maxLength: 8000 },
-        downloaderId: { type: 'string', format: 'uuid' },
+        downloaderId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'Omit for local system handoff; supply an enabled owned downloader ID for remote download.',
+        },
       },
+    },
+    LocalDownload: {
+      description:
+        'Temporary local handoff. expiresAt limits ZME metadata and file access; it does not expire the underlying magnet URI.',
+      oneOf: [
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'kind', 'href', 'expiresAt', 'links'],
+          properties: {
+            id: { type: 'string' },
+            kind: { type: 'string', const: 'magnet' },
+            href: { type: 'string', format: 'uri' },
+            expiresAt: dateTime,
+            links: { type: 'object', additionalProperties: { type: 'string', format: 'uri' } },
+          },
+        },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'kind', 'href', 'filename', 'mediaType', 'expiresAt', 'links'],
+          properties: {
+            id: { type: 'string' },
+            kind: { type: 'string', const: 'file' },
+            href: { type: 'string', format: 'uri' },
+            filename: { type: 'string' },
+            mediaType: { type: 'string' },
+            expiresAt: dateTime,
+            links: { type: 'object', additionalProperties: { type: 'string', format: 'uri' } },
+          },
+        },
+      ],
+      discriminator: { propertyName: 'kind' },
     },
     DownloadStatus: {
       type: 'string',
@@ -2142,6 +2067,7 @@ function schemas() {
         'resolving',
         'waitingSource',
         'submitting',
+        'submissionUnknown',
         'submitted',
         'running',
         'pausing',
@@ -2154,6 +2080,11 @@ function schemas() {
       ],
     },
     Download: {
+      description:
+        'A temporary local handoff when downloaderId is omitted, or a persisted remote task when it is supplied.',
+      oneOf: [{ $ref: '#/components/schemas/LocalDownload' }, { $ref: '#/components/schemas/RemoteDownload' }],
+    },
+    RemoteDownload: {
       type: 'object',
       additionalProperties: false,
       required: [
@@ -2165,8 +2096,10 @@ function schemas() {
         'downloaderName',
         'downloaderKind',
         'managementSupported',
+        'monitoringSupported',
+        'submissionRecoverySupported',
+        'pollingRequired',
         'sourceType',
-        'sourceUri',
         'name',
         'targetFolder',
         'category',
@@ -2186,14 +2119,25 @@ function schemas() {
       properties: {
         id: { type: 'string', format: 'uuid' },
         resourceRef: { type: 'string' },
-        resourceKind: { type: 'string', enum: ['release', 'music_track'] },
+        resourceKind: { type: 'string', enum: ['torrent', 'music_track'] },
         resourceKey: { type: 'string' },
         downloaderId: { type: 'string', format: 'uuid' },
         downloaderName: { type: 'string' },
-        downloaderKind: { type: 'string', enum: ['zpan', 'qbittorrent', 'transmission', 'aria2'] },
+        downloaderKind: { type: ['string', 'null'], enum: ['zpan', 'qbittorrent', 'transmission', 'aria2', null] },
         managementSupported: { type: 'boolean' },
+        monitoringSupported: {
+          type: 'boolean',
+          description: 'Whether ZME can read progress and completion from this remote client.',
+        },
+        submissionRecoverySupported: {
+          type: 'boolean',
+          description: 'Whether uncertain submission can be reconciled without creating another remote task.',
+        },
+        pollingRequired: {
+          type: 'boolean',
+          description: 'Poll only while true; acceptance by a submission-only client is a handoff, not completion.',
+        },
         sourceType: { type: 'string', enum: ['http', 'magnet', 'torrent_url'] },
-        sourceUri: { type: 'string' },
         name: { type: 'string' },
         targetFolder: { type: 'string' },
         category: nullableString,
@@ -2227,7 +2171,7 @@ function schemas() {
         links,
       },
     },
-    DownloadCollection: collection('#/components/schemas/Download'),
+    DownloadCollection: collection('#/components/schemas/RemoteDownload'),
     DownloadSuspension: {
       type: 'object',
       additionalProperties: false,
@@ -2243,14 +2187,20 @@ function schemas() {
   }
 }
 
-function releaseCandidateProperties(nullableDateTime: object) {
+function torrentProperties(nullableDateTime: object) {
   return {
-    id: { type: 'string', pattern: '^release-candidate:[0-9a-f]{64}$' },
+    id: { type: 'string', pattern: '^torrent:[0-9a-f]{64}$' },
+    mediaKey: {
+      type: 'string',
+      minLength: 1,
+      description: 'Optional selected catalog association; not part of the torrent identity.',
+    },
+    expiresAt: { type: 'string', format: 'date-time' },
     title: { type: 'string' },
     size: { type: ['integer', 'null'], minimum: 0 },
     publishDate: nullableDateTime,
-    quality: { $ref: '#/components/schemas/ReleaseCandidateQuality' },
-    availability: { $ref: '#/components/schemas/ReleaseCandidateAvailability' },
+    quality: { $ref: '#/components/schemas/TorrentQuality' },
+    availability: { $ref: '#/components/schemas/TorrentAvailability' },
     links: {
       type: 'object',
       additionalProperties: false,
@@ -2260,8 +2210,8 @@ function releaseCandidateProperties(nullableDateTime: object) {
   }
 }
 
-function releaseCandidateItemSchema() {
+function torrentItemSchema() {
   return {
-    oneOf: [{ $ref: '#/components/schemas/ReleaseCandidate' }, { $ref: '#/components/schemas/ReleaseCandidateFull' }],
+    oneOf: [{ $ref: '#/components/schemas/Torrent' }, { $ref: '#/components/schemas/TorrentFull' }],
   }
 }

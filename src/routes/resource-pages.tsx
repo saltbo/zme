@@ -1214,9 +1214,9 @@ export function BookDetailPage() {
       }
       sections={
         <ResourceSection title={t('editions')}>
-          {book.editionCandidates.length > 0 ? (
+          {book.editions.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
-              {book.editionCandidates.slice(0, 12).map((edition) => (
+              {book.editions.slice(0, 12).map((edition) => (
                 <Card key={edition.mediaKey} className="p-4">
                   <CardContent className="px-0">
                     <h3 className="line-clamp-2 font-semibold text-sm">{edition.title ?? book.title}</h3>
@@ -1622,7 +1622,7 @@ function useFavoriteSongs() {
   const queryClient = useQueryClient()
   const favorites = useQuery({
     queryKey: queryKeys.music.favorites,
-    queryFn: async () => (await getFavoriteSongs()).item,
+    queryFn: async () => await getFavoriteSongs(),
   })
   const mutation = useMutation({
     mutationFn: ({ track, selected }: { track: MusicFavoriteTrackInput; selected: boolean }) =>

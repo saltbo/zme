@@ -1,4 +1,12 @@
-import type { IndexerDetails, IndexerHealth, IndexerInput, IndexerSearchItem, IndexerSummary } from '@shared/types'
+import { patchStringMap } from '@server/domain/connection-patch'
+import type {
+  ConnectionPatch,
+  IndexerDetails,
+  IndexerHealth,
+  IndexerInput,
+  IndexerSearchItem,
+  IndexerSummary,
+} from '@shared/types'
 import type { Deps } from './deps'
 import { IndexerNotConfiguredError, type IndexerRecord, type IndexerSearchInput, StaleWriteError } from './ports'
 
@@ -26,16 +34,16 @@ export async function createIndexer(deps: Deps, input: IndexerInput): Promise<In
 export async function updateIndexer(
   deps: Deps,
   id: string,
-  input: Partial<IndexerInput>,
+  input: ConnectionPatch<IndexerInput>,
 ): Promise<IndexerSummary | null> {
   const current = await deps.indexersRepo.get(id)
   if (!current) return null
   const merged: IndexerInput = {
-    description: input.description ?? current.description ?? undefined,
+    description: input.description === null ? undefined : (input.description ?? current.description ?? undefined),
     kind: input.kind ?? current.kind,
     endpoint: input.endpoint ?? current.config.endpoint,
-    credentials: input.credentials ?? current.config.credentials,
-    options: input.options ?? current.config.options,
+    credentials: patchStringMap(current.config.credentials, input.credentials),
+    options: patchStringMap(current.config.options, input.options),
     enabled: input.enabled ?? current.enabled,
   }
   const record = await deps.indexersRepo.update(id, merged, current.updatedAt)

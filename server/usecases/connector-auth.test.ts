@@ -1,7 +1,15 @@
 import { decryptConnectorPayload, encryptConnectorPayload } from '@server/domain/connector-credentials'
 import type { Env } from '@server/env'
 import { describe, expect, it, vi } from 'vitest'
-import { continueConnectorLogin, listConnectorProviders, startConnectorLogin } from './connector-auth'
+import {
+  continueConnectorLogin,
+  getConnectorChallengeResponse,
+  getConnectorLoginAttempt,
+  listConnectorProviders,
+  processConnectorLoginPoll,
+  startConnectorLogin,
+  submitConnectorChallengeResponse,
+} from './connector-auth'
 import type { Deps } from './deps'
 import type { ConnectorLoginAttemptRecord, ConnectorRecord, MusicConnectorModule } from './ports'
 
@@ -24,6 +32,96 @@ function fakeModule(auth: MusicConnectorModule['auth']): MusicConnectorModule {
 }
 
 describe('connector authentication state machine', () => {
+  it('defers a busy login lease and propagates provider failures', async () => {
+    const f = loginFixture(
+      fakeModule({ start: async () => ({ status: 'expired' }), continue: async () => ({ status: 'expired' }) }),
+    )
+    f.deps.dispatchLanesRepo.acquire = async () => ({
+      acquired: false,
+      lane: { key: 'test', leaseOwner: null, leaseExpiresAt: null, nextAllowedAt: null, updatedAt: 'now' },
+    })
+    const message = { type: 'connector_login_poll' as const, userId: 'user-1', attemptId: 'busy' }
+    expect(await processConnectorLoginPoll(f.deps, env, message)).toBe(2)
+    f.deps.dispatchLanesRepo.acquire = async () => {
+      throw new Error('Lease unavailable')
+    }
+    await expect(processConnectorLoginPoll(f.deps, env, message)).rejects.toThrow('Lease unavailable')
+  })
+
+  it('rejects a form response after the attempt expires', async () => {
+    const f = loginFixture(fakeModule({ start: async () => ({ status: 'expired' }), continue: vi.fn() }))
+    const created = await startConnectorLogin(f.deps, env, 'user-1', { kind: 'fake-music', method: 'sms', input: {} })
+    await expect(
+      submitConnectorChallengeResponse(f.deps, env, 'user-1', created.attempt.id, { code: '123456' }),
+    ).rejects.toThrow('not waiting for a form response')
+  })
+  it('queues QR progress on the server while GET only reads the current attempt', async () => {
+    const challenge = {
+      type: 'qr' as const,
+      url: 'https://fake.test/qr',
+      purpose: 'login' as const,
+      progress: 'waiting_scan' as const,
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    }
+    const continued = vi.fn(async () => ({ status: 'pending' as const, state: { privateState: 'next' }, challenge }))
+    const f = loginFixture(
+      fakeModule({
+        start: async () => ({ status: 'pending', state: { privateState: 'original' }, challenge }),
+        continue: continued,
+      }),
+    )
+    const created = await startConnectorLogin(f.deps, env, 'user-1', {
+      kind: 'fake-music',
+      method: 'device',
+      input: {},
+    })
+    expect(f.enqueue).toHaveBeenCalledWith({ userId: 'user-1', attemptId: created.attempt.id }, 2)
+    await getConnectorLoginAttempt(f.deps, 'user-1', created.attempt.id)
+    expect(continued).not.toHaveBeenCalled()
+    expect(
+      await processConnectorLoginPoll(f.deps, env, {
+        type: 'connector_login_poll',
+        userId: 'user-1',
+        attemptId: created.attempt.id,
+      }),
+    ).toBe(2)
+    expect(continued).toHaveBeenCalledOnce()
+    expect(f.release).toHaveBeenCalledOnce()
+  })
+
+  it('records one accepted form response and does not resubmit identical retries', async () => {
+    const challenge = {
+      type: 'form' as const,
+      action: 'submit_code',
+      fields: [{ name: 'code', type: 'text' as const, required: true }],
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    }
+    const qr = {
+      type: 'qr' as const,
+      url: 'https://fake.test/verify',
+      purpose: 'verification' as const,
+      progress: 'waiting_scan' as const,
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    }
+    const continued = vi.fn(async () => ({ status: 'pending' as const, state: {}, challenge: qr }))
+    const f = loginFixture(
+      fakeModule({ start: async () => ({ status: 'pending', state: {}, challenge }), continue: continued }),
+    )
+    const created = await startConnectorLogin(f.deps, env, 'user-1', { kind: 'fake-music', method: 'sms', input: {} })
+    const first = await submitConnectorChallengeResponse(f.deps, env, 'user-1', created.attempt.id, { code: '123456' })
+    const second = await submitConnectorChallengeResponse(f.deps, env, 'user-1', created.attempt.id, { code: '123456' })
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(false)
+    expect(second.response).toEqual(first.response)
+    expect(continued).toHaveBeenCalledOnce()
+    expect(await getConnectorChallengeResponse(f.deps, 'user-1', created.attempt.id)).toEqual(first.response)
+    expect(f.record()?.responseHash).not.toContain('123456')
+    await expect(
+      submitConnectorChallengeResponse(f.deps, env, 'user-1', created.attempt.id, { code: '654321' }),
+    ).rejects.toThrow('different accepted response')
+    expect(continued).toHaveBeenCalledOnce()
+  })
+
   it('lists provider authentication capabilities without provider-specific routes', () => {
     const module = fakeModule({
       start: async () => ({ status: 'expired' }),
@@ -163,3 +261,25 @@ describe('connector authentication state machine', () => {
     })
   })
 })
+
+function loginFixture(module: MusicConnectorModule) {
+  let current: ConnectorLoginAttemptRecord | null = null
+  const enqueue = vi.fn(async () => undefined)
+  const release = vi.fn(async () => undefined)
+  const deps = {
+    musicConnectors: new Map([['fake-music', module]]),
+    connectorLoginAttemptsRepo: {
+      create: async (record: ConnectorLoginAttemptRecord) => {
+        current = record
+      },
+      get: async () => current,
+      update: async (_user: string, _id: string, patch: Partial<ConnectorLoginAttemptRecord>) => {
+        current = { ...(current as ConnectorLoginAttemptRecord), ...patch }
+        return current
+      },
+    },
+    connectorLoginQueue: { enqueue },
+    dispatchLanesRepo: { acquire: async () => ({ acquired: true }), release },
+  } as unknown as Deps
+  return { deps, enqueue, release, record: () => current }
+}

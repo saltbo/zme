@@ -11,7 +11,7 @@ import {
   compareIndexerReleasesByRecommendation,
   getReleaseAvailabilityTier,
 } from './release-analysis'
-import type { ReleaseCandidateFull } from './types'
+import type { TorrentFull } from './types'
 
 describe('media indexer search planning', () => {
   it('keeps more title aliases for multilingual release searches', () => {
@@ -296,7 +296,7 @@ describe('media indexer search planning', () => {
   })
 })
 
-function release(id: string, title: string): ReleaseCandidateFull {
+function release(id: string, title: string): TorrentFull {
   return {
     id,
     downloadTarget: null,
@@ -310,8 +310,8 @@ function release(id: string, title: string): ReleaseCandidateFull {
     leechers: null,
     files: null,
     publishDate: null,
-    links: { self: `/api/release-candidates/${id}` },
-    resourceRef: 'release-ref:v1:test',
+    links: { self: `/api/torrents/${id}` },
+    resourceRef: 'torrent-ref:v1:test',
     resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
     sourceType: 'torrent_url',
     infoUrl: null,
@@ -324,7 +324,7 @@ function release(id: string, title: string): ReleaseCandidateFull {
   }
 }
 
-const testQuality: ReleaseCandidateFull['quality'] = {
+const testQuality: TorrentFull['quality'] = {
   resolution: 'other',
   source: 'unknown',
   codec: null,

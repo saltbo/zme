@@ -1,4 +1,4 @@
-import type { ReleaseCandidateFull } from '@shared/types'
+import type { TorrentFull } from '@shared/types'
 import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -21,7 +21,7 @@ export interface ReleaseSearchTask {
   id: string
   request: ReleaseSearchTaskRequest
   status: ReleaseSearchTaskStatus
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   progress: ReleaseSearchProgress | null
   canSearchMore: boolean
   error: ReleaseSearchError | null

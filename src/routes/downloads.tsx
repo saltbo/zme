@@ -23,18 +23,6 @@ import { getTmdbLanguage } from '@/i18n'
 import { getDownloadCatalogResource, getDownloadMedia } from '@/lib/download-resource'
 import { cn, formatBytes } from '@/lib/utils'
 
-const activeStatuses = new Set<DownloadTaskStatus>([
-  'queued',
-  'resolving',
-  'waitingSource',
-  'submitting',
-  'submitted',
-  'running',
-  'pausing',
-  'paused',
-  'resuming',
-  'canceling',
-])
 const statusFilters: DownloadTaskStatus[] = ['running', 'paused', 'completed', 'failed', 'canceled']
 const skeletonKeys = ['download-skeleton-1', 'download-skeleton-2', 'download-skeleton-3', 'download-skeleton-4']
 type StatusFilter = 'all' | DownloadTaskStatus
@@ -46,7 +34,7 @@ export function DownloadsPage() {
   const downloads = useDownloadTasks(statusFilter)
   const tasks = downloads.data?.pages.flatMap((page) => page.items) ?? []
   const total = downloads.data?.pages[0]?.total ?? 0
-  const active = tasks.filter((task) => activeStatuses.has(task.status)).length
+  const active = tasks.filter((task) => task.pollingRequired).length
   const totalSpeed = tasks.reduce((sum, task) => sum + task.downloadBps, 0)
 
   useEffect(() => {
@@ -155,7 +143,7 @@ function DownloadTaskCard({ task }: { task: DownloadSummary }) {
   const progress = getProgress(task)
   const status = getStatusMeta(task.status, t)
   const primaryProgress = getPrimaryProgress(task.status, progress)
-  const stageMetric = getStageMetric(task, primaryProgress)
+  const stageMetric = getStageMetric(task, primaryProgress, t)
 
   return (
     <article className="group">
@@ -252,7 +240,13 @@ function getStatusMeta(status: DownloadTaskStatus, t: (key: string) => string) {
       className: 'text-red-100',
     }
   }
-  if (status === 'queued' || status === 'resolving' || status === 'waitingSource' || status === 'submitting') {
+  if (
+    status === 'queued' ||
+    status === 'resolving' ||
+    status === 'waitingSource' ||
+    status === 'submitting' ||
+    status === 'submissionUnknown'
+  ) {
     return { label: getStatusLabel(status, t), icon: Clock, className: 'text-amber-100' }
   }
   return { label: getStatusLabel(status, t), icon: LoaderCircle, className: 'text-white' }
@@ -276,7 +270,9 @@ function getPrimaryProgress(
   return status === 'completed' ? progress.upload : progress.download
 }
 
-function getStageMetric(task: DownloadSummary, progress: { value: number; label: string }) {
+function getStageMetric(task: DownloadSummary, progress: { value: number; label: string }, t: (key: string) => string) {
+  if (!task.monitoringSupported && task.status === 'submitted')
+    return { icon: DownloadCloud, className: 'text-white/72', label: t('downloadHandedOff') }
   if (task.status === 'running' && task.stage !== 'uploading') {
     return {
       icon: DownloadCloud,

@@ -47,6 +47,8 @@ function toRecord(row: typeof connectorLoginAttempts.$inferSelect) {
     method: row.method,
     stateEncrypted: row.stateEncrypted,
     challenge: row.challengeJson ? JSON.parse(row.challengeJson) : null,
+    responseHash: row.responseHash,
+    responseSubmittedAt: row.responseSubmittedAt,
     status: row.status,
     expiresAt: row.expiresAt,
     createdAt: row.createdAt,

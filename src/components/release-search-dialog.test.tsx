@@ -1,4 +1,4 @@
-import type { ReleaseCandidateFull } from '@shared/types'
+import type { TorrentFull } from '@shared/types'
 import type { ReleaseSearchMedia } from '@/components/release-search-dialog'
 import { ReleaseSearchDialog, ReleaseSearchSurface } from '@/components/release-search-dialog'
 import '@/i18n'
@@ -136,7 +136,7 @@ function renderReleaseSearchSurface({
   loading,
   progress,
 }: {
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   loading: boolean
   progress: ReleaseSearchProgress | null
 }) {
@@ -150,7 +150,7 @@ function renderReleaseSearchSurfaceElement({
   canSearchMore = false,
   onSearchMore = () => {},
 }: {
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   loading: boolean
   progress: ReleaseSearchProgress | null
   canSearchMore?: boolean
@@ -230,7 +230,7 @@ const releaseSearchProgress: ReleaseSearchProgress = {
   ],
 }
 
-const release: ReleaseCandidateFull = {
+const release: TorrentFull = {
   id: 'release-1',
   downloadTarget: null,
   title: 'Test Movie 2026 1080p WEB-DL',
@@ -251,8 +251,8 @@ const release: ReleaseCandidateFull = {
   leechers: 0,
   files: 1,
   publishDate: null,
-  links: { self: '/api/release-candidates/release-1' },
-  resourceRef: 'release-ref:v1:test',
+  links: { self: '/api/torrents/release-1' },
+  resourceRef: 'torrent-ref:v1:test',
   resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
   sourceType: 'torrent_url',
   infoUrl: null,

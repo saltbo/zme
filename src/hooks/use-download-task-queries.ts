@@ -5,18 +5,6 @@ import { queryKeys } from '@/lib/query-keys'
 
 type StatusFilter = 'all' | DownloadTaskStatus
 const pageSize = 20
-const activeStatuses = new Set<DownloadTaskStatus>([
-  'queued',
-  'resolving',
-  'waitingSource',
-  'submitting',
-  'submitted',
-  'running',
-  'pausing',
-  'paused',
-  'resuming',
-  'canceling',
-])
 
 export function useDownloadTasks(status: StatusFilter) {
   return useInfiniteQuery({
@@ -30,7 +18,7 @@ export function useDownloadTasks(status: StatusFilter) {
     },
     refetchInterval: (query) => {
       const pages = query.state.data?.pages
-      return pages?.some((page) => page.items.some((item) => activeStatuses.has(item.status))) ? 5_000 : false
+      return pages?.some((page) => page.items.some((item) => item.pollingRequired)) ? 5_000 : false
     },
     refetchOnWindowFocus: true,
   })

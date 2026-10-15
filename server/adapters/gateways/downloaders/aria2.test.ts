@@ -24,6 +24,23 @@ afterEach(() => {
 })
 
 describe('aria2DownloaderGateway', () => {
+  it('recognizes a retained task when addUri reports a duplicate stable GID', async () => {
+    let gid = ''
+    const calls = stubFetch((request) => {
+      const body = JSON.parse(request.body ?? '{}')
+      if (body.method === 'aria2.addUri') {
+        gid = body.params.at(-1).gid
+        return jsonResponse({ error: { message: 'GID is not unique' } })
+      }
+      expect(body).toMatchObject({ method: 'aria2.tellStatus', params: ['token:s3cret', gid, ['gid']] })
+      return jsonResponse({ result: { gid } })
+    })
+    await expect(aria2DownloaderGateway.submit(config, input, 'stable-task-id')).resolves.toEqual({
+      externalTaskId: expect.stringMatching(/^[0-9a-f]{16}$/),
+    })
+    expect(calls).toHaveLength(2)
+  })
+
   it('submits addUri with the token, uri, and typed directory', async () => {
     const calls = stubFetch(() => jsonResponse({ result: 'gid-1' }))
 

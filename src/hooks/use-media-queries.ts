@@ -41,7 +41,7 @@ export function useDiscoverMedia(input: Omit<MediaDiscoverInput, 'page'>, option
 export function useMediaGenres(kind: MediaKind, language: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.media.genres(kind, language),
-    queryFn: async () => (await listMediaGenres(kind, language)).genres,
+    queryFn: async () => (await listMediaGenres(kind, language)).items,
     enabled: options?.enabled,
   })
 }
@@ -57,7 +57,7 @@ export function useMediaSearch(query: string, language: string, options?: { enab
 export function useMediaDetails(kind: MediaKind, id: number, language: string, watchRegion = 'US') {
   return useQuery({
     queryKey: queryKeys.media.details(kind, id, language, watchRegion),
-    queryFn: async () => (await getMediaDetails(kind, id, language, watchRegion)).item,
+    queryFn: async () => await getMediaDetails(kind, id, language, watchRegion),
     enabled: Number.isInteger(id) && id > 0,
     placeholderData: keepPreviousData,
   })
@@ -66,7 +66,7 @@ export function useMediaDetails(kind: MediaKind, id: number, language: string, w
 export function useSeasonDetails(seriesId: number, seasonNumber: number, language: string) {
   return useQuery({
     queryKey: queryKeys.media.season(seriesId, seasonNumber, language),
-    queryFn: async () => (await getSeasonDetails(seriesId, seasonNumber, language)).item,
+    queryFn: async () => await getSeasonDetails(seriesId, seasonNumber, language),
     enabled: Number.isInteger(seriesId) && seriesId > 0 && Number.isInteger(seasonNumber) && seasonNumber >= 0,
   })
 }
@@ -79,7 +79,7 @@ export function useMediaWatchClickouts(
 ) {
   return useQuery({
     queryKey: queryKeys.media.watchClickouts(kind, id, watchRegion),
-    queryFn: async () => (await getMediaWatchClickouts(kind, id, watchRegion)).clickouts,
+    queryFn: async () => getMediaWatchClickouts(kind, id, watchRegion),
     enabled: Number.isInteger(id) && id > 0 && options?.enabled !== false,
     staleTime: 1000 * 60 * 30,
   })

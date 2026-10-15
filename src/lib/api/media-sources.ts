@@ -6,19 +6,15 @@ export async function listMediaSources() {
 }
 
 export async function createMediaSource(input: MediaSourceInput) {
-  return apiRequest<{ item: MediaSourceSummary }>(
-    '/api/media-sources',
-    'Failed to create media source.',
-    jsonBody(input),
-  )
+  return apiRequest<MediaSourceSummary>('/api/media-sources', 'Failed to create media source.', jsonBody(input))
 }
 
 export async function getMediaSource(id: string) {
-  return apiRequest<{ item: MediaSourceDetails }>(`/api/media-sources/${id}`, 'Failed to load media source.')
+  return apiRequest<MediaSourceDetails>(`/api/media-sources/${id}`, 'Failed to load media source.')
 }
 
 export async function updateMediaSource(id: string, input: MediaSourceInput) {
-  return apiRequest<{ item: MediaSourceSummary }>(`/api/media-sources/${id}`, 'Failed to update media source.', {
+  return apiRequest<MediaSourceSummary>(`/api/media-sources/${id}`, 'Failed to update media source.', {
     ...mergePatch(input),
   })
 }
@@ -30,9 +26,8 @@ export async function deleteMediaSource(id: string) {
 }
 
 export async function checkMediaSourceHealth(id: string) {
-  return apiRequest<{ item: MediaSourceHealth }>(
-    `/api/media-sources/${id}/health-observations`,
-    'Failed to check media source health.',
-    { method: 'POST' },
-  )
+  return apiRequest<MediaSourceHealth>(`/api/media-sources/${id}/health`, 'Failed to check media source health.', {
+    method: 'GET',
+    cache: 'no-store',
+  })
 }

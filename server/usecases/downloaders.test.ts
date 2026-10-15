@@ -4,6 +4,7 @@ import type { Deps } from './deps'
 import {
   checkDownloaderHealth,
   deleteDownloader,
+  getDownloader,
   getDownloaderHealth,
   submitDownload,
   updateDownloader,
@@ -53,6 +54,40 @@ const httpInput: CreateDownloadInput = {
   uri: 'https://zme.test/api/music/tracks/track-1/content?key=temporary',
   sourceType: 'http',
 }
+
+it('keeps saved credentials private and applies nested Merge Patch without dropping sibling keys', async () => {
+  let current = {
+    ...downloader,
+    config: {
+      ...downloader.config,
+      credentials: { username: 'owner', password: 'old-secret' },
+      options: { dir: '/media', other: 'keep' },
+    },
+  } as DownloaderRecord
+  const deps = {
+    downloadersRepo: {
+      get: async () => current,
+      update: async (
+        _userId: string,
+        _id: string,
+        input: { credentials: Record<string, string>; options: Record<string, string> },
+      ) => {
+        current = { ...current, config: { ...current.config, credentials: input.credentials, options: input.options } }
+        return current
+      },
+    },
+    downloaderGateways: { zpan: { supportedSourceTypes: ['http'] } },
+  } as unknown as Deps
+  const detail = await getDownloader(deps, 'owner', current.id)
+  expect(detail).not.toHaveProperty('credentials')
+  expect(JSON.stringify(detail)).not.toContain('old-secret')
+  expect(detail?.configuredCredentials).toEqual(['password', 'username'])
+  await updateDownloader(deps, 'owner', current.id, { credentials: { password: 'new-secret' }, options: { dir: null } })
+  expect(current.config.credentials).toEqual({ username: 'owner', password: 'new-secret' })
+  expect(current.config.options).toEqual({ other: 'keep' })
+  await updateDownloader(deps, 'owner', current.id, { credentials: null })
+  expect(current.config.credentials).toEqual({})
+})
 
 it('applies downloader mutations against the latest record', async () => {
   const update = vi.fn(async () => downloader)

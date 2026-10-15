@@ -16,7 +16,7 @@ export default defineConfig({
     coverage: {
       include: ['server/**/*.{ts,tsx}', 'shared/**/*.{ts,tsx}'],
       exclude: ['server/clients/**', 'server/api-tests/**', '**/*.test.ts', '**/*.d.ts'],
-      reporter: ['text', 'text-summary', 'lcov'],
+      reporter: ['text', 'text-summary', 'lcov', 'json'],
       thresholds: { statements: 55 },
     },
     projects: [

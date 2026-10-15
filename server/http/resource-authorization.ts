@@ -1,10 +1,12 @@
 import type { AppConfig } from '@server/config'
+import { catalogOperations } from './catalog-contract'
 
 export const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource/api'
 
 const agentScope = {
   mediaRead: 'media:read',
-  releaseCandidatesRead: 'release-candidates:read',
+  libraryRead: 'library:read',
+  torrentsRead: 'torrents:read',
   downloadersRead: 'downloaders:read',
   downloadsRead: 'downloads:read',
   downloadsWrite: 'downloads:write',
@@ -14,9 +16,14 @@ const agentScope = {
 type AgentScope = (typeof agentScope)[keyof typeof agentScope]
 
 export const AGENT_OPERATION_POLICIES = [
-  policy('listMedia', 'GET', '/media', agentScope.mediaRead),
-  policy('listReleaseCandidates', 'GET', '/release-candidates', agentScope.releaseCandidatesRead),
-  policy('getReleaseCandidate', 'GET', '/release-candidates/{releaseCandidateId}', agentScope.releaseCandidatesRead),
+  ...catalogOperations.map(([path, operationId]) => policy(operationId, 'GET', path, agentScope.mediaRead)),
+  policy('listLibraryResources', 'GET', '/library/items', agentScope.libraryRead),
+  policy('listLibraryStates', 'GET', '/library/states', agentScope.libraryRead),
+  policy('listMusicCollections', 'GET', '/library/music/collections', agentScope.libraryRead),
+  policy('getMusicCollection', 'GET', '/library/music/collections/{id}', agentScope.libraryRead),
+  policy('getFavoriteMusicCollection', 'GET', '/library/music/favorites', agentScope.libraryRead),
+  policy('listTorrents', 'GET', '/torrents', agentScope.torrentsRead),
+  policy('getTorrent', 'GET', '/torrents/{torrentId}', agentScope.torrentsRead),
   policy('listDownloaders', 'GET', '/downloaders', agentScope.downloadersRead),
   policy('getDownloader', 'GET', '/downloaders/{id}', agentScope.downloadersRead),
   policy('listDownloads', 'GET', '/downloads', agentScope.downloadsRead),

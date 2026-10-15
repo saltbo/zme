@@ -176,6 +176,20 @@
       "when": 1786681429494,
       "tag": "20260814042349_soft_mongu",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1792022400000,
+      "tag": "20261015000000_connector_challenge_response",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1792026000000,
+      "tag": "20261015010000_torrent_query_snapshots",
+      "breakpoints": true
     }
   ]
 }

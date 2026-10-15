@@ -1,4 +1,4 @@
-import type { ReleaseCandidateFull } from '@shared/types'
+import type { TorrentFull } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { searchIndexerOnce } from '@/lib/api'
 import { automaticReleaseResultLimit, searchMediaReleasesInSteps } from './release-search'
@@ -131,7 +131,7 @@ function releases(title: string, count: number, offset = 0) {
   )
 }
 
-function release(id: string, title: string): ReleaseCandidateFull {
+function release(id: string, title: string): TorrentFull {
   return {
     id,
     downloadTarget: null,
@@ -145,8 +145,8 @@ function release(id: string, title: string): ReleaseCandidateFull {
     leechers: 0,
     files: 1,
     publishDate: null,
-    links: { self: `/api/release-candidates/${id}` },
-    resourceRef: `release-ref:v1:${id}`,
+    links: { self: `/api/torrents/${id}` },
+    resourceRef: `torrent-ref:v1:${id}`,
     resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
     sourceType: 'torrent_url',
     infoUrl: null,
@@ -159,7 +159,7 @@ function release(id: string, title: string): ReleaseCandidateFull {
   }
 }
 
-const testQuality: ReleaseCandidateFull['quality'] = {
+const testQuality: TorrentFull['quality'] = {
   resolution: '1080p',
   source: 'webdl',
   codec: null,

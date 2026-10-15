@@ -145,5 +145,5 @@ const bookFixture: BookDetails = {
   covers: [],
   workKey: 'openlibrary:work:OL45883W',
   editionKey: 'openlibrary:edition:OL7353617M',
-  editionCandidates: [],
+  editions: [],
 }

@@ -19,9 +19,12 @@ export interface IdentityBinding {
   legacyUserId: string
 }
 
-export interface AppConfig {
+export interface ResourceConfig {
   appOrigin: string
   resourceUrl: string
+}
+
+export interface AppConfig extends ResourceConfig {
   downloadResourceRefSecret?: string
   oidc: {
     issuer: string
@@ -35,8 +38,19 @@ export interface AppConfig {
   }
 }
 
-export function readConfig(env: Env): AppConfig {
+export function readResourceConfig(env: Pick<Env, 'PUBLIC_APP_ORIGIN'>): ResourceConfig {
   const appOrigin = parseOrigin(required(env.PUBLIC_APP_ORIGIN, 'PUBLIC_APP_ORIGIN'), 'PUBLIC_APP_ORIGIN')
+  return { appOrigin, resourceUrl: `${appOrigin}/api` }
+}
+
+export function readOpenApiConfig(env: Pick<Env, 'PUBLIC_APP_ORIGIN' | 'OIDC_ISSUER'>) {
+  const { resourceUrl } = readResourceConfig(env)
+  const issuer = env.OIDC_ISSUER?.trim()
+  return { resourceUrl, oidc: issuer ? { issuer: parseIssuer(issuer) } : undefined }
+}
+
+export function readConfig(env: Env): AppConfig {
+  const { appOrigin, resourceUrl } = readResourceConfig(env)
   const issuer = parseIssuer(required(env.OIDC_ISSUER, 'OIDC_ISSUER'))
   const clientId = required(env.OIDC_CLIENT_ID, 'OIDC_CLIENT_ID')
   const redirectUri = new URL('/auth/callback', appOrigin).toString()
@@ -63,8 +77,6 @@ export function readConfig(env: Env): AppConfig {
       }),
   )
   const legacyBindings = parseLegacyBindings(env.OIDC_LEGACY_BINDINGS_JSON, issuer)
-  const resourceUrl = `${appOrigin}/api`
-
   return {
     appOrigin,
     resourceUrl,

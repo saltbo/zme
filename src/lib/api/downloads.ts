@@ -1,4 +1,4 @@
-import type { DownloadPage } from '@shared/types'
+import type { DownloadPage, LocalDownload } from '@shared/types'
 import { apiRequest, jsonBody, query } from './client'
 
 export async function listDownloadTasks(input: {
@@ -41,8 +41,10 @@ export async function listDownloadTasks(input: {
   }
 }
 
-export async function createDownload(input: { resourceRef: string; downloaderId: string }) {
+export function createDownload(input: { resourceRef: string; downloaderId?: undefined }): Promise<LocalDownload>
+export function createDownload(input: { resourceRef: string; downloaderId: string }): Promise<unknown>
+export function createDownload(input: { resourceRef: string; downloaderId?: string }): Promise<unknown> {
   const init = jsonBody(input)
-  init.headers = { 'Idempotency-Key': crypto.randomUUID() }
+  if (input.downloaderId !== undefined) init.headers = { 'Idempotency-Key': crypto.randomUUID() }
   return apiRequest('/api/downloads', 'Failed to submit download.', init)
 }

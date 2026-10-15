@@ -32,6 +32,37 @@ export class MusicDownloadError extends Error {
   }
 }
 
+async function getLocalMusicTrack(deps: Deps, userId: string, mediaKey: string) {
+  const candidate = await deps.musicCollectionsRepo.getTrackByMediaKey(mediaKey)
+  const track = candidate ? await deps.musicCollectionsRepo.getLibraryTrack(userId, candidate.id) : null
+  if (!track) throw new MusicDownloadError('Music track was not found in the library.', 404)
+  const module = deps.musicConnectors.get(track.provider)
+  if (!module?.definition.capabilities.includes('music.tracks.download')) {
+    throw new MusicDownloadError('This music provider does not support direct downloads.', 400)
+  }
+  const connector = await deps.connectorsRepo.findByKind(userId, track.provider)
+  if (!connector?.enabled || connector.status !== 'connected' || !connector.credentialsEncrypted) {
+    throw new MusicDownloadError('The music connector is not available.', 409)
+  }
+  return { track, connector }
+}
+
+export async function resolveLocalMusicDownload(deps: Deps, env: Env, userId: string, mediaKey: string) {
+  const { track, connector } = await getLocalMusicTrack(deps, userId, mediaKey)
+  try {
+    const resource = await resolvePreferredTrackResource(deps, env, track, connector, DEFAULT_MUSIC_DOWNLOAD_QUALITY)
+    await setTrackAvailability(deps, userId, connector.id, track.id, availableResult())
+    return {
+      resource,
+      filename: buildMusicDownloadFilename(track, resource.extension),
+      tags: buildMusicFileTags(track),
+    }
+  } catch (error) {
+    await setTrackAvailability(deps, userId, connector.id, track.id, availabilityFromError(error))
+    throw toResolutionError(error)
+  }
+}
+
 export async function submitMusicTrackDownload(
   deps: Deps,
   userId: string,

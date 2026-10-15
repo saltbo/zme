@@ -8,12 +8,14 @@ import {
   getFavoriteSongs,
   getMusicCollection,
   listMusicCollections,
+  removeFavoriteSong,
   removeMusicCollection,
   saveMusicAlbum,
   setFavoriteSong,
 } from '@server/usecases/music-library'
 import type { Hono } from 'hono'
 import { z } from 'zod'
+import { mediaKeyParamsSchema } from './books'
 import type { AppEnv } from './context'
 import { idParamsSchema } from './schemas'
 
@@ -30,7 +32,6 @@ const musicSubscriptionSchema = z.object({
 })
 
 const favoriteTrackSchema = z.object({
-  selected: z.boolean(),
   track: z.object({
     provider: z.string().trim().min(1),
     externalId: z.string().trim().min(1),
@@ -77,7 +78,7 @@ export function registerMusicLibraryRoutes(routes: Hono<AppEnv>) {
   routes.get('/library/music/collections/:id', zValidator('param', idParamsSchema), async (c) => {
     const item = await getMusicCollection(c.get('deps'), c.get('user').id, c.req.valid('param').id)
     if (!item) return c.json({ error: 'Music collection not found.' }, 404)
-    return c.json({ item })
+    return c.json(item)
   })
 
   routes.put(
@@ -92,7 +93,7 @@ export function registerMusicLibraryRoutes(routes: Hono<AppEnv>) {
           c.req.valid('param').id,
           c.req.valid('json'),
         )
-        return c.json({ item }, 202)
+        return c.json(item, 202)
       } catch (error) {
         const status = error instanceof MusicSubscriptionError ? error.status : 500
         return c.json({ error: error instanceof Error ? error.message : 'Music subscription failed.' }, status)
@@ -103,7 +104,7 @@ export function registerMusicLibraryRoutes(routes: Hono<AppEnv>) {
   routes.delete('/library/music/collections/:id/subscription', zValidator('param', idParamsSchema), async (c) => {
     try {
       const item = await disableMusicCollectionSubscription(c.get('deps'), c.get('user').id, c.req.valid('param').id)
-      return c.json({ item })
+      return c.json(item)
     } catch (error) {
       const status = error instanceof MusicSubscriptionError ? error.status : 500
       return c.json({ error: error instanceof Error ? error.message : 'Music subscription failed.' }, status)
@@ -120,17 +121,30 @@ export function registerMusicLibraryRoutes(routes: Hono<AppEnv>) {
   routes.post('/library/music/albums', zValidator('json', albumSchema), async (c) => {
     const item = await saveMusicAlbum(c.get('deps'), c.get('user').id, c.req.valid('json').mediaKey)
     c.header('Location', `/api/library/music/collections/${item.id}`)
-    return c.json({ item }, 201)
+    return c.json(item, 201)
   })
 
   routes.get('/library/music/favorites', async (c) => {
     const item = await getFavoriteSongs(c.get('deps'), c.get('user').id)
-    return c.json({ item })
+    if (!item) return c.json({ error: 'Favorite music collection not found.' }, 404)
+    return c.json(item)
   })
 
-  routes.put('/library/music/favorites', zValidator('json', favoriteTrackSchema), async (c) => {
-    const input = c.req.valid('json')
-    const item = await setFavoriteSong(c.get('deps'), c.get('user').id, input.track, input.selected)
-    return c.json({ item })
+  routes.put(
+    '/library/music/favorites/tracks/:mediaKey',
+    zValidator('param', mediaKeyParamsSchema),
+    zValidator('json', favoriteTrackSchema),
+    async (c) => {
+      const input = c.req.valid('json')
+      if (input.track.mediaKey !== c.req.valid('param').mediaKey)
+        return c.json({ error: 'Track identity does not match the resource URI.' }, 422)
+      await setFavoriteSong(c.get('deps'), c.get('user').id, input.track, true)
+      return c.body(null, 204)
+    },
+  )
+
+  routes.delete('/library/music/favorites/tracks/:mediaKey', zValidator('param', mediaKeyParamsSchema), async (c) => {
+    await removeFavoriteSong(c.get('deps'), c.get('user').id, c.req.valid('param').mediaKey)
+    return c.body(null, 204)
   })
 }

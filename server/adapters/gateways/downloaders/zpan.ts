@@ -23,6 +23,7 @@ const upstreamScanTimeoutMs = 10_000
 const snapshotRefreshIntervalMs = 1_500
 
 export const zpanDownloaderGateway: DownloaderGateway = {
+  supportsIdempotentSubmission: true,
   supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
   async submit(config, input, idempotencyKey) {
     const task = await getClient(config).createDownloadTask(
@@ -259,6 +260,7 @@ function toTaskSummary(owner: DownloadTaskOwner, task: ZpanTaskSummarySource): D
 }
 
 function toZpanStatus(status: DownloadTaskStatus): ZpanDownloadTaskState {
+  if (status === 'submissionUnknown') return 'queued'
   if (status === 'running') return 'downloading'
   if (status === 'paused') return 'suspended'
   if (status === 'submitted' || status === 'resolving' || status === 'waitingSource' || status === 'submitting')

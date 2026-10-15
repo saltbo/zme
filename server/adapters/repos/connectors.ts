@@ -82,9 +82,14 @@ export function createConnectorsRepo(db: Db): ConnectorsRepo {
     },
 
     async updateState(userId, id, input, expectedUpdatedAt) {
+      const { settings, ...values } = input
       const rows = await db
         .update(connectors)
-        .set({ ...input, updatedAt: expectedUpdatedAt ? nextUpdatedAt(expectedUpdatedAt) : new Date().toISOString() })
+        .set({
+          ...values,
+          ...(settings ? { settingsJson: JSON.stringify(settings) } : {}),
+          updatedAt: expectedUpdatedAt ? nextUpdatedAt(expectedUpdatedAt) : new Date().toISOString(),
+        })
         .where(
           and(
             eq(connectors.userId, userId),

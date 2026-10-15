@@ -1,7 +1,7 @@
 import type { createDb } from '@server/db/client'
 import { downloads } from '@server/db/schema'
 import type { DownloadRecord, DownloadsRepo } from '@server/usecases/ports'
-import { and, count, desc, eq, isNotNull, notInArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNotNull, lt, notInArray, or } from 'drizzle-orm'
 
 type Db = ReturnType<typeof createDb>
 
@@ -36,7 +36,13 @@ export function createDownloadsRepo(db: Db): DownloadsRepo {
         .select()
         .from(downloads)
         .where(
-          and(isNotNull(downloads.externalTaskId), notInArray(downloads.status, ['completed', 'failed', 'canceled'])),
+          or(
+            and(isNotNull(downloads.externalTaskId), notInArray(downloads.status, ['completed', 'failed', 'canceled'])),
+            and(
+              inArray(downloads.status, ['submitting', 'submissionUnknown']),
+              lt(downloads.updatedAt, new Date(Date.now() - 60_000).toISOString()),
+            ),
+          ),
         )
         .orderBy(downloads.updatedAt)
         .limit(limit)

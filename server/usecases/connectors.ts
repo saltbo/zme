@@ -27,6 +27,7 @@ import {
   type MusicReleaseMetadata,
   StaleWriteError,
 } from './ports'
+import { ResourceConflictError, ResourceNotFoundError } from './resource-errors'
 
 const CONNECTOR_DEFINITIONS = {
   douban: { authModes: ['profile'], capabilities: ['library.import'] },
@@ -282,20 +283,69 @@ export async function saveConnectorPlaylistSelection(
   userId: string,
   connectorId: string,
   selectedPlaylistIds: string[],
-): Promise<{ selectedPlaylists: number }> {
+): Promise<{ selectedPlaylistIds: string[]; syncJob: ConnectorSyncJobSummary }> {
+  const laneKey = `playlist-selection:${userId}:${connectorId}`
+  const owner = crypto.randomUUID()
+  const now = new Date()
+  const lease = await deps.dispatchLanesRepo.acquire(
+    laneKey,
+    owner,
+    now.toISOString(),
+    new Date(now.getTime() + 60_000).toISOString(),
+  )
+  if (!lease.acquired) throw new ResourceConflictError('The playlist selection is already being updated.')
+  try {
+    return await replaceConnectorPlaylistSelection(deps, userId, connectorId, selectedPlaylistIds)
+  } finally {
+    const releasedAt = new Date().toISOString()
+    await deps.dispatchLanesRepo.release(laneKey, owner, releasedAt, releasedAt)
+  }
+}
+
+async function replaceConnectorPlaylistSelection(
+  deps: Deps,
+  userId: string,
+  connectorId: string,
+  selectedPlaylistIds: string[],
+) {
   const connector = await deps.connectorsRepo.get(userId, connectorId)
   if (!connector || connector.kind === 'douban' || !deps.musicConnectors.has(connector.kind)) {
-    throw new Error('Music connector was not found.')
+    throw new ResourceNotFoundError('Music connector was not found.')
   }
   const collections = await deps.musicCollectionsRepo.listForConnector(userId, connectorId)
   const knownIds = new Set(collections.map((item) => item.id))
-  if (selectedPlaylistIds.some((id) => !knownIds.has(id))) throw new Error('Connector playlist was not found.')
+  if (selectedPlaylistIds.some((id) => !knownIds.has(id)))
+    throw new ResourceNotFoundError('Connector playlist was not found.')
 
-  const uniqueIds = [...new Set(selectedPlaylistIds)]
+  const uniqueIds = [...new Set(selectedPlaylistIds)].sort()
+  const selectionIds = JSON.stringify(uniqueIds)
+  let revision = connector.settings.playlistSelectionRevision
+  if (!revision || connector.settings.playlistSelectionIds !== selectionIds) {
+    revision = crypto.randomUUID()
+    const updated = await deps.connectorsRepo.updateState(
+      userId,
+      connectorId,
+      { settings: { ...connector.settings, playlistSelectionRevision: revision, playlistSelectionIds: selectionIds } },
+      connector.updatedAt,
+    )
+    if (!updated) throw new ResourceConflictError('The connector changed while its playlist selection was being saved.')
+  }
   await deps.musicCollectionsRepo.setLibrarySelections(userId, connectorId, uniqueIds, new Date().toISOString())
-  const selectionKey = await hashSecret(JSON.stringify(uniqueIds))
-  await enqueueConnectorSync(deps, userId, connectorId, `playlist-selection:${selectionKey}`)
-  return { selectedPlaylists: uniqueIds.length }
+  const syncJob = await enqueueConnectorSync(deps, userId, connectorId, `playlist-selection:${revision}`)
+  return { selectedPlaylistIds: uniqueIds, syncJob }
+}
+
+export async function getConnectorPlaylistSelection(deps: Deps, userId: string, connectorId: string) {
+  const connector = await deps.connectorsRepo.get(userId, connectorId)
+  if (!connector || connector.kind === 'douban' || !deps.musicConnectors.has(connector.kind))
+    throw new ResourceNotFoundError('Music connector was not found.')
+  const items = await deps.musicCollectionsRepo.listForConnector(userId, connectorId)
+  return {
+    selectedPlaylistIds: items
+      .filter((item) => item.libraryAddedAt !== null)
+      .map((item) => item.id)
+      .sort(),
+  }
 }
 
 function toConnectorSyncJobSummary(job: ConnectorSyncJobRecord): ConnectorSyncJobSummary {

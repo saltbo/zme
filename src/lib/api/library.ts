@@ -10,11 +10,11 @@ import type {
   MusicSubscriptionInput,
   MusicSubscriptionMutationResult,
 } from '@shared/types'
-import { apiRequest, query } from './client'
+import { ApiError, type ApiPage, apiRequest, query } from './client'
 
 export async function listLibrary(input: LibraryPageInput) {
-  return apiRequest<LibraryMediaPage>(
-    `/api/library${query({
+  const response = await apiRequest<ApiPage<LibraryMediaPage['items'][number]>>(
+    `/api/library/items${query({
       page: input.page,
       pageSize: input.pageSize,
       language: input.language,
@@ -23,6 +23,13 @@ export async function listLibrary(input: LibraryPageInput) {
     })}`,
     'Failed to load library.',
   )
+  return {
+    items: response.items,
+    page: response.pagination.page,
+    pageSize: response.pagination.pageSize,
+    totalResults: response.pagination.totalItems,
+    totalPages: response.pagination.totalPages,
+  }
 }
 
 export async function listLibraryStates() {
@@ -30,8 +37,8 @@ export async function listLibraryStates() {
 }
 
 export async function saveLibraryResource(input: LibraryResourceStateInput) {
-  return apiRequest<{ item: LibraryStateItem }>(
-    `/api/library/resources/${encodeURIComponent(input.mediaKey)}`,
+  return apiRequest<LibraryStateItem>(
+    `/api/library/items/${encodeURIComponent(input.mediaKey)}`,
     'Failed to save library item.',
     {
       method: 'PUT',
@@ -42,7 +49,7 @@ export async function saveLibraryResource(input: LibraryResourceStateInput) {
 
 export async function removeLibraryResource(input: LibraryResourceInput) {
   return apiRequest<{ mediaKey: string; kind: LibraryResourceInput['kind'] }>(
-    `/api/library/resources/${encodeURIComponent(input.mediaKey)}`,
+    `/api/library/items/${encodeURIComponent(input.mediaKey)}`,
     'Failed to remove library item.',
     {
       method: 'DELETE',
@@ -58,10 +65,7 @@ export async function listMusicCollections(kind: 'playlist' | 'album') {
 }
 
 export async function getMusicCollection(id: string) {
-  return apiRequest<{ item: MusicCollectionDetails }>(
-    `/api/library/music/collections/${id}`,
-    'Failed to load music collection.',
-  )
+  return apiRequest<MusicCollectionDetails>(`/api/library/music/collections/${id}`, 'Failed to load music collection.')
 }
 
 export async function removeMusicCollection(id: string) {
@@ -71,7 +75,7 @@ export async function removeMusicCollection(id: string) {
 }
 
 export async function enableMusicCollectionSubscription(id: string, input: MusicSubscriptionInput) {
-  return apiRequest<{ item: MusicSubscriptionMutationResult }>(
+  return apiRequest<MusicSubscriptionMutationResult>(
     `/api/library/music/collections/${id}/subscription`,
     'Failed to enable automatic downloads.',
     { method: 'PUT', body: JSON.stringify(input) },
@@ -79,7 +83,7 @@ export async function enableMusicCollectionSubscription(id: string, input: Music
 }
 
 export async function disableMusicCollectionSubscription(id: string) {
-  return apiRequest<{ item: MusicSubscriptionMutationResult }>(
+  return apiRequest<MusicSubscriptionMutationResult>(
     `/api/library/music/collections/${id}/subscription`,
     'Failed to disable automatic downloads.',
     { method: 'DELETE' },
@@ -87,23 +91,25 @@ export async function disableMusicCollectionSubscription(id: string) {
 }
 
 export async function saveMusicAlbum(mediaKey: string) {
-  return apiRequest<{ item: MusicCollectionDetails }>('/api/library/music/albums', 'Failed to save music album.', {
+  return apiRequest<MusicCollectionDetails>('/api/library/music/albums', 'Failed to save music album.', {
     method: 'POST',
     body: JSON.stringify({ mediaKey }),
   })
 }
 
 export async function getFavoriteSongs() {
-  return apiRequest<{ item: MusicCollectionDetails | null }>(
-    '/api/library/music/favorites',
-    'Failed to load favorite songs.',
-  )
+  try {
+    return await apiRequest<MusicCollectionDetails>('/api/library/music/favorites', 'Failed to load favorite songs.')
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
+  }
 }
 
 export async function setFavoriteSong(track: MusicFavoriteTrackInput, selected: boolean) {
-  return apiRequest<{ item: MusicCollectionDetails | null }>(
-    '/api/library/music/favorites',
+  return apiRequest<void>(
+    `/api/library/music/favorites/tracks/${encodeURIComponent(track.mediaKey)}`,
     'Failed to update favorite song.',
-    { method: 'PUT', body: JSON.stringify({ track, selected }) },
+    selected ? { method: 'PUT', body: JSON.stringify({ track }) } : { method: 'DELETE' },
   )
 }

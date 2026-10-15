@@ -4,7 +4,8 @@ import type {
   IndexerHealth,
   IndexerInput,
   IndexerSummary,
-  ReleaseCandidateFull,
+  Torrent,
+  TorrentFull,
 } from '@shared/types'
 import { apiRequest, jsonBody, mergePatch, query } from './client'
 
@@ -15,12 +16,10 @@ export async function searchIndexerOnce(input: {
   categories?: number[]
   target?: DownloadSearchTarget
 }) {
-  const response = await apiRequest<{ items: ReleaseCandidateFull[] }>(
-    `/api/release-candidates${query({
+  const response = await apiRequest<{ items: TorrentFull[] }>(
+    `/api/torrents${query({
       mediaKey: input.mediaKey,
-      query: input.query,
-      searchType: input.searchType,
-      categories: input.categories?.join('|'),
+      q: input.query,
       target: input.target,
       view: 'full',
       page: 1,
@@ -31,8 +30,11 @@ export async function searchIndexerOnce(input: {
   return { results: response.items }
 }
 
-export async function getReleaseCandidateResourceRef(self: string) {
-  return apiRequest<ReleaseCandidateFull>(self, 'Failed to load release candidate.')
+export async function getTorrentResourceRef(self: string, context?: Pick<TorrentFull, 'mediaKey' | 'downloadTarget'>) {
+  return apiRequest<Torrent & { resourceRef: string; resourceRefExpiresAt: string }>(
+    `${self}${query({ mediaKey: context?.mediaKey, target: context?.downloadTarget ?? undefined })}`,
+    'Failed to load torrent.',
+  )
 }
 
 export async function listIndexers() {
@@ -40,15 +42,15 @@ export async function listIndexers() {
 }
 
 export async function createIndexer(input: IndexerInput) {
-  return apiRequest<{ item: IndexerSummary }>('/api/indexers', 'Failed to create indexer.', jsonBody(input))
+  return apiRequest<IndexerSummary>('/api/indexers', 'Failed to create indexer.', jsonBody(input))
 }
 
 export async function getIndexer(id: string) {
-  return apiRequest<{ item: IndexerDetails }>(`/api/indexers/${id}`, 'Failed to load indexer.')
+  return apiRequest<IndexerDetails>(`/api/indexers/${id}`, 'Failed to load indexer.')
 }
 
 export async function updateIndexer(id: string, input: IndexerInput) {
-  return apiRequest<{ item: IndexerSummary }>(`/api/indexers/${id}`, 'Failed to update indexer.', {
+  return apiRequest<IndexerSummary>(`/api/indexers/${id}`, 'Failed to update indexer.', {
     ...mergePatch(input),
   })
 }
@@ -60,9 +62,8 @@ export async function deleteIndexer(id: string) {
 }
 
 export async function checkIndexerHealth(id: string) {
-  return apiRequest<{ item: IndexerHealth }>(
-    `/api/indexers/${id}/health-observations`,
-    'Failed to check indexer health.',
-    { method: 'POST' },
-  )
+  return apiRequest<IndexerHealth>(`/api/indexers/${id}/health`, 'Failed to check indexer health.', {
+    method: 'GET',
+    cache: 'no-store',
+  })
 }

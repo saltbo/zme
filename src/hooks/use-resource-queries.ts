@@ -23,7 +23,7 @@ export function useBookSearch(query: string, discovery: Omit<BookDiscoveryInput,
 export function useBookDetails(mediaKey: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.books.details(mediaKey),
-    queryFn: async () => (await getBookDetails(mediaKey)).item,
+    queryFn: async () => await getBookDetails(mediaKey),
     enabled: mediaKey.length > 0 && options?.enabled !== false,
     placeholderData: keepPreviousData,
   })
@@ -42,7 +42,7 @@ export function useMusicSearch(query: string, discovery: Omit<MusicDiscoveryInpu
 export function useMusicAlbumDetails(mediaKey: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.music.details(mediaKey),
-    queryFn: async () => (await getMusicAlbumDetails(mediaKey)).item,
+    queryFn: async () => await getMusicAlbumDetails(mediaKey),
     enabled: mediaKey.length > 0 && options?.enabled !== false,
     placeholderData: keepPreviousData,
   })

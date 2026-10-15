@@ -87,6 +87,10 @@ Then start the dev server:
 pnpm dev          # → http://localhost:7171
 ```
 
+ZME serves its public Scalar API reference at
+[http://localhost:7171/api/docs](http://localhost:7171/api/docs), backed by
+`/api/openapi.json`. Viewing the documentation requires no login or OIDC setup.
+
 Sign in through the external provider. The first administrator is the explicitly
 configured subject—login order never grants privileges. Then connect your **media
 sources**, **indexers**, and **downloaders** from the Admin area. ZME doesn't run

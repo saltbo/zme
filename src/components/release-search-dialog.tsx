@@ -4,7 +4,7 @@ import {
   type IndexerReleaseAnalysis,
   type ReleaseSourceTier,
 } from '@shared/release-analysis'
-import type { DownloaderSummary, MediaSearchItem, ReleaseCandidateFull } from '@shared/types'
+import type { DownloaderSummary, MediaSearchItem, TorrentFull } from '@shared/types'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
 import {
@@ -41,7 +41,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDownloaders } from '@/hooks/use-downloader-queries'
-import { createDownload, getReleaseCandidateResourceRef } from '@/lib/api'
+import { createDownload, getTorrentResourceRef } from '@/lib/api'
+import { startLocalDownload } from '@/lib/local-download'
 import type { ReleaseSearchProgress } from '@/lib/release-search'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -64,7 +65,7 @@ type ReleaseRowLayout = 'dialog' | 'page'
 interface ReleaseSearchSurfaceProps {
   media: ReleaseSearchMedia
   query: string
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   loading: boolean
   error: ReleaseSearchError | null
   progress?: ReleaseSearchProgress | null
@@ -92,7 +93,7 @@ export function ReleaseSearchDialog({
 }: {
   media: ReleaseSearchMedia
   query: string
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   loading: boolean
   error: ReleaseSearchError | null
   progress?: ReleaseSearchProgress | null
@@ -855,7 +856,7 @@ function ReleasePanel({
   layout,
 }: {
   downloaders: DownloaderSummary[]
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   loading: boolean
   progress?: ReleaseSearchProgress | null
   loadingDownloaders: boolean
@@ -1005,7 +1006,7 @@ function ReleaseRow({
   layout,
 }: {
   downloaders: DownloaderSummary[]
-  item: ReleaseCandidateFull
+  item: TorrentFull
   loadingDownloaders: boolean
   layout: ReleaseRowLayout
 }) {
@@ -1013,11 +1014,24 @@ function ReleaseRow({
   const [submittingDownloaderId, setSubmittingDownloaderId] = useState<string | null>(null)
   const title = item.fileName || item.title
 
+  async function handleLocalDownload() {
+    setSubmittingDownloaderId('local')
+    try {
+      const candidate = item.resourceRef ? item : await getTorrentResourceRef(item.links.self, item)
+      if (!candidate.resourceRef) throw new Error('Torrent has no resource reference.')
+      await startLocalDownload(candidate.resourceRef)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
+    } finally {
+      setSubmittingDownloaderId(null)
+    }
+  }
+
   async function handleDownload(downloader: DownloaderSummary) {
     setSubmittingDownloaderId(downloader.id)
     try {
-      const candidate = item.resourceRef ? item : await getReleaseCandidateResourceRef(item.links.self)
-      if (!candidate.resourceRef) throw new Error('Release candidate has no resource reference.')
+      const candidate = item.resourceRef ? item : await getTorrentResourceRef(item.links.self, item)
+      if (!candidate.resourceRef) throw new Error('Torrent has no resource reference.')
       await createDownload({
         downloaderId: downloader.id,
         resourceRef: candidate.resourceRef,
@@ -1031,12 +1045,8 @@ function ReleaseRow({
   }
 
   const submitting = Boolean(submittingDownloaderId)
-  const disabled = loadingDownloaders || downloaders.length === 0 || submitting
-  const downloadLabel = loadingDownloaders
-    ? t('loadingDownloaders')
-    : downloaders.length === 0
-      ? t('noDownloadersAvailable')
-      : t('downloadTo')
+  const disabled = submitting
+  const downloadLabel = t('downloadTo')
   const analysis = analyzeIndexerRelease(item)
 
   return (
@@ -1118,7 +1128,12 @@ function ReleaseRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('chooseDownloadDestination')}</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => void handleLocalDownload()}>
+                <Download />
+                <span>{t('downloadToLocal')}</span>
+              </DropdownMenuItem>
+              {loadingDownloaders ? <DropdownMenuItem disabled>{t('loadingDownloaders')}</DropdownMenuItem> : null}
               {downloaders.map((downloader) => (
                 <DropdownMenuItem key={downloader.id} onClick={() => void handleDownload(downloader)}>
                   <HardDriveDownload />
@@ -1335,11 +1350,11 @@ function getEditionTooltip(label: string, t: TFunction) {
   return t('releaseEditionTooltip')
 }
 
-function getReleaseIndexers(items: ReleaseCandidateFull[]) {
+function getReleaseIndexers(items: TorrentFull[]) {
   return Array.from(new Set(items.map((item) => item.indexer))).sort((left, right) => left.localeCompare(right))
 }
 
-function sortReleases(items: ReleaseCandidateFull[], sort: ReleaseSort) {
+function sortReleases(items: TorrentFull[], sort: ReleaseSort) {
   return [...items].sort((left, right) => {
     if (sort === 'best') {
       return compareIndexerReleasesByRecommendation(left, right)
@@ -1369,7 +1384,7 @@ function filterReleases({
   sourceFilter,
   sort,
 }: {
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   keyword: string
   indexer: string
   quality: ReleaseQuality

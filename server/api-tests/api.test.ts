@@ -1,7 +1,9 @@
 import { env } from 'cloudflare:test'
 import { app } from '@server/app'
 import { hashSecret } from '@server/usecases/identity'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+afterEach(() => vi.unstubAllGlobals())
 
 function request(path: string, init?: RequestInit & { cookie?: string }) {
   const headers = new Headers(init?.headers)
@@ -46,20 +48,20 @@ describe('library resources', () => {
     const cookie = await setupAdmin()
     const resource = { mediaKey: 'tmdb:movie:550', kind: 'movie' }
 
-    const saved = await request(`/api/library/resources/${encodeURIComponent(resource.mediaKey)}`, {
+    const saved = await request(`/api/library/items/${encodeURIComponent(resource.mediaKey)}`, {
       method: 'PUT',
       cookie,
       body: JSON.stringify({ status: 'saved' }),
     })
     expect(saved.status).toBe(200)
-    expect(await saved.json()).toMatchObject({ item: { mediaKey: 'tmdb:movie:550', id: 550, kind: 'movie' } })
+    expect(await saved.json()).toMatchObject({ mediaKey: 'tmdb:movie:550', id: 550, kind: 'movie' })
 
-    const watched = await request(`/api/library/resources/${encodeURIComponent(resource.mediaKey)}`, {
+    const watched = await request(`/api/library/items/${encodeURIComponent(resource.mediaKey)}`, {
       method: 'PUT',
       cookie,
       body: JSON.stringify({ status: 'watched' }),
     })
-    const watchedItem = ((await watched.json()) as { item: { watchedAt: string | null } }).item
+    const watchedItem = (await watched.json()) as { watchedAt: string | null }
     expect(watchedItem.watchedAt).not.toBeNull()
 
     const states = (await (await request('/api/library/states', { cookie })).json()) as {
@@ -67,7 +69,7 @@ describe('library resources', () => {
     }
     expect(states.items.map((item) => item.mediaKey)).toEqual(['tmdb:movie:550'])
 
-    const deleted = await request(`/api/library/resources/${encodeURIComponent('tmdb:movie:550')}`, {
+    const deleted = await request(`/api/library/items/${encodeURIComponent('tmdb:movie:550')}`, {
       method: 'DELETE',
       cookie,
     })
@@ -79,7 +81,7 @@ describe('library resources', () => {
 
   it('rejects a media key that is not a library resource identity', async () => {
     const cookie = await setupAdmin()
-    const response = await request('/api/library/resources/not-a-media-key', {
+    const response = await request('/api/library/items/not-a-media-key', {
       method: 'DELETE',
       cookie,
     })
@@ -88,9 +90,9 @@ describe('library resources', () => {
 
   it('serves the book/music library kinds without a TMDB source [spec: library/book-music-no-tmdb]', async () => {
     const cookie = await setupAdmin()
-    const response = await request('/api/library?kind=book', { cookie })
+    const response = await request('/api/library/items?kind=book', { cookie })
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ items: [], totalResults: 0 })
+    expect(await response.json()).toMatchObject({ items: [], pagination: { totalItems: 0 } })
   })
 })
 
@@ -118,13 +120,13 @@ describe('admin-managed connectors', () => {
       body: JSON.stringify({ connectorId: 'connector-1' }),
     })
     expect(created.status).toBe(201)
-    const { job } = (await created.json()) as { job: { id: string; connectorId: string; status: string } }
+    const job = (await created.json()) as { id: string; connectorId: string; status: string }
     expect(job).toMatchObject({ connectorId: 'connector-1', status: 'queued' })
     expect(created.headers.get('location')).toBe(`/api/connector-sync-jobs/${job.id}`)
 
     const fetched = await request(`/api/connector-sync-jobs/${job.id}`, { cookie })
     expect(fetched.status).toBe(200)
-    expect(await fetched.json()).toMatchObject({ job: { id: job.id, status: 'queued' } })
+    expect(await fetched.json()).toMatchObject({ id: job.id, status: 'queued' })
     expect(
       await env.DB.prepare('SELECT user_id, connector_id, status FROM connector_sync_jobs WHERE id = ?')
         .bind(job.id)
@@ -137,7 +139,7 @@ describe('admin-managed connectors', () => {
       headers: { 'Idempotency-Key': 'connector-sync-1' },
       body: JSON.stringify({ connectorId: 'connector-1' }),
     })
-    expect(await retried.json()).toMatchObject({ job: { id: job.id } })
+    expect(await retried.json()).toMatchObject({ id: job.id })
     expect(
       await env.DB.prepare('SELECT COUNT(*) AS total FROM connector_sync_jobs WHERE user_id = ?')
         .bind('admin-user')
@@ -202,17 +204,21 @@ describe('admin-managed connectors', () => {
 
     const created = await request('/api/media-sources', { method: 'POST', cookie, body: JSON.stringify(input) })
     expect(created.status).toBe(201)
-    const { item } = (await created.json()) as { item: { id: string } & Record<string, unknown> }
+    const item = (await created.json()) as { id: string } & Record<string, unknown>
     expect(item).toMatchObject({ kind: 'tmdb', enabled: true, healthStatus: 'unknown' })
     // Summaries never leak credentials.
     expect(item).not.toHaveProperty('credentials')
 
     const details = await request(`/api/media-sources/${item.id}`, { cookie })
-    expect(await details.json()).toMatchObject({ item: { credentials: { apiKey: 'tmdb-key' } } })
+    expect(await details.json()).toMatchObject({ credentials: { apiKey: 'tmdb-key' } })
 
-    const health = await request(`/api/media-sources/${item.id}/health-observations`, { cookie })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: 401 })),
+    )
+    const health = await request(`/api/media-sources/${item.id}/health`, { cookie })
     expect(health.status).toBe(200)
-    expect(await health.json()).toEqual({ items: [] })
+    expect(await health.json()).toMatchObject({ status: 'offline', checkedAt: expect.any(String) })
 
     const updated = await request(`/api/media-sources/${item.id}`, {
       method: 'PATCH',
@@ -220,7 +226,7 @@ describe('admin-managed connectors', () => {
       headers: { 'Content-Type': 'application/merge-patch+json' },
       body: JSON.stringify({ enabled: false }),
     })
-    expect(await updated.json()).toMatchObject({ item: { enabled: false } })
+    expect(await updated.json()).toMatchObject({ enabled: false })
     const deleted = await request(`/api/media-sources/${item.id}`, {
       method: 'DELETE',
       cookie,
@@ -242,7 +248,7 @@ describe('admin-managed connectors', () => {
 
     const created = await request('/api/downloaders', { method: 'POST', cookie, body: JSON.stringify(input) })
     expect(created.status).toBe(201)
-    const { item } = (await created.json()) as { item: { id: string } }
+    const item = (await created.json()) as { id: string }
 
     const list = (await (await request('/api/downloaders', { cookie })).json()) as { items: Array<{ id: string }> }
     expect(list.items.map((entry) => entry.id)).toEqual([item.id])
@@ -262,7 +268,7 @@ describe('admin-managed connectors', () => {
     expect((await request('/api/media-sources', { cookie })).status).toBe(403)
     expect((await request('/api/indexers', { cookie })).status).toBe(403)
     // Indexer search stays available to regular users.
-    const search = await request('/api/release-candidates?mediaKey=tmdb%3Amovie%3A438631&query=dune', { cookie })
+    const search = await request('/api/torrents?mediaKey=tmdb%3Amovie%3A438631&q=dune', { cookie })
     expect(search.status).toBe(503)
     expect(await search.json()).toMatchObject({
       type: 'https://zme.test/problems/http-503',

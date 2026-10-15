@@ -1,13 +1,30 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
+import { changedExecutableLines } from './changed-coverage-lines.mjs'
 
 const root = process.cwd()
 const lcovPath = resolve(root, 'coverage/lcov.info')
+const statementsPath = resolve(root, 'coverage/coverage-final.json')
 const threshold = Number(process.env.CHANGED_UNIT_COVERAGE_THRESHOLD ?? '90')
 if (!existsSync(lcovPath)) fail(`Missing ${relative(root, lcovPath)}. Run the Unit coverage suite first.`)
+if (!existsSync(statementsPath)) fail(`Missing ${relative(root, statementsPath)}. Run the Unit coverage suite first.`)
 
 const coverage = parseLcov(readFileSync(lcovPath, 'utf8'))
+type NativeStatement = {
+  start: { line: number; column: number }
+  end: { line: number; column: number }
+}
+const statementReport = JSON.parse(readFileSync(statementsPath, 'utf8')) as Record<
+  string,
+  { statementMap: Record<string, NativeStatement> }
+>
+const statements = new Map(
+  Object.entries(statementReport).map(([path, item]) => [
+    relative(root, path).replaceAll('\\', '/'),
+    item.statementMap,
+  ]),
+)
 const base = resolveBase()
 const changedFiles = new Set([
   ...git(['diff', '--name-only', '--diff-filter=ACMR', base, '--'])!.split('\n').filter(Boolean),
@@ -22,6 +39,7 @@ if (unitFiles.length === 0) {
 const trackedChangedLines = changedLines(base, new Set(unitFiles))
 let aggregateCovered = 0
 let aggregateTotal = 0
+let measuredFiles = 0
 const failures: string[] = []
 for (const path of unitFiles) {
   const lines = coverage.get(path)
@@ -31,12 +49,18 @@ for (const path of unitFiles) {
   }
   const isUntracked = git(['ls-files', '--error-unmatch', '--', path], false) === null
   const changedForFile = isUntracked ? new Set(lines.keys()) : trackedChangedLines.get(path) ?? new Set<number>()
-  const executable = [...changedForFile].filter((line) => lines.has(line))
+  const statementMap = statements.get(path)
+  if (!statementMap) {
+    failures.push(`${path}: missing native statement map`)
+    continue
+  }
+  const executable = [...changedExecutableLines(changedForFile, lines, statementMap)]
   if (executable.length === 0) {
-    failures.push(`${path}: no changed executable-line denominator; move the statement into the changed hunk or add an explicit mapping`)
+    console.log(`${path}: no changed executable statements; coverage is not applicable`)
     continue
   }
   const uncovered = executable.filter((line) => (lines.get(line) ?? 0) === 0)
+  measuredFiles += 1
   const covered = executable.length - uncovered.length
   const percentage = (covered / executable.length) * 100
   aggregateCovered += covered
@@ -50,7 +74,7 @@ for (const path of unitFiles) {
 if (aggregateTotal === 0) fail('No changed executable lines were found in Unit-owned production files.')
 if (failures.length > 0) fail(`Per-file changed Unit coverage is below ${threshold}%:\n${failures.join('\n')}`)
 console.log(
-  `Per-file changed Unit coverage meets ${threshold}% for ${unitFiles.length} mechanically discovered files; aggregate ${(
+  `Per-file changed Unit coverage meets ${threshold}% for ${measuredFiles} executable files (${unitFiles.length} discovered); aggregate ${(
     (aggregateCovered / aggregateTotal) *
     100
   ).toFixed(2)}% (${aggregateCovered}/${aggregateTotal}).`,

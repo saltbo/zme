@@ -1,7 +1,7 @@
-import type { ReleaseCandidateFull } from './types'
+import type { TorrentFull } from './types'
 
 type ReleaseAnalysisInput = Pick<
-  ReleaseCandidateFull,
+  TorrentFull,
   | 'title'
   | 'fileName'
   | 'categories'
@@ -141,10 +141,7 @@ export function analyzeIndexerRelease(item: ReleaseAnalysisInput): IndexerReleas
   }
 }
 
-export function compareIndexerReleasesByRecommendation(
-  left: ReleaseCandidateFull,
-  right: ReleaseCandidateFull,
-): number {
+export function compareIndexerReleasesByRecommendation(left: TorrentFull, right: TorrentFull): number {
   const leftAnalysis = analyzeIndexerRelease(left)
   const rightAnalysis = analyzeIndexerRelease(right)
   return (
@@ -213,7 +210,7 @@ function getReleaseScore({
   )
 }
 
-export function getReleaseAvailabilityTier(seeders: number | null): ReleaseCandidateFull['availability']['tier'] {
+export function getReleaseAvailabilityTier(seeders: number | null): TorrentFull['availability']['tier'] {
   if (seeders === null) return 'unknown'
   if (seeders >= 20) return 'high'
   if (seeders >= 5) return 'medium'

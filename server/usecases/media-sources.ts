@@ -1,6 +1,14 @@
-import type { MediaSourceDetails, MediaSourceHealth, MediaSourceInput, MediaSourceSummary } from '@shared/types'
+import { patchStringMap } from '@server/domain/connection-patch'
+import type {
+  ConnectionPatch,
+  MediaSourceDetails,
+  MediaSourceHealth,
+  MediaSourceInput,
+  MediaSourceSummary,
+} from '@shared/types'
 import type { Deps } from './deps'
 import { type ActiveMediaSource, type MediaSourceRecord, StaleWriteError } from './ports'
+import { ResourceUnavailableError } from './resource-errors'
 
 export async function listMediaSources(deps: Deps): Promise<MediaSourceSummary[]> {
   return (await deps.mediaSourcesRepo.list()).map(toSummary)
@@ -25,15 +33,15 @@ export async function createMediaSource(deps: Deps, input: MediaSourceInput): Pr
 export async function updateMediaSource(
   deps: Deps,
   id: string,
-  input: Partial<MediaSourceInput>,
+  input: ConnectionPatch<MediaSourceInput>,
 ): Promise<MediaSourceSummary | null> {
   const current = await deps.mediaSourcesRepo.get(id)
   if (!current) return null
   const merged: MediaSourceInput = {
-    description: input.description ?? current.description ?? undefined,
+    description: input.description === null ? undefined : (input.description ?? current.description ?? undefined),
     kind: input.kind ?? current.kind,
-    credentials: input.credentials ?? current.credentials,
-    options: input.options ?? current.options,
+    credentials: patchStringMap(current.credentials, input.credentials),
+    options: patchStringMap(current.options, input.options),
     enabled: input.enabled ?? current.enabled,
   }
   const record = await deps.mediaSourcesRepo.update(id, merged, current.updatedAt)
@@ -51,10 +59,10 @@ export async function deleteMediaSource(deps: Deps, id: string): Promise<boolean
 
 export async function getActiveTmdbSource(deps: Deps, requestedLanguage?: string): Promise<ActiveMediaSource> {
   const record = await deps.mediaSourcesRepo.findEnabled('tmdb')
-  if (!record) throw new Error('TMDB media source is not configured.')
+  if (!record) throw new ResourceUnavailableError('TMDB media source is not configured.')
 
   const apiKey = record.credentials.apiKey
-  if (!apiKey) throw new Error('TMDB API key is missing.')
+  if (!apiKey) throw new ResourceUnavailableError('TMDB API key is missing.')
 
   return {
     apiKey,

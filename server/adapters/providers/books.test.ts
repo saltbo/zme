@@ -1,16 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { discoverBooks, getBookDetails, searchBooks } from './books'
+import { discoverBooks, getBookDetails, openLibraryBookProvider, searchBooks } from './books'
 
 describe('Open Library book provider', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('normalizes search results with canonical ISBN media keys', async () => {
+  it('keeps work search identity independent of the editions and ISBNs it includes', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         jsonResponse({
+          numFound: 1,
           docs: [
             {
               key: '/works/OL45883W',
@@ -32,7 +33,7 @@ describe('Open Library book provider', () => {
 
     expect(page.results).toEqual([
       {
-        mediaKey: 'isbn:book:9780747532699',
+        mediaKey: 'openlibrary:work:OL45883W',
         title: "Harry Potter and the Philosopher's Stone",
         authors: ['J. K. Rowling'],
         languages: ['eng', 'fre'],
@@ -124,7 +125,7 @@ describe('Open Library book provider', () => {
     expect(item.covers).toHaveLength(3)
     expect(item.workKey).toBe('openlibrary:work:OL45883W')
     expect(item.editionKey).toBe('openlibrary:edition:OL7353617M')
-    expect(item.editionCandidates[0]).toMatchObject({
+    expect(item.editions[0]).toMatchObject({
       mediaKey: 'openlibrary:edition:OL7353617M',
       isbnCandidates: ['9780140328721'],
     })
@@ -157,7 +158,7 @@ describe('Open Library book provider', () => {
       covers: [],
       workKey: 'openlibrary:work:OL1W',
       editionKey: null,
-      editionCandidates: [],
+      editions: [],
     })
   })
 
@@ -193,6 +194,26 @@ describe('Open Library book provider', () => {
     await expect(searchBooks('broken')).rejects.toMatchObject({
       status: 502,
       message: 'Open Library request failed: 503',
+    })
+  })
+
+  it('rejects incomplete pagination instead of publishing invented book totals', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ docs: [] })))
+    await expect(searchBooks('book')).rejects.toMatchObject({ status: 502 })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ works: {} })))
+    await expect(
+      discoverBooks({ mode: 'subject', subject: 'fiction', page: 1, pageSize: 20, period: 'daily' }),
+    ).rejects.toMatchObject({ status: 502 })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ works: [], work_count: -1 })))
+    await expect(
+      discoverBooks({ mode: 'subject', subject: 'fiction', page: 1, pageSize: 20, period: 'daily' }),
+    ).rejects.toMatchObject({ status: 502 })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ entries: [], size: -1 })))
+    await expect(openLibraryBookProvider.editions('openlibrary:work:OL1W', 1, 20)).rejects.toMatchObject({
+      status: 502,
+    })
+    await expect(openLibraryBookProvider.editions('openlibrary:edition:OL1M', 1, 20)).rejects.toMatchObject({
+      status: 400,
     })
   })
 

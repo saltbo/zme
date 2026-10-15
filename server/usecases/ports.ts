@@ -1,6 +1,7 @@
 import type {
   BookDetails,
   BookDiscoveryInput,
+  BookEditionSummary,
   BookSearchItem,
   ConnectorAuthChallenge,
   ConnectorAuthMode,
@@ -22,6 +23,7 @@ import type {
   LibraryFilterKind,
   LibraryFilterStatus,
   LibraryKind,
+  MediaChartPage,
   MediaDetails,
   MediaDiscoverInput,
   MediaDiscoverPage,
@@ -44,7 +46,9 @@ import type {
   MusicDownloadStatus,
   MusicLibraryRelease,
   MusicLibraryTrack,
+  MusicRecordingDetails,
   MusicReleaseKind,
+  MusicReleaseSummary,
   MusicSearchItem,
   ResourcePage,
 } from '@shared/types'
@@ -58,6 +62,7 @@ export interface ConnectorConfig {
 
 export interface DownloaderGateway {
   readonly supportedSourceTypes: ReadonlyArray<CreateDownloadInput['sourceType']>
+  readonly supportsIdempotentSubmission?: boolean
   /** Submits a download to the remote downloader. Throws on rejection. */
   submit(
     config: ConnectorConfig,
@@ -140,6 +145,7 @@ export type DownloadStatus =
   | 'resolving'
   | 'waitingSource'
   | 'submitting'
+  | 'submissionUnknown'
   | 'submitted'
   | 'running'
   | 'pausing'
@@ -210,7 +216,7 @@ export interface DownloadsRepo {
   delete(userId: string, id: string, expectedUpdatedAt: string): Promise<boolean>
 }
 
-export interface ReleaseCandidateSnapshotRecord {
+export interface TorrentSnapshotRecord {
   id: string
   userId: string
   mediaKey: string
@@ -219,10 +225,22 @@ export interface ReleaseCandidateSnapshotRecord {
   expiresAt: string
 }
 
-export interface ReleaseCandidateSnapshotsRepo {
-  saveMany(records: ReleaseCandidateSnapshotRecord[]): Promise<void>
-  get(userId: string, id: string, now: string): Promise<ReleaseCandidateSnapshotRecord | null>
+export interface TorrentSnapshotsRepo {
+  saveMany(records: TorrentSnapshotRecord[]): Promise<void>
+  get(userId: string, id: string, now: string): Promise<TorrentSnapshotRecord | null>
   deleteExpired(now: string, limit: number): Promise<number>
+  saveQuery(record: {
+    id: string
+    userId: string
+    querySignature: string
+    items: IndexerSearchItem[]
+    expiresAt: string
+  }): Promise<void>
+  getQuery(
+    userId: string,
+    id: string,
+    now: string,
+  ): Promise<{ id: string; querySignature: string; items: IndexerSearchItem[]; expiresAt: string } | null>
 }
 
 export interface IndexerSearchInput {
@@ -414,7 +432,7 @@ export interface ConnectorsRepo {
   updateState(
     userId: string,
     id: string,
-    input: { enabled?: boolean; status?: ConnectorStatus },
+    input: { enabled?: boolean; status?: ConnectorStatus; settings?: Record<string, string> },
     expectedUpdatedAt?: string,
   ): Promise<ConnectorRecord | null>
   delete(userId: string, id: string, expectedUpdatedAt: string): Promise<boolean>
@@ -432,6 +450,8 @@ export interface ConnectorLoginAttemptRecord {
   expiresAt: string
   createdAt: string
   updatedAt: string
+  responseHash?: string | null
+  responseSubmittedAt?: string | null
 }
 
 export interface ConnectorLoginAttemptsRepo {
@@ -441,7 +461,10 @@ export interface ConnectorLoginAttemptsRepo {
     userId: string,
     id: string,
     patch: Partial<
-      Pick<ConnectorLoginAttemptRecord, 'stateEncrypted' | 'challenge' | 'status' | 'expiresAt' | 'updatedAt'>
+      Pick<
+        ConnectorLoginAttemptRecord,
+        'stateEncrypted' | 'challenge' | 'status' | 'expiresAt' | 'updatedAt' | 'responseHash' | 'responseSubmittedAt'
+      >
     >,
   ): Promise<ConnectorLoginAttemptRecord | null>
 }
@@ -741,6 +764,14 @@ export interface ActiveMediaSource {
 
 export interface MediaProvider {
   search(source: ActiveMediaSource, query: string): Promise<MediaSearchItem[]>
+  searchPage(
+    source: ActiveMediaSource,
+    input: { query: string; page: number; kind?: MediaKind },
+  ): Promise<MediaDiscoverPage>
+  chartPage(
+    source: ActiveMediaSource,
+    input: { chart: 'trending' | 'popular'; kind?: MediaKind; period?: 'day' | 'week'; page: number },
+  ): Promise<MediaChartPage>
   trending(source: ActiveMediaSource): Promise<MediaSearchItem[]>
   popular(source: ActiveMediaSource, kind: MediaKind): Promise<MediaSearchItem[]>
   discover(source: ActiveMediaSource, input: Omit<MediaDiscoverInput, 'language'>): Promise<MediaDiscoverPage>
@@ -768,6 +799,7 @@ export interface BookProvider {
   search(query: string, page: number, pageSize: number): Promise<ResourcePage<BookSearchItem>>
   discover(input: BookDiscoveryInput): Promise<ResourcePage<BookSearchItem>>
   details(mediaKey: string): Promise<BookDetails>
+  editions(mediaKey: string, page: number, pageSize: number): Promise<ResourcePage<BookEditionSummary>>
 }
 
 export class MusicProviderError extends Error {
@@ -785,6 +817,9 @@ export interface MusicSearchInput {
   q?: string
   artist?: string
   title?: string
+  genre?: string
+  releaseType?: 'album' | 'ep' | 'single'
+  year?: string
   page: number
   pageSize: number
 }
@@ -793,6 +828,8 @@ export interface MusicProvider {
   search(input: MusicSearchInput): Promise<ResourcePage<MusicAlbumSearchItem>>
   discover(input: MusicDiscoveryInput): Promise<ResourcePage<MusicSearchItem>>
   details(mediaKey: string): Promise<MusicAlbumDetails>
+  editions(mediaKey: string, page: number, pageSize: number): Promise<ResourcePage<MusicReleaseSummary>>
+  recording(mediaKey: string): Promise<MusicRecordingDetails>
 }
 
 export interface ImportedLibraryEntry {
@@ -915,6 +952,10 @@ export interface ResolvedMusicResource {
   extension: string
   contentType: string | null
   contentLength: number | null
+}
+
+export interface DownloadSourceContentGateway {
+  torrent(uri: string): Promise<Uint8Array<ArrayBuffer>>
 }
 
 export class MusicResourceUnavailableError extends Error {

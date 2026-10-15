@@ -15,7 +15,7 @@ This release inventory maps each new observable contract to the native runner th
 | DPoP token/proof binding and failure matrix | protocol adapter | `server/adapters/gateways/dpop-token.test.ts` |
 | DPoP replay, scope, ownership, high-risk denial, challenge headers | API integration | `server/api-tests/dpop-resource.test.ts` |
 | RFC 9728 Protected Resource Metadata, complete scope catalog, DPoP capabilities, and public Worker routing | contract and API integration | `server/http/app.test.ts`, `server/http/openapi.test.ts`, `scripts/verify-quality-inventory.ts` |
-| `listMedia`, `createReleaseSearchJob`, `listReleaseSearchResults`, `listDownloadDestinations`, `createDownloadTask`, `getDownloadTask` including exact ZPan lookup and final downloader progress/result | full resource workflow | `server/api-tests/dpop-resource.test.ts`, `server/adapters/gateways/downloaders/zpan.test.ts` |
+| `listCatalogItems`, `listTorrents`, `getTorrent`, `listDownloaders`, `createDownload` (local and remote), `getDownload` including exact ZPan lookup and final downloader progress/result | full resource workflow | `server/api-tests/dpop-resource.test.ts`, `server/adapters/gateways/downloaders/zpan.test.ts` |
 | leased release and connector-sync recovery, queued-job republishing after the D1-to-Queue crash window, live lease renewal, idempotent connector creation, database ownership constraints, partial-result invisibility/cleanup, monotonic health writes, and monotonic revisioned download state | real D1 concurrency | `server/api-tests/resource-concurrency.test.ts`, `server/api-tests/api.test.ts` |
 | every production `/api` route, request/response/query/path/media semantics, unique operation IDs, scopes, session-only high-risk operations | contract | `server/http/openapi.test.ts`, Redocly 2.44.1 `recommended-strict` lint, and reviewed semantic signature |
 | exact deployed `/api` dispatch and same-zone public OIDC provider compatibility | deployment configuration and live preview | `scripts/verify-quality-inventory.ts`, `wrangler.toml`, isolated Cloudflare preview |
@@ -26,3 +26,7 @@ Native evidence on 2026-08-05: Vitest 60 files/413 tests passed and its native J
 An isolated Cloudflare acceptance preview uses Worker `zme-oidc-preview`, a dedicated D1 database, and a dedicated Queue rather than production state. All 27 migrations applied cleanly to the empty preview database. The exact `https://zme-oidc-preview.saltbo.workers.dev/api` Resource Server URL returns canonical discovery metadata and an RFC 8631 `service-desc` Link; its linked OpenAPI contains all 81 reviewed operations and only the six documented Agent scopes.
 
 Promotion requires a fresh provider-issued, least-privilege DPoP token against the isolated preview and successful completion of the workflow in `docs/resource-server.md`. The Draft remains blocked from release until that external acceptance evidence is recorded.
+
+Current contract migration and local acceptance: `docs/api-2026-10-15.md`.
+Historical preview evidence above predates contract release 2.0 and does not
+constitute deployment acceptance for the renamed operations or new scopes.

@@ -57,6 +57,7 @@ import {
   removeMusicCollection,
   submitMusicTrackDownload,
 } from '@/lib/api'
+import { startLocalDownload } from '@/lib/local-download'
 import { queryKeys } from '@/lib/query-keys'
 
 const collectionSkeletonKeys = Array.from({ length: 10 }, (_, index) => `music-collection-skeleton-${index + 1}`)
@@ -112,7 +113,7 @@ export function MusicCollectionDetailPage() {
   const [subscriptionDownloaderId, setSubscriptionDownloaderId] = useState('')
   const collection = useQuery({
     queryKey: queryKeys.music.collection(collectionId),
-    queryFn: async () => (await getMusicCollection(collectionId)).item,
+    queryFn: async () => await getMusicCollection(collectionId),
     enabled: Boolean(collectionId),
   })
   const remove = useMutation({
@@ -129,7 +130,7 @@ export function MusicCollectionDetailPage() {
       enableMusicCollectionSubscription(collectionId, {
         downloaderId: subscriptionDownloaderId,
       }),
-    onSuccess: async ({ item }) => {
+    onSuccess: async (item) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })
       setSubscriptionDialogOpen(false)
       toast.success(t('musicSubscriptionEnabled', { count: item.queued }))
@@ -138,7 +139,7 @@ export function MusicCollectionDetailPage() {
   })
   const disableSubscription = useMutation({
     mutationFn: () => disableMusicCollectionSubscription(collectionId),
-    onSuccess: async ({ item }) => {
+    onSuccess: async (item) => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.music.collection(collectionId) })
       toast.success(t('musicSubscriptionDisabled', { count: item.canceled }))
     },
@@ -454,7 +455,7 @@ function MusicSubscriptionDialog({
                 onValueChange={(value) => onDownloaderChange(value ?? '')}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder={t('chooseDownloader')} />
+                  <SelectValue placeholder={t('chooseDownloadDestination')} />
                 </SelectTrigger>
                 <SelectContent align="start" alignItemWithTrigger={false}>
                   <SelectGroup>
@@ -545,15 +546,18 @@ function MusicTrackDownloadButton({
   const available = supported && track.downloadStatus !== 'unavailable'
   const submitting = submittingDownloaderId !== null
   const dispatching = ['queued', 'resolving', 'submitting'].includes(track.downloadRecord?.status ?? '')
-  const label = !available
-    ? t('musicDownloadUnavailable')
-    : dispatching
-      ? t(`musicRecordStatus_${track.downloadRecord?.status}`)
-      : loadingDownloaders
-        ? t('loadingDownloaders')
-        : downloaders.length === 0
-          ? t('noDownloadersAvailable')
-          : t('downloadTo')
+  const label = !available ? t('musicDownloadUnavailable') : t('downloadTo')
+
+  async function handleLocalDownload() {
+    setSubmittingDownloaderId('local')
+    try {
+      await startLocalDownload(`music-track:${track.mediaKey}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('downloadSubmitFailed'))
+    } finally {
+      setSubmittingDownloaderId(null)
+    }
+  }
 
   async function handleDownload(downloader: DownloaderSummary, force = false) {
     setSubmittingDownloaderId(downloader.id)
@@ -581,7 +585,7 @@ function MusicTrackDownloadButton({
               type="button"
               variant="ghost"
               size="icon-sm"
-              disabled={!available || loadingDownloaders || downloaders.length === 0 || submitting || dispatching}
+              disabled={!available || submitting}
               title={label}
               aria-label={label}
             />
@@ -591,10 +595,16 @@ function MusicTrackDownloadButton({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuGroup>
-            <DropdownMenuLabel>{t('chooseDownloader')}</DropdownMenuLabel>
+            <DropdownMenuLabel>{t('chooseDownloadDestination')}</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => void handleLocalDownload()}>
+              <Download />
+              <span>{t('downloadToLocal')}</span>
+            </DropdownMenuItem>
+            {loadingDownloaders ? <DropdownMenuItem disabled>{t('loadingDownloaders')}</DropdownMenuItem> : null}
             {downloaders.map((downloader) => (
               <DropdownMenuItem
                 key={downloader.id}
+                disabled={dispatching}
                 onClick={() => {
                   if (track.downloadRecord?.status === 'accepted') {
                     setRedownloadTarget(downloader)

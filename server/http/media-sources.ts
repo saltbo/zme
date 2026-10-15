@@ -4,7 +4,6 @@ import {
   createMediaSource,
   deleteMediaSource,
   getMediaSource,
-  getMediaSourceHealth,
   listMediaSources,
   updateMediaSource,
 } from '@server/usecases/media-sources'
@@ -21,7 +20,14 @@ const mediaSourceSchema = z.object({
   options: z.record(z.string(), z.string()),
   enabled: z.boolean(),
 })
-const mediaSourcePatchSchema = mediaSourceSchema.partial().refine((value) => Object.keys(value).length > 0)
+const mediaSourcePatchSchema = mediaSourceSchema
+  .partial()
+  .extend({
+    description: z.string().trim().nullable().optional(),
+    credentials: z.record(z.string(), z.string().nullable()).nullable().optional(),
+    options: z.record(z.string(), z.string().nullable()).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0)
 export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
   routes.get('/media-sources', async (c) => {
     const items = await listMediaSources(c.get('deps'))
@@ -32,13 +38,13 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
     const { id } = c.req.valid('param')
     const item = await getMediaSource(c.get('deps'), id)
     if (!item) return c.json({ error: 'Media source not found.' }, 404)
-    return c.json({ item })
+    return c.json(item)
   })
 
   routes.post('/media-sources', zValidator('json', mediaSourceSchema), async (c) => {
     const item = await createMediaSource(c.get('deps'), c.req.valid('json'))
     c.header('Location', `/api/media-sources/${item.id}`)
-    return c.json({ item }, 201)
+    return c.json(item, 201)
   })
 
   routes.patch(
@@ -51,7 +57,7 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
       const { id } = c.req.valid('param')
       const item = await updateMediaSource(c.get('deps'), id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Media source not found.' }, 404)
-      return c.json({ item })
+      return c.json(item)
     },
   )
 
@@ -62,27 +68,10 @@ export function registerMediaSourceRoutes(routes: Hono<AppEnv>) {
     return c.body(null, 204)
   })
 
-  routes.post('/media-sources/:id/health-observations', zValidator('param', idParamsSchema), async (c) => {
-    const { id } = c.req.valid('param')
-    const health = await checkMediaSourceHealth(c.get('deps'), id)
-    if (!health) return c.json({ error: 'Media source not found.' }, 404)
-    c.header(
-      'Location',
-      `/api/media-sources/${id}/health-observations/${encodeURIComponent(health.checkedAt as string)}`,
-    )
-    return c.json({ item: health }, 201)
-  })
-
-  routes.get('/media-sources/:id/health-observations', zValidator('param', idParamsSchema), async (c) => {
-    const health = await getMediaSourceHealth(c.get('deps'), c.req.valid('param').id)
-    if (!health) return c.json({ error: 'Media source not found.' }, 404)
-    return c.json({ items: health.checkedAt ? [health] : [] })
-  })
-
-  routes.get('/media-sources/:id/health-observations/:checkedAt', zValidator('param', idParamsSchema), async (c) => {
-    const health = await getMediaSourceHealth(c.get('deps'), c.req.param('id'))
-    if (!health || health.checkedAt !== c.req.param('checkedAt'))
-      return c.json({ error: 'Health observation not found.' }, 404)
-    return c.json({ item: health })
+  routes.get('/media-sources/:id/health', zValidator('param', idParamsSchema), async (c) => {
+    const health = await checkMediaSourceHealth(c.get('deps'), c.req.valid('param').id)
+    if (!health) return c.json({ error: 'Connection not found.' }, 404)
+    c.header('Cache-Control', 'private, no-store')
+    return c.json(health)
   })
 }

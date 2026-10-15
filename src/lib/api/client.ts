@@ -36,6 +36,25 @@ export async function apiRequest<T>(path: string, fallbackMessage: string, init?
   return response.json() as Promise<T>
 }
 
+export interface ApiPage<T> {
+  items: T[]
+  pagination: { page: number; pageSize: number; totalItems?: number; totalPages?: number }
+}
+
+export async function apiResourcePage<T>(path: string, message: string) {
+  const response = await apiRequest<ApiPage<T>>(path, message)
+  return {
+    results: response.items,
+    page: response.pagination.page,
+    totalPages:
+      response.pagination.totalPages ??
+      response.pagination.page + Number(response.items.length === response.pagination.pageSize),
+    totalResults:
+      response.pagination.totalItems ??
+      (response.pagination.page - 1) * response.pagination.pageSize + response.items.length,
+  }
+}
+
 export function query(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {

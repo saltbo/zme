@@ -20,14 +20,14 @@ export async function listConnectorProviders() {
 }
 
 export async function saveDoubanConnector(input: DoubanConnectorInput) {
-  return apiRequest<{ item: ConnectorSummary }>('/api/connectors', 'Failed to save Douban connector.', {
+  return apiRequest<ConnectorSummary>('/api/connectors', 'Failed to save Douban connector.', {
     method: 'POST',
     body: JSON.stringify({ kind: 'douban', ...input }),
   })
 }
 
 export async function updateConnector(id: string, input: { enabled: boolean }) {
-  return apiRequest<{ item: ConnectorSummary }>(`/api/connectors/${id}`, 'Failed to update connector.', {
+  return apiRequest<ConnectorSummary>(`/api/connectors/${id}`, 'Failed to update connector.', {
     ...mergePatch(input),
   })
 }
@@ -39,7 +39,7 @@ export async function deleteConnector(id: string) {
 }
 
 export async function syncConnector(id: string) {
-  return apiRequest<{ job: ConnectorSyncJobSummary }>('/api/connector-sync-jobs', 'Failed to sync connector.', {
+  return apiRequest<ConnectorSyncJobSummary>('/api/connector-sync-jobs', 'Failed to sync connector.', {
     method: 'POST',
     body: JSON.stringify({ connectorId: id }),
     headers: { 'Idempotency-Key': crypto.randomUUID() },
@@ -47,28 +47,41 @@ export async function syncConnector(id: string) {
 }
 
 export async function startConnectorLogin(kind: string, method: string, input: Record<string, string> = {}) {
-  return apiRequest<ConnectorLoginResult>('/api/connector-login-attempts', 'Failed to start connector login.', {
-    method: 'POST',
-    body: JSON.stringify({ kind, method, input }),
-  })
+  const response = await apiRequest<LoginAttemptResource>(
+    '/api/connector-login-attempts',
+    'Failed to start connector login.',
+    {
+      method: 'POST',
+      body: JSON.stringify({ kind, method, input }),
+    },
+  )
+  return loginResult(response)
 }
 
 export async function getConnectorLoginAttempt(id: string) {
-  return apiRequest<ConnectorLoginResult>(
+  const response = await apiRequest<LoginAttemptResource>(
     `/api/connector-login-attempts/${id}`,
     'Failed to load connector login attempt.',
   )
+  return loginResult(response)
 }
 
-export async function continueConnectorLogin(id: string, action: string, input: Record<string, string> = {}) {
-  return apiRequest<ConnectorLoginResult>(
-    `/api/connector-login-attempts/${id}/response`,
-    'Failed to continue connector login.',
-    {
-      method: 'PUT',
-      body: JSON.stringify({ challenge: action, input }),
-    },
-  )
+type LoginAttemptResource = ConnectorLoginResult['attempt'] & {
+  connector: ConnectorLoginResult['connector']
+  links: Record<string, string>
+}
+
+function loginResult(resource: LoginAttemptResource): ConnectorLoginResult {
+  const { connector, links: _links, ...attempt } = resource
+  return { attempt, connector }
+}
+
+export async function submitConnectorChallengeResponse(id: string, input: Record<string, string>) {
+  await apiRequest(`/api/connector-login-attempts/${id}/challenge-response`, 'Failed to continue connector login.', {
+    method: 'PUT',
+    body: JSON.stringify({ input }),
+  })
+  return getConnectorLoginAttempt(id)
 }
 
 export async function listConnectorPlaylists(id: string) {
@@ -79,8 +92,8 @@ export async function listConnectorPlaylists(id: string) {
 }
 
 export async function saveConnectorPlaylistSelection(id: string, selectedPlaylistIds: string[]) {
-  return apiRequest<{ selectedPlaylists: number }>(
-    `/api/connectors/${id}/playlists`,
+  return apiRequest<{ selectedPlaylistIds: string[]; links: { syncJob: string } }>(
+    `/api/connectors/${id}/playlist-selection`,
     'Failed to update playlist selection.',
     { method: 'PUT', body: JSON.stringify({ selectedPlaylistIds }) },
   )

@@ -3,6 +3,7 @@ import { createDeps } from '@server/composition'
 import type { Env } from '@server/env'
 import { PROTECTED_RESOURCE_METADATA_PATH } from '@server/http/resource-authorization'
 import { continueTrace } from '@server/observability/trace'
+import { type ConnectorLoginPollMessage, processConnectorLoginPoll } from '@server/usecases/connector-auth'
 import {
   type ConnectorSyncMessage,
   processConnectorSyncJob,
@@ -38,12 +39,24 @@ export default {
     ctx.waitUntil(runScheduled(env))
   },
   async queue(
-    batch: MessageBatch<DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage>,
+    batch: MessageBatch<
+      DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage | ConnectorLoginPollMessage
+    >,
     env: Env,
   ): Promise<void> {
     for (const message of batch.messages) {
       const trace = continueTrace(message.body)
       const tracedDeps = createDeps(env, trace)
+      if ('type' in message.body && message.body.type === 'connector_login_poll') {
+        const delay = await processConnectorLoginPoll(tracedDeps, env, message.body)
+        if (delay)
+          await tracedDeps.connectorLoginQueue.enqueue(
+            { userId: message.body.userId, attemptId: message.body.attemptId },
+            delay,
+          )
+        message.ack()
+        continue
+      }
       if (isDownloadReconciliationMessage(message.body)) {
         try {
           const delaySeconds = await processDownloadReconciliation(tracedDeps, message.body)
@@ -113,17 +126,17 @@ async function runScheduled(env: Env): Promise<void> {
   await syncEnabledConnectors(deps, env)
   await recoverDownloadDispatches(deps)
   await recoverDownloadReconciliations(deps)
-  await deps.releaseCandidateSnapshotsRepo.deleteExpired(new Date().toISOString(), 1_000)
+  await deps.torrentSnapshotsRepo.deleteExpired(new Date().toISOString(), 1_000)
 }
 
 function isConnectorSyncMessage(
-  message: DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage,
+  message: DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage | ConnectorLoginPollMessage,
 ): message is ConnectorSyncMessage {
   return 'type' in message && message.type === 'connector_sync'
 }
 
 function isDownloadReconciliationMessage(
-  message: DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage,
+  message: DownloadDispatchMessage | ConnectorSyncMessage | DownloadReconciliationMessage | ConnectorLoginPollMessage,
 ): message is DownloadReconciliationMessage {
   return 'type' in message && message.type === 'download_reconciliation'
 }

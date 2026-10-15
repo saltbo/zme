@@ -1,7 +1,7 @@
 import type { MusicCollectionDetails, MusicFavoriteTrackInput } from '@shared/types'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
-import { setFavoriteSong } from './music-library'
+import { removeFavoriteSong, setFavoriteSong } from './music-library'
 import type { MusicCollectionRecord, MusicTrackInput } from './ports'
 
 const track: MusicFavoriteTrackInput = {
@@ -108,5 +108,15 @@ describe('Favorite Songs', () => {
 
     expect(result).toMatchObject({ kind: 'favorites', trackCount: 0 })
     expect(result?.tracks).toEqual([])
+  })
+
+  it('removes an owned favorite by media key and permits repeated removal', async () => {
+    const fixture = createDeps()
+    await removeFavoriteSong(fixture.deps, 'user-1', track.mediaKey)
+    expect(fixture.getTracks()).toEqual([])
+    await setFavoriteSong(fixture.deps, 'user-1', track, true)
+    await removeFavoriteSong(fixture.deps, 'user-1', track.mediaKey)
+    await removeFavoriteSong(fixture.deps, 'user-1', track.mediaKey)
+    expect(fixture.getTracks()).toEqual([])
   })
 })

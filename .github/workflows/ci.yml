@@ -57,6 +57,9 @@ jobs:
       - name: Test (unit + api)
         run: pnpm test:ci
 
+      - name: Local download system handoff
+        run: pnpm test:local-download
+
       - name: Coverage report
         run: pnpm test:coverage
 

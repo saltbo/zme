@@ -1,4 +1,4 @@
-import type { DownloadSearchTarget, MediaKind, ReleaseCandidateFull } from './types'
+import type { DownloadSearchTarget, MediaKind, TorrentFull } from './types'
 
 export interface ReleaseMatchCriteria {
   query: string
@@ -98,10 +98,7 @@ export function buildTitleSearches(input: ReleaseMatchCriteria): ReleaseTitleSea
   return searches.length > 0 ? searches : [{ ...input, titleKind: 'original' }]
 }
 
-export function filterExactMediaMatches(
-  items: ReleaseCandidateFull[],
-  input: ReleaseMatchCriteria,
-): ReleaseCandidateFull[] {
+export function filterExactMediaMatches(items: TorrentFull[], input: ReleaseMatchCriteria): TorrentFull[] {
   const imdbId = parseImdbNumber(input.imdbId ?? undefined)
   return items.filter((item) => {
     if (imdbId && item.imdbId === imdbId) return true
@@ -124,24 +121,21 @@ export function getResourceSearchQueries(
   }))
 }
 
-export function scoreResourceResults(
-  items: ReleaseCandidateFull[],
-  input: ResourceDownloadSearchInput,
-): ReleaseCandidateFull[] {
-  const scoredItems: Array<{ item: ReleaseCandidateFull; score: number | null }> = items.map((item) => ({
+export function scoreResourceResults(items: TorrentFull[], input: ResourceDownloadSearchInput): TorrentFull[] {
+  const scoredItems: Array<{ item: TorrentFull; score: number | null }> = items.map((item) => ({
     item: { ...item, downloadTarget: input.target },
     score: scoreResourceResult(item, input),
   }))
   const scored = scoredItems
-    .filter((entry): entry is { item: ReleaseCandidateFull; score: number } => entry.score !== null)
+    .filter((entry): entry is { item: TorrentFull; score: number } => entry.score !== null)
     .sort((left, right) => right.score - left.score || (right.item.seeders ?? 0) - (left.item.seeders ?? 0))
 
   return uniqueById(scored.map((entry) => entry.item))
 }
 
-export function uniqueById(items: ReleaseCandidateFull[]): ReleaseCandidateFull[] {
+export function uniqueById(items: TorrentFull[]): TorrentFull[] {
   const seen = new Set<string>()
-  const unique: ReleaseCandidateFull[] = []
+  const unique: TorrentFull[] = []
   for (const item of items) {
     if (seen.has(item.id)) continue
     seen.add(item.id)
@@ -150,9 +144,9 @@ export function uniqueById(items: ReleaseCandidateFull[]): ReleaseCandidateFull[
   return unique
 }
 
-export function uniqueReleases(items: ReleaseCandidateFull[]): ReleaseCandidateFull[] {
+export function uniqueReleases(items: TorrentFull[]): TorrentFull[] {
   const seen = new Set<string>()
-  const unique: ReleaseCandidateFull[] = []
+  const unique: TorrentFull[] = []
   for (const item of items) {
     if (seen.has(item.id)) continue
     seen.add(item.id)
@@ -203,7 +197,7 @@ function buildResourceQueries(input: ResourceDownloadSearchInput): string[] {
   ]).slice(0, 8)
 }
 
-function scoreResourceResult(item: ReleaseCandidateFull, input: ResourceDownloadSearchInput): number | null {
+function scoreResourceResult(item: TorrentFull, input: ResourceDownloadSearchInput): number | null {
   const config = targetConfigs[input.target]
   const haystack = normalizeReleaseText(
     [item.title, item.fileName, item.categories.join(' ')].filter(Boolean).join(' '),
@@ -237,7 +231,7 @@ function scoreResourceResult(item: ReleaseCandidateFull, input: ResourceDownload
   return score >= config.minimumScore ? score : null
 }
 
-function matchesExpectedTitle(item: ReleaseCandidateFull, input: ReleaseMatchCriteria): boolean {
+function matchesExpectedTitle(item: TorrentFull, input: ReleaseMatchCriteria): boolean {
   if (input.kind === 'movie' && looksLikeMovieCollection(item.title)) return false
 
   const expectedTitles = uniqueStrings([
@@ -257,11 +251,11 @@ function matchesExpectedTitle(item: ReleaseCandidateFull, input: ReleaseMatchCri
   return releaseTitle.includes(input.year) || !hasReleaseYear(releaseTitle)
 }
 
-function hasCategoryEvidence(item: ReleaseCandidateFull): boolean {
+function hasCategoryEvidence(item: TorrentFull): boolean {
   return item.categoryIds.length > 0 || item.categories.length > 0
 }
 
-function hasTargetCategory(item: ReleaseCandidateFull, config: TargetConfig): boolean {
+function hasTargetCategory(item: TorrentFull, config: TargetConfig): boolean {
   if (item.categoryIds.some((id) => config.categories.includes(id))) return true
   const categoryText = normalizeReleaseText(item.categories.join(' '))
   return config.categoryTerms.some((term) => textIncludesPhrase(categoryText, normalizeReleaseText(term)))

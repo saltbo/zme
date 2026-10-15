@@ -73,6 +73,7 @@ export const downloads = sqliteTable(
         'resolving',
         'waitingSource',
         'submitting',
+        'submissionUnknown',
         'submitted',
         'running',
         'pausing',
@@ -129,7 +130,7 @@ export const downloaders = sqliteTable('downloaders', {
   updatedAt: text('updated_at').notNull(),
 })
 
-export const releaseCandidateSnapshots = sqliteTable(
+export const torrentSnapshots = sqliteTable(
   'release_candidate_snapshots',
   {
     id: text('id').notNull(),
@@ -145,6 +146,20 @@ export const releaseCandidateSnapshots = sqliteTable(
     uniqueIndex('release_candidate_snapshots_user_id_idx').on(table.userId, table.id),
     index('release_candidate_snapshots_expires_idx').on(table.expiresAt),
   ],
+)
+
+export const torrentQuerySnapshots = sqliteTable(
+  'torrent_query_snapshots',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    querySignature: text('query_signature').notNull(),
+    itemsJson: text('items_json').notNull(),
+    expiresAt: text('expires_at').notNull(),
+  },
+  (table) => [index('torrent_query_snapshots_expires_idx').on(table.expiresAt)],
 )
 
 export const indexers = sqliteTable('indexers', {
@@ -234,6 +249,8 @@ export const connectorLoginAttempts = sqliteTable('connector_login_attempts', {
   method: text('method').notNull(),
   stateEncrypted: text('state_encrypted'),
   challengeJson: text('challenge_json'),
+  responseHash: text('response_hash'),
+  responseSubmittedAt: text('response_submitted_at'),
   status: text('status', { enum: ['pending', 'connected', 'expired'] })
     .notNull()
     .default('pending'),
@@ -524,8 +541,8 @@ export const dispatchLanes = sqliteTable('dispatch_lanes', {
 export type User = typeof user.$inferSelect
 export type Downloader = typeof downloaders.$inferSelect
 export type NewDownloader = typeof downloaders.$inferInsert
-export type ReleaseCandidateSnapshot = typeof releaseCandidateSnapshots.$inferSelect
-export type NewReleaseCandidateSnapshot = typeof releaseCandidateSnapshots.$inferInsert
+export type TorrentSnapshot = typeof torrentSnapshots.$inferSelect
+export type NewTorrentSnapshot = typeof torrentSnapshots.$inferInsert
 export type Indexer = typeof indexers.$inferSelect
 export type NewIndexer = typeof indexers.$inferInsert
 export type MediaSource = typeof mediaSources.$inferSelect

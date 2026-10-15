@@ -4,7 +4,7 @@ import type {
   BookCover,
   BookDetails,
   BookDiscoveryInput,
-  BookEditionCandidate,
+  BookEditionSummary,
   BookSearchItem,
   ResourcePage,
 } from '@shared/types'
@@ -63,6 +63,7 @@ interface OpenLibraryEditionResponse {
 
 interface OpenLibraryEditionsResponse {
   entries?: OpenLibraryEditionResponse[]
+  size?: number
 }
 
 interface OpenLibraryAuthorResponse {
@@ -100,6 +101,9 @@ export async function searchBooks(query: string, page = 1, pageSize = 20): Promi
   if (payload.docs !== undefined && !Array.isArray(payload.docs)) {
     throw new BookProviderError('Open Library search response has invalid docs.', 502)
   }
+  if (!Number.isInteger(payload.numFound) || (payload.numFound as number) < 0) {
+    throw new BookProviderError('Open Library search response is missing an exact result count.', 502)
+  }
   const results = (payload.docs ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
   return toResourcePage(results, page, pageSize, payload.numFound)
 }
@@ -113,6 +117,9 @@ export async function discoverBooks(input: BookDiscoveryInput): Promise<Resource
     const payload = await fetchOpenLibraryJson<OpenLibrarySubjectResponse>(url, { notFoundStatus: 502 })
     if (payload.works !== undefined && !Array.isArray(payload.works)) {
       throw new BookProviderError('Open Library subject response has invalid works.', 502)
+    }
+    if (!Number.isInteger(payload.work_count) || (payload.work_count as number) < 0) {
+      throw new BookProviderError('Open Library subject response is missing an exact result count.', 502)
     }
     const results = (payload.works ?? []).map(toBookSearchItem).filter((item): item is BookSearchItem => item !== null)
     return toResourcePage(results, input.page, input.pageSize, payload.work_count)
@@ -211,7 +218,7 @@ async function toBookDetailsFromEdition(
     covers: toBookCovers(firstCoverIds(edition, work) ?? []),
     workKey: workId ? buildMediaKey({ provider: 'openlibrary', resourceType: 'work', id: workId }) : null,
     editionKey: buildMediaKey({ provider: 'openlibrary', resourceType: 'edition', id: editionId }),
-    editionCandidates: toEditionCandidates(editions),
+    editions: toEditionSummaries(editions),
   }
 }
 
@@ -247,7 +254,7 @@ async function toBookDetailsFromWork(work: OpenLibraryWorkResponse): Promise<Boo
     editionKey: editionKeys[0]
       ? buildMediaKey({ provider: 'openlibrary', resourceType: 'edition', id: editionKeys[0] })
       : null,
-    editionCandidates: toEditionCandidates(editions),
+    editions: toEditionSummaries(editions),
   }
 }
 
@@ -259,9 +266,7 @@ function toBookSearchItem(doc: OpenLibrarySearchDoc): BookSearchItem | null {
   const isbnCandidates = uniqueStrings(
     (doc.isbn ?? []).map(normalizeIsbn).filter((isbn): isbn is string => Boolean(isbn)),
   )
-  const mediaKey = isbnCandidates[0]
-    ? buildMediaKey({ provider: 'isbn', resourceType: 'book', id: isbnCandidates[0] })
-    : buildMediaKey({ provider: 'openlibrary', resourceType: 'work', id: workId })
+  const mediaKey = buildMediaKey({ provider: 'openlibrary', resourceType: 'work', id: workId })
 
   return {
     mediaKey,
@@ -278,17 +283,14 @@ function toBookSearchItem(doc: OpenLibrarySearchDoc): BookSearchItem | null {
   }
 }
 
-function toResourcePage<T>(
-  results: T[],
-  page: number,
-  pageSize: number,
-  totalResults = results.length === pageSize ? page * pageSize + 1 : (page - 1) * pageSize + results.length,
-): ResourcePage<T> {
+function toResourcePage<T>(results: T[], page: number, pageSize: number, totalResults?: number): ResourcePage<T> {
+  const count =
+    totalResults ?? (results.length === pageSize ? page * pageSize + 1 : (page - 1) * pageSize + results.length)
   return {
     results,
     page,
-    totalPages: Math.max(page, Math.ceil(totalResults / pageSize)),
-    totalResults,
+    totalPages: totalResults === undefined ? Math.max(page, Math.ceil(count / pageSize)) : Math.ceil(count / pageSize),
+    totalResults: count,
   }
 }
 
@@ -338,7 +340,7 @@ async function fetchOpenLibraryJson<T>(input: URL | string, options: { notFoundS
   }
 }
 
-function toEditionCandidates(editions: OpenLibraryEditionResponse[]): BookEditionCandidate[] {
+function toEditionSummaries(editions: OpenLibraryEditionResponse[]): BookEditionSummary[] {
   return editions
     .map((edition) => {
       const id = parseOpenLibraryId(edition.key, 'edition')
@@ -352,7 +354,7 @@ function toEditionCandidates(editions: OpenLibraryEditionResponse[]): BookEditio
         isbnCandidates: getEditionIsbns(edition),
       }
     })
-    .filter((edition): edition is BookEditionCandidate => edition !== null)
+    .filter((edition): edition is BookEditionSummary => edition !== null)
 }
 
 function getEditionIsbns(edition: OpenLibraryEditionResponse): string[] {
@@ -433,4 +435,18 @@ export const openLibraryBookProvider: BookProvider = {
   search: (query, page, pageSize) => searchBooks(query, page, pageSize),
   discover: (input) => discoverBooks(input),
   details: (mediaKey) => getBookDetails(mediaKey),
+  async editions(mediaKey, page, pageSize) {
+    const key = parseBookMediaKey(mediaKey)
+    if (key?.provider !== 'openlibrary' || key.resourceType !== 'work') {
+      throw new BookProviderError('A book work identifier is required.', 400)
+    }
+    const url = new URL(`${OPEN_LIBRARY_BASE}/works/${key.id}/editions.json`)
+    url.searchParams.set('offset', String((page - 1) * pageSize))
+    url.searchParams.set('limit', String(pageSize))
+    const payload = await fetchOpenLibraryJson<OpenLibraryEditionsResponse>(url)
+    if (!Array.isArray(payload.entries) || !Number.isInteger(payload.size) || (payload.size as number) < 0) {
+      throw new BookProviderError('Open Library editions response is missing pagination metadata.', 502)
+    }
+    return toResourcePage(toEditionSummaries(payload.entries), page, pageSize, payload.size)
+  },
 }

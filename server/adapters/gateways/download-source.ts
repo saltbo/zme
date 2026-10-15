@@ -1,19 +1,29 @@
 export type DownloadSourceType = 'magnet' | 'torrent_url'
 
-export interface DownloadSource {
+export interface DownloadLink {
   uri: string
   sourceType: DownloadSourceType
 }
 
 const resolveTimeoutMs = 30_000
 
-export async function resolveProwlarrProxyDownloadUrl(uri: string): Promise<DownloadSource | null> {
+export async function resolveProwlarrProxyDownloadUrl(uri: string): Promise<DownloadLink | null> {
   let current = uri
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const response = await fetchWithTimeout(current, {
       method: 'GET',
       redirect: 'manual',
     })
+
+    if (
+      response.ok &&
+      ['application/x-bittorrent', 'application/octet-stream'].includes(
+        response.headers.get('content-type')?.split(';', 1)[0] ?? '',
+      )
+    ) {
+      await response.body?.cancel()
+      return { uri: current, sourceType: 'torrent_url' }
+    }
 
     if (!isRedirect(response.status)) {
       const detail = await readResponseDetail(response)
@@ -23,6 +33,7 @@ export async function resolveProwlarrProxyDownloadUrl(uri: string): Promise<Down
     }
 
     const location = response.headers.get('location')
+    await response.body?.cancel()
     if (!location) {
       throw new Error(`Prowlarr download URL returned HTTP ${response.status} without a Location header.`)
     }

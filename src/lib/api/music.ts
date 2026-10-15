@@ -1,12 +1,16 @@
+import { parseMediaKey } from '@shared/media-key'
 import type {
+  CatalogAlbum,
+  CatalogAlbumEdition,
   MusicAlbumDetails,
   MusicAlbumSearchItem,
   MusicDiscoveryInput,
+  MusicReleaseSummary,
   MusicSearchItem,
   MusicTrackDownloadInput,
-  ResourcePage,
 } from '@shared/types'
-import { apiRequest, jsonBody, query } from './client'
+import { readChartEntries } from './charts'
+import { apiRequest, apiResourcePage, jsonBody, query } from './client'
 
 export async function searchMusicAlbums(input: {
   query?: string
@@ -15,8 +19,8 @@ export async function searchMusicAlbums(input: {
   page: number
   pageSize?: number
 }) {
-  return apiRequest<ResourcePage<MusicAlbumSearchItem>>(
-    `/api/music${query({
+  return apiResourcePage<MusicAlbumSearchItem>(
+    `/api/catalog/albums${query({
       q: input.query,
       artist: input.artist,
       title: input.title,
@@ -28,11 +32,17 @@ export async function searchMusicAlbums(input: {
 }
 
 export async function discoverMusicAlbums(input: MusicDiscoveryInput) {
-  return apiRequest<ResourcePage<MusicSearchItem>>(
-    `/api/music-recommendations${query({
-      mode: input.mode,
-      range: input.range,
-      chartType: input.chartType,
+  if (input.mode === 'popular')
+    return readChartEntries<MusicSearchItem>(
+      input.chartType === 'tracks' ? 'recordings-popular' : 'album-editions-popular',
+      {
+        period: input.range === 'all_time' ? 'all' : input.range,
+        page: input.page,
+        pageSize: input.pageSize,
+      },
+    )
+  return apiResourcePage<MusicSearchItem>(
+    `/api/catalog/albums${query({
       genre: input.genre,
       releaseType: input.releaseType,
       year: /^(19|20)\d{2}$/.test(input.year ?? '') ? input.year : undefined,
@@ -43,11 +53,38 @@ export async function discoverMusicAlbums(input: MusicDiscoveryInput) {
   )
 }
 
-export async function getMusicAlbumDetails(mediaKey: string) {
-  return apiRequest<{ item: MusicAlbumDetails }>(
-    `/api/music/${encodeURIComponent(mediaKey)}`,
+export async function getMusicAlbumDetails(mediaKey: string): Promise<MusicAlbumDetails> {
+  const isEdition = parseMediaKey(mediaKey)?.resourceType === 'release'
+  const resource = await apiRequest<CatalogAlbum | CatalogAlbumEdition>(
+    `/api/catalog/${isEdition ? 'album-editions' : 'albums'}/${encodeURIComponent(mediaKey)}`,
     'Failed to load music album details.',
   )
+  const edition = 'preferredEdition' in resource ? resource.preferredEdition : resource
+  const preferredRelease: MusicReleaseSummary | null = edition
+    ? {
+        mediaKey: edition.mediaKey,
+        mbid: edition.mbid,
+        title: edition.title,
+        date: edition.releaseDate,
+        country: edition.country,
+        status: edition.status,
+        barcode: edition.barcode,
+        formats: edition.formats,
+      }
+    : null
+  return {
+    ...resource,
+    detailMediaKey: resource.mediaKey,
+    releaseMbid: edition?.mbid ?? null,
+    preferredRelease,
+    releases: preferredRelease ? [preferredRelease] : [],
+    releaseDate: edition?.releaseDate ?? resource.firstReleaseDate,
+    country: edition?.country ?? null,
+    barcode: edition?.barcode ?? null,
+    formats: edition?.formats ?? [],
+    aliases: resource.aliases,
+    media: edition?.discs ?? [],
+  }
 }
 
 export async function submitMusicTrackDownload(mediaKey: string, input: MusicTrackDownloadInput) {

@@ -8,6 +8,7 @@ import type {
   MusicCoverArt,
   MusicDiscoveryInput,
   MusicMedium,
+  MusicRecordingDetails,
   MusicReleaseSummary,
   MusicSearchItem,
   MusicTrack,
@@ -248,7 +249,19 @@ export async function getMusicAlbumDetails(mediaKey: string): Promise<MusicAlbum
   const releaseGroup = await lookupReleaseGroup(parts.id)
   const preferredRelease = selectPreferredRelease(releaseGroup.releases ?? [])
   if (!preferredRelease?.id) {
-    throw new MusicProviderError('MusicBrainz release group has no release details.', 502, 'MUSIC_PROVIDER_FAILED')
+    const summary = toMusicAlbumSearchItem(releaseGroup, await getCoverArt('release-group', releaseGroup.id ?? ''))
+    if (!summary) throw new MusicProviderError('MusicBrainz album response is invalid.', 502, 'MUSIC_PROVIDER_FAILED')
+    return {
+      ...summary,
+      detailMediaKey: mediaKey,
+      releaseMbid: null,
+      preferredRelease: null,
+      releases: [],
+      barcode: null,
+      aliases: toMusicAliases(releaseGroup.aliases ?? []),
+      formats: [],
+      media: [],
+    }
   }
 
   const release = await lookupRelease(preferredRelease.id)
@@ -600,17 +613,14 @@ function getListenBrainzCoverArt(release: ListenBrainzTopRelease): MusicCoverArt
   }
 }
 
-function toResourcePage<T>(
-  results: T[],
-  page: number,
-  pageSize: number,
-  totalResults = results.length === pageSize ? page * pageSize + 1 : (page - 1) * pageSize + results.length,
-): ResourcePage<T> {
+function toResourcePage<T>(results: T[], page: number, pageSize: number, totalResults?: number): ResourcePage<T> {
+  const count =
+    totalResults ?? (results.length === pageSize ? page * pageSize + 1 : (page - 1) * pageSize + results.length)
   return {
     results,
     page,
-    totalPages: Math.max(page, Math.ceil(totalResults / pageSize)),
-    totalResults,
+    totalPages: totalResults === undefined ? Math.max(page, Math.ceil(count / pageSize)) : Math.ceil(count / pageSize),
+    totalResults: count,
   }
 }
 
@@ -776,7 +786,60 @@ function mergeCoverArt(primary: MusicCoverArt, secondary: MusicCoverArt): MusicC
 }
 
 export const musicBrainzMusicProvider: MusicProvider = {
-  search: (input) => searchMusicAlbums(input),
+  search: (input) => searchMusicAlbums({ ...input, limit: input.pageSize, tag: input.genre }),
   discover: (input) => discoverMusicAlbums(input),
   details: (mediaKey) => getMusicAlbumDetails(mediaKey),
+  async editions(mediaKey, page, pageSize) {
+    const key = parseMusicBrainzMediaKey(mediaKey)
+    if (key?.resourceType !== 'release-group')
+      throw new MusicProviderError('An album identifier is required.', 400, 'INVALID_ALBUM_ID')
+    const url = new URL(`${MUSICBRAINZ_API_BASE}/release`)
+    url.searchParams.set('fmt', 'json')
+    url.searchParams.set('release-group', key.mbid)
+    url.searchParams.set('inc', 'media')
+    url.searchParams.set('offset', String((page - 1) * pageSize))
+    url.searchParams.set('limit', String(pageSize))
+    const payload = (await fetchMusicBrainzJson(url)) as { releases?: MusicBrainzRelease[]; 'release-count'?: number }
+    if (!Array.isArray(payload.releases) || !Number.isInteger(payload['release-count'])) {
+      throw new MusicProviderError(
+        'MusicBrainz editions response is missing pagination metadata.',
+        502,
+        'MUSICBRAINZ_REQUEST_FAILED',
+      )
+    }
+    const results = payload.releases
+      .map(toMusicReleaseSummary)
+      .filter((item): item is MusicReleaseSummary => item !== null)
+    return toResourcePage(results, page, pageSize, payload['release-count'])
+  },
+  async recording(mediaKey): Promise<MusicRecordingDetails> {
+    const key = parseMusicBrainzMediaKey(mediaKey)
+    if (key?.resourceType !== 'recording')
+      throw new MusicProviderError('A recording identifier is required.', 400, 'INVALID_RECORDING_ID')
+    const url = new URL(`${MUSICBRAINZ_API_BASE}/recording/${key.mbid}`)
+    url.searchParams.set('fmt', 'json')
+    url.searchParams.set('inc', 'artist-credits+releases+isrcs')
+    const payload = (await fetchMusicBrainzJson(url)) as {
+      id?: string
+      title?: string
+      length?: number
+      isrcs?: string[]
+      'artist-credit'?: MusicBrainzArtistCredit[]
+      releases?: MusicBrainzRelease[]
+    }
+    if (payload.id !== key.mbid || !payload.title)
+      throw new MusicProviderError('MusicBrainz recording response is invalid.', 502, 'MUSICBRAINZ_REQUEST_FAILED')
+    return {
+      mediaKey,
+      title: payload.title,
+      artists: toArtistCredits(payload['artist-credit'] ?? []),
+      durationMs: typeof payload.length === 'number' ? payload.length : null,
+      isrcs: payload.isrcs ?? [],
+      albumEditions: (payload.releases ?? []).flatMap((release) =>
+        release.id && release.title
+          ? [{ mediaKey: buildMusicBrainzMediaKey('release', release.id), title: release.title }]
+          : [],
+      ),
+    }
+  },
 }

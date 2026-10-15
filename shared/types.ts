@@ -20,7 +20,7 @@ export interface BookCover {
   url: string
 }
 
-export interface BookEditionCandidate {
+export interface BookEditionSummary {
   mediaKey: string
   openLibraryId: string
   title: string | null
@@ -64,7 +64,7 @@ export interface BookDetails extends BookSearchItem {
   covers: BookCover[]
   workKey: string | null
   editionKey: string | null
-  editionCandidates: BookEditionCandidate[]
+  editions: BookEditionSummary[]
 }
 
 export type MediaDiscoverSort =
@@ -89,6 +89,10 @@ export interface MediaDiscoverPage {
   page: number
   totalPages: number
   totalResults: number
+}
+
+export interface MediaChartPage extends MediaDiscoverPage {
+  ranks: number[]
 }
 
 export interface MusicArtistCredit {
@@ -188,6 +192,15 @@ export interface MusicTrack {
   isrcs: string[]
 }
 
+export interface MusicRecordingDetails {
+  mediaKey: string
+  title: string
+  artists: MusicArtistCredit[]
+  durationMs: number | null
+  isrcs: string[]
+  albumEditions: Array<{ mediaKey: string; title: string }>
+}
+
 export interface MusicMedium {
   position: number
   format: string | null
@@ -207,6 +220,24 @@ export interface MusicAlbumDetails extends MusicAlbumSearchItem {
   aliases: MusicAlias[]
   formats: string[]
   media: MusicMedium[]
+}
+
+export interface CatalogAlbumEdition extends MusicAlbumSearchItem {
+  resourceType: 'release'
+  albumMediaKey: string
+  aliases: MusicAlias[]
+  formats: string[]
+  barcode: string | null
+  status: string | null
+  discs: MusicMedium[]
+  links: Record<string, string>
+}
+
+export interface CatalogAlbum extends MusicAlbumSearchItem {
+  resourceType: 'release-group'
+  aliases: MusicAlias[]
+  preferredEdition: CatalogAlbumEdition | null
+  links: Record<string, string>
 }
 
 export interface MediaGenre {
@@ -663,8 +694,10 @@ export interface IndexerSearchItem {
   tvdbId: number | null
 }
 
-export interface ReleaseCandidate {
+export interface Torrent {
   id: string
+  mediaKey?: string
+  expiresAt?: string
   title: string
   size: number | null
   publishDate: string | null
@@ -687,7 +720,7 @@ export interface ReleaseCandidate {
   resourceRefExpiresAt?: string
 }
 
-export interface ReleaseCandidateFull extends ReleaseCandidate {
+export interface TorrentFull extends Torrent {
   indexer: string
   downloadTarget: DownloadSearchTarget | null
   fileName: string | null
@@ -779,6 +812,15 @@ export interface SaveTarget {
 export type DownloaderKind = 'zpan' | 'qbittorrent' | 'transmission' | 'aria2'
 export type DownloadSourceType = 'http' | 'magnet' | 'torrent_url'
 
+interface LocalDownloadBase {
+  id: string
+  expiresAt: string
+  links: { self: string }
+}
+
+export type LocalDownload = LocalDownloadBase &
+  ({ kind: 'magnet'; href: string } | { kind: 'file'; href: string; filename: string; mediaType: string })
+
 export interface DownloaderSummary {
   id: string
   description: string | null
@@ -794,8 +836,14 @@ export interface DownloaderSummary {
 }
 
 export interface DownloaderDetails extends DownloaderSummary {
-  credentials: Record<string, string>
+  configuredCredentials: string[]
   options: Record<string, string>
+}
+
+export type ConnectionPatch<T> = Omit<Partial<T>, 'credentials' | 'options' | 'description'> & {
+  description?: string | null
+  credentials?: Record<string, string | null> | null
+  options?: Record<string, string | null> | null
 }
 
 export interface DownloaderHealth {
@@ -818,6 +866,7 @@ export type DownloadTaskStatus =
   | 'resolving'
   | 'waitingSource'
   | 'submitting'
+  | 'submissionUnknown'
   | 'submitted'
   | 'running'
   | 'pausing'
@@ -858,9 +907,13 @@ export interface DownloadTaskPage {
   pageSize: number
 }
 
-export interface DownloadSummary extends DownloadTaskSummary {
+export interface DownloadSummary extends Omit<DownloadTaskSummary, 'sourceUri' | 'downloaderKind'> {
+  downloaderKind: DownloaderKind | null
+  monitoringSupported: boolean
+  submissionRecoverySupported: boolean
+  pollingRequired: boolean
   resourceKey: string
-  resourceKind: 'release' | 'music_track'
+  resourceKind: 'search_result' | 'music_track'
 }
 
 export interface DownloadPage {

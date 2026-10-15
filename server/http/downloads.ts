@@ -1,4 +1,5 @@
 import { InvalidDownloadResourceRefError } from '@server/security/download-resource-ref'
+import { isLocalDownloadId, readLocalDownloadTicket } from '@server/security/local-download-ticket'
 import {
   cancelDownload,
   createDownload,
@@ -8,6 +9,8 @@ import {
   resumeDownload,
   suspendDownload,
 } from '@server/usecases/downloads'
+import { localDownloadSecret, prepareLocalDownload } from '@server/usecases/local-downloads'
+import { MusicDownloadError } from '@server/usecases/music-downloads'
 import type { DownloadRecord } from '@server/usecases/ports'
 import { StaleWriteError } from '@server/usecases/ports'
 import {
@@ -21,12 +24,15 @@ import {
 import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
+import { localDownloadError, localDownloadRepresentation } from './local-downloads'
 import { problem, setPageLinks } from './protocol'
 
-const createSchema = z.object({
-  resourceRef: z.string().trim().min(1).max(8_000),
-  downloaderId: z.string().uuid(),
-})
+const createSchema = z
+  .object({
+    resourceRef: z.string().trim().min(1).max(8_000),
+    downloaderId: z.string().uuid().optional(),
+  })
+  .strict()
 const listSchema = z.object({
   status: z
     .enum([
@@ -34,6 +40,7 @@ const listSchema = z.object({
       'resolving',
       'waitingSource',
       'submitting',
+      'submissionUnknown',
       'submitted',
       'running',
       'pausing',
@@ -66,12 +73,32 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.post('/downloads', async (c) => {
-    const key = c.req.header('Idempotency-Key')?.trim()
-    if (!key || key.length > 200) return problem(c, 400, 'idempotency-key-required', 'Idempotency-Key is required')
     const parsed = createSchema.safeParse(await safeJson(c))
     if (!parsed.success) return problem(c, 422, 'validation-error', 'Request validation failed')
+    if (parsed.data.downloaderId === undefined) {
+      try {
+        const source = await prepareLocalDownload(
+          c.get('deps'),
+          c.env,
+          c.get('principal').userId,
+          parsed.data.resourceRef,
+        )
+        const result = localDownloadRepresentation(c.req.url, source)
+        c.header('Cache-Control', 'private, no-store')
+        c.header('Location', result.links.self)
+        return c.json(result, 201)
+      } catch (error) {
+        return localDownloadError(c, error)
+      }
+    }
+    const key = c.req.header('Idempotency-Key')?.trim()
+    if (!key || key.length > 200)
+      return problem(c, 400, 'idempotency-key-required', 'Idempotency-Key is required for remote downloads')
     try {
-      const item = await createDownload(c.get('deps'), c.env, c.get('principal').userId, key, parsed.data)
+      const item = await createDownload(c.get('deps'), c.env, c.get('principal').userId, key, {
+        ...parsed.data,
+        downloaderId: parsed.data.downloaderId,
+      })
       c.header('Location', `${new URL(c.req.url).origin}/api/downloads/${item.id}`)
       return c.json(await representation(c, item), 201)
     } catch (error) {
@@ -80,6 +107,16 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.get('/downloads/:id', async (c) => {
+    if (isLocalDownloadId(c.req.param('id'))) {
+      try {
+        const source = await readLocalDownloadTicket(localDownloadSecret(c.env), c.req.param('id'))
+        if (source.userId !== c.get('principal').userId) return problem(c, 404, 'not-found', 'Download not found')
+        c.header('Cache-Control', 'private, no-store')
+        return c.json(localDownloadRepresentation(c.req.url, { id: c.req.param('id'), ...source }))
+      } catch (error) {
+        return localDownloadError(c, error)
+      }
+    }
     const item = await getDownload(c.get('deps'), c.get('principal').userId, c.req.param('id'))
     if (!item) return problem(c, 404, 'not-found', 'Download not found')
     return c.json(await representation(c, item))
@@ -147,18 +184,29 @@ export function registerDownloadRoutes(routes: Hono<AppEnv>) {
 async function representation(c: Context<AppEnv>, item: DownloadRecord) {
   const base = `${new URL(c.req.url).origin}/api`
   const downloader = await c.get('deps').downloadersRepo.get(item.userId, item.downloaderId)
-  const managementSupported = downloader?.kind === 'zpan' && c.get('deps').downloadTaskGateways.zpan !== undefined
+  const taskGateway = downloader ? c.get('deps').downloadTaskGateways[downloader.kind] : undefined
+  const monitoringSupported = typeof taskGateway?.get === 'function'
+  const managementSupported = typeof taskGateway?.setStatus === 'function'
   return {
     id: item.id,
     resourceRef: item.resourceRef,
-    resourceKind: item.resourceKind,
+    resourceKind: item.resourceKind === 'release' ? 'torrent' : item.resourceKind,
     resourceKey: item.resourceKey,
     downloaderId: item.downloaderId,
     downloaderName: downloader?.description ?? downloader?.kind ?? item.downloaderId,
-    downloaderKind: downloader?.kind ?? 'aria2',
+    downloaderKind: downloader?.kind ?? null,
     managementSupported,
+    monitoringSupported,
+    submissionRecoverySupported: downloader
+      ? c.get('deps').downloaderGateways[downloader.kind]?.supportsIdempotentSubmission === true
+      : false,
+    pollingRequired:
+      !['completed', 'failed', 'canceled'].includes(item.status) &&
+      (['queued', 'resolving', 'waitingSource', 'submitting'].includes(item.status) ||
+        (item.status === 'submissionUnknown'
+          ? Boolean(downloader && c.get('deps').downloaderGateways[downloader.kind]?.supportsIdempotentSubmission)
+          : monitoringSupported)),
     sourceType: item.spec.sourceType,
-    sourceUri: item.spec.uri,
     name: item.spec.title ?? item.resourceKey,
     targetFolder: item.spec.targetFolder ?? '',
     category: item.spec.category ?? null,
@@ -176,16 +224,31 @@ async function representation(c: Context<AppEnv>, item: DownloadRecord) {
     },
     result:
       item.status === 'completed'
-        ? { objectId: item.resultObjectId, name: item.resultName, targetFolder: item.resultTargetFolder }
+        ? {
+            objectId: item.resultObjectId,
+            name:
+              item.resultName && !/^https?:\/\//i.test(item.resultName)
+                ? item.resultName
+                : (item.spec.title ?? item.resourceKey),
+            targetFolder: item.resultTargetFolder,
+          }
         : null,
-    error: item.error,
+    error: item.error
+      ? item.status === 'submissionUnknown'
+        ? 'The submission result is not confirmed. Check the remote client before creating another task.'
+        : 'The remote download could not be completed.'
+      : null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     completedAt: item.completedAt,
     links: {
       self: `${base}/downloads/${item.id}`,
-      suspension: `${base}/downloads/${item.id}/suspension`,
-      cancellation: `${base}/downloads/${item.id}/cancellation`,
+      ...(managementSupported
+        ? {
+            suspension: `${base}/downloads/${item.id}/suspension`,
+            cancellation: `${base}/downloads/${item.id}/cancellation`,
+          }
+        : {}),
       downloader: `${base}/downloaders/${item.downloaderId}`,
     },
   }
@@ -208,6 +271,8 @@ function cancellationRepresentation(c: Context<AppEnv>, item: DownloadRecord) {
 }
 
 function resourceError(c: Context<AppEnv>, error: unknown): Response {
+  if (error instanceof MusicDownloadError)
+    return problem(c, error.status, 'music-download-unavailable', 'The music download is unavailable')
   if (error instanceof InvalidDownloadResourceRefError)
     return problem(c, 422, 'invalid-resource-ref', 'The download resource reference is invalid', error.message)
   if (error instanceof IdempotencyConflictError)
@@ -221,7 +286,8 @@ function resourceError(c: Context<AppEnv>, error: unknown): Response {
   if (error instanceof ResourceConflictError) {
     return problem(c, 409, 'download-conflict', error.message)
   }
-  if (error instanceof ResourceUpstreamError) return problem(c, 502, 'downloader-unavailable', error.message)
+  if (error instanceof ResourceUpstreamError)
+    return problem(c, 502, 'downloader-unavailable', 'The downloader is unavailable')
   throw error
 }
 

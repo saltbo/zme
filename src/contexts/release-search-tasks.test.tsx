@@ -1,4 +1,4 @@
-import type { ReleaseCandidateFull } from '@shared/types'
+import type { TorrentFull } from '@shared/types'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router'
@@ -35,7 +35,7 @@ describe('release search tasks', () => {
   })
 
   it('keeps a search running after the detail action leaves the tree', async () => {
-    let finishSearch: ((value: { items: ReleaseCandidateFull[]; stoppedEarly: boolean }) => void) | undefined
+    let finishSearch: ((value: { items: TorrentFull[]; stoppedEarly: boolean }) => void) | undefined
     mockedSearchMediaReleases.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -81,7 +81,7 @@ describe('release search tasks', () => {
   })
 
   it('warns before reloading only while a search is running', async () => {
-    let finishSearch: ((value: { items: ReleaseCandidateFull[]; stoppedEarly: boolean }) => void) | undefined
+    let finishSearch: ((value: { items: TorrentFull[]; stoppedEarly: boolean }) => void) | undefined
     mockedSearchMediaReleases.mockImplementation(
       () =>
         new Promise((resolve) => {
@@ -172,7 +172,7 @@ const request: ReleaseSearchTaskRequest = {
   },
 }
 
-const release: ReleaseCandidateFull = {
+const release: TorrentFull = {
   id: 'release-1',
   downloadTarget: null,
   title: 'The.Matrix.1999.1080p.BluRay',
@@ -193,8 +193,8 @@ const release: ReleaseCandidateFull = {
   leechers: 2,
   files: 1,
   publishDate: '2026-07-27T00:00:00.000Z',
-  links: { self: '/api/release-candidates/release-1' },
-  resourceRef: 'release-ref:v1:test',
+  links: { self: '/api/torrents/release-1' },
+  resourceRef: 'torrent-ref:v1:test',
   resourceRefExpiresAt: '2026-08-08T00:00:00.000Z',
   sourceType: 'torrent_url',
   infoUrl: null,

@@ -13,10 +13,6 @@ import {
 
 const env = {
   PUBLIC_APP_ORIGIN: 'https://zme.test',
-  OIDC_ISSUER: 'https://issuer.zme.test',
-  OIDC_CLIENT_ID: 'zme-test-client',
-  OIDC_ADMIN_SUBJECTS: 'admin-subject',
-  OIDC_LEGACY_BINDINGS_JSON: '[]',
 } as unknown as Env
 
 function protocolApp() {
@@ -45,6 +41,27 @@ function protocolApp() {
 }
 
 describe('HTTP protocol helpers', () => {
+  it('redacts temporary local download capabilities from success and failure logs', async () => {
+    const app = new Hono<AppEnv>()
+    app.use('*', requestBoundaryMiddleware)
+    app.get('/api/downloads/:id/content', (c) => {
+      logRequestFailure(new Error('File source unavailable'), c, 502)
+      return problem(c, 502, 'source-unavailable', 'Source unavailable')
+    })
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await app.request('/api/downloads/local:private-capability/content', undefined, env)
+      for (const log of [info, error]) {
+        expect(JSON.parse(String(log.mock.calls.at(-1)?.[0])).path).toBe('/api/downloads/[redacted]/content')
+        expect(JSON.stringify(log.mock.calls)).not.toContain('private-capability')
+      }
+    } finally {
+      info.mockRestore()
+      error.mockRestore()
+    }
+  })
+
   it('normalizes JSON errors to stable Problem Details titles', async () => {
     const app = protocolApp()
     const expected = new Map([

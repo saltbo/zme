@@ -25,7 +25,8 @@ Link: <https://zme.example/api/openapi.json>; rel="service-desc"; type="applicat
 The current scope catalog is:
 
 - `media:read`
-- `release-candidates:read`
+- `library:read`
+- `torrents:read`
 - `downloaders:read`
 - `downloads:read`
 - `downloads:write`
@@ -49,14 +50,25 @@ The token `sub` identifies the represented local user. The standard `act.sub` cl
 1. Derive and read the RFC 9728 Protected Resource Metadata from the Resource Server URL.
 2. Read `authorization_servers` to discover the external provider and `scopes_supported` to learn the complete Resource Server scope catalog.
 3. Follow the Resource Server's `service-desc` link and read the OpenAPI to request only the scopes needed for the next operation.
-4. `GET /api/media?query=...` with `media:read`; select a movie or series.
-5. `GET /api/release-candidates?mediaKey=...&query=...` with `release-candidates:read`; select a release candidate.
-6. `GET /api/downloaders` with `downloaders:read`; choose an enabled credential-free downloader summary.
-7. `POST /api/downloads` with `downloads:write`, a new `Idempotency-Key`, the opaque candidate reference, and downloader ID.
-8. Read `/api/downloads/{id}` with `downloads:read`. Use `downloads:manage` for the owned download's suspension, cancellation, or deletion resources.
+4. `GET /api/catalog/items?q=...` with `media:read`; select a movie or series and its canonical media key.
+5. `GET /api/torrents?mediaKey=...&q=...` with `torrents:read`; select a torrent. Follow pagination links to reuse its owned query snapshot.
+6. Read the selected torrent's `links.self`, supplying the selected `mediaKey` and applicable `target`, to obtain its user-bound opaque `resourceRef`.
+7. `GET /api/downloaders` with `downloaders:read`; choose an enabled credential-free downloader summary in the configuration group.
+8. `POST /api/downloads` with `downloads:write`, a new `Idempotency-Key`, the opaque resource reference, and downloader ID.
+9. Read `/api/downloads/{id}` with `downloads:read`. Use `downloads:manage` for the owned download's suspension, cancellation, or deletion resources.
 
 All downloader and download reads are scoped to the represented user. Reusing an idempotency key with different content returns a conflict. Replaying a proof, changing its method or URL, using the wrong audience, omitting a scope, or crossing an ownership boundary is rejected with a DPoP challenge or Problem Details response.
 
 ## Deployment acceptance
 
 Use an isolated preview with dedicated storage and queues. Apply all migrations to an empty preview database, fetch the exact Resource Server URL and linked OpenAPI, then obtain a least-privilege DPoP token from the configured provider and execute the complete flow above. Do not promote a release until discovery, token validation, ownership boundaries, downloader submission, and terminal task reconciliation all pass against that preview.
+
+## Contract release 2.0
+
+See [the coordinated contract migration](api-2026-10-15.md) for the catalog, chart, torrent,
+local-link, library-member, health, and challenge-response routes. Catalog reads
+for books and music use `media:read`; owned library and collection-track reads
+use `library:read`. Both destinations use `POST /api/downloads` with
+`downloads:write`: omit `downloaderId` for a local handoff; supply it and an
+`Idempotency-Key` for a remote task. Local `links.self` and file `href` values
+are under `/api/downloads/{downloadId}` and expire after five minutes.

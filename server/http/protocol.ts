@@ -1,8 +1,18 @@
-import { readConfig } from '@server/config'
+import { readResourceConfig } from '@server/config'
 import { startTrace } from '@server/observability/trace'
 import type { Context, MiddlewareHandler } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { AppEnv } from './context'
+
+export function pageRepresentation<T>(
+  items: T[],
+  page: number,
+  pageSize: number,
+  totalItems: number,
+  totalPages = Math.ceil(totalItems / pageSize),
+) {
+  return { items, pagination: { page, pageSize, totalItems, totalPages } }
+}
 
 export const requestBoundaryMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const requestId = crypto.randomUUID()
@@ -19,14 +29,14 @@ export const requestBoundaryMiddleware: MiddlewareHandler<AppEnv> = async (c, ne
     c.header('Request-Id', requestId)
     appendLink(
       c,
-      `<${readConfig(c.env).resourceUrl}/openapi.json>; rel="service-desc"; type="application/openapi+json"`,
+      `<${readResourceConfig(c.env).resourceUrl}/openapi.json>; rel="service-desc"; type="application/openapi+json"`,
     )
     console.info(
       JSON.stringify({
         event: 'http.request.completed',
         requestId,
         method: c.req.method,
-        path: c.req.path,
+        path: safeRequestPath(c.req.path),
         status: c.res.status,
         durationMs: Date.now() - started,
         traceId: trace.traceId,
@@ -47,7 +57,7 @@ export function logRequestFailure(error: unknown, c: Context<AppEnv>, status: nu
       event: 'http.request.failed',
       requestId: c.get('requestId'),
       method: c.req.method,
-      path: c.req.path,
+      path: safeRequestPath(c.req.path),
       status,
       traceId: trace?.traceId,
       spanId: trace?.spanId,
@@ -63,6 +73,10 @@ function safeErrorMessage(message: string): string {
   if (message.startsWith('Failed query:')) return 'Database query failed.'
   const redacted = message.replace(/\b(https?:\/\/[^\s?]+)\?[^\s]*/gu, '$1?[redacted]')
   return redacted.length > 1_000 ? `${redacted.slice(0, 1_000)}…` : redacted
+}
+
+function safeRequestPath(path: string): string {
+  return path.replace(/(\/downloads\/)(?:local:|local%3A)[^/]+/i, '$1[redacted]')
 }
 
 async function claimFingerprint(value: string): Promise<string> {
@@ -97,7 +111,7 @@ export const normalizeProblemMiddleware: MiddlewareHandler<AppEnv> = async (c, n
   headers.set('Request-Id', requestId)
   c.res = new Response(
     JSON.stringify({
-      type: `${readConfig(c.env).appOrigin}/problems/${problemSlug(status)}`,
+      type: `${readResourceConfig(c.env).appOrigin}/problems/${problemSlug(status)}`,
       title,
       status,
       detail,
@@ -124,7 +138,7 @@ export function problem(
   const requestId = c.get('requestId') ?? crypto.randomUUID()
   return c.json(
     {
-      type: `${readConfig(c.env).appOrigin}/problems/${type}`,
+      type: `${readResourceConfig(c.env).appOrigin}/problems/${type}`,
       title,
       status,
       detail: detail ?? title,
@@ -142,11 +156,17 @@ export function requireMergePatch(c: Context<AppEnv>) {
   return problem(c, 415, 'unsupported-media-type', 'PATCH requires application/merge-patch+json')
 }
 
-export function setPageLinks(c: Context<AppEnv>, page: { page: number; pageSize: number }, totalItems: number): void {
+export function setPageLinks(
+  c: Context<AppEnv>,
+  page: { page: number; pageSize: number },
+  totalItems: number,
+  query?: Record<string, string>,
+): void {
   const totalPages = Math.ceil(totalItems / page.pageSize)
   const links: string[] = []
   const add = (targetPage: number, relation: string) => {
     const url = new URL(c.req.url)
+    for (const [name, value] of Object.entries(query ?? {})) url.searchParams.set(name, value)
     url.searchParams.set('page', String(targetPage))
     url.searchParams.set('pageSize', String(page.pageSize))
     links.push(`<${url.toString()}>; rel="${relation}"`)

@@ -85,7 +85,7 @@ export function MediaSourcesPage() {
     try {
       const payload = await updateMediaSource(selectedId, toMediaSourceInput(editForm))
       queryClient.setQueryData<MediaSourceSummary[]>(queryKeys.mediaSources, (current = []) =>
-        current.map((item) => (item.id === payload.item.id ? payload.item : item)),
+        current.map((item) => (item.id === payload.id ? payload : item)),
       )
       setEditOpen(false)
       toast.success(t('mediaSourceUpdated'))
@@ -120,9 +120,9 @@ export function MediaSourcesPage() {
           item.id === id
             ? {
                 ...item,
-                healthStatus: payload.item.status,
-                healthMessage: payload.item.message,
-                healthCheckedAt: payload.item.checkedAt,
+                healthStatus: payload.status,
+                healthMessage: payload.message,
+                healthCheckedAt: payload.checkedAt,
               }
             : item,
         ),
@@ -142,7 +142,7 @@ export function MediaSourcesPage() {
     setEditForm(fromSummary(item))
     try {
       const payload = await getMediaSource(item.id)
-      setEditForm(fromDetails(payload.item))
+      setEditForm(fromDetails(payload))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('mediaSourcesLoadFailed'))
     } finally {

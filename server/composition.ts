@@ -1,3 +1,4 @@
+import { downloadSourceContentGateway } from './adapters/gateways/download-source-content'
 import { downloaderGateways, downloadTaskGateways } from './adapters/gateways/downloaders'
 import { indexerGateways } from './adapters/gateways/indexers'
 import { createDpopTokenValidator, createOidcClient } from './adapters/gateways/oidc'
@@ -22,7 +23,7 @@ import {
 import { createMediaSourcesRepo } from './adapters/repos/media-sources'
 import { createMusicCollectionsRepo } from './adapters/repos/music-collections'
 import { createMusicDownloadKeysRepo } from './adapters/repos/music-download-keys'
-import { createReleaseCandidateSnapshotsRepo } from './adapters/repos/release-candidate-snapshots'
+import { createTorrentSnapshotsRepo } from './adapters/repos/torrents'
 import { readConfig } from './config'
 import { createDb } from './db/client'
 import type { Env } from './env'
@@ -35,6 +36,15 @@ export function createDeps(env: Env, trace?: TraceContext): Deps {
   const db = createDb(env)
   const config = readConfig(env)
   return {
+    connectorLoginQueue: {
+      async enqueue(input, delaySeconds) {
+        await env.MEDIA_DOWNLOAD_DISPATCH.send(
+          { type: 'connector_login_poll', ...input, ...traceCarrier(trace) },
+          delaySeconds ? { delaySeconds } : undefined,
+        )
+      },
+    },
+    downloadSourceContent: downloadSourceContentGateway,
     identityRepo: createIdentityRepo(db),
     oidcClient: createOidcClient(config.oidc),
     dpopTokenValidator: createDpopTokenValidator(config),
@@ -74,7 +84,7 @@ export function createDeps(env: Env, trace?: TraceContext): Deps {
     },
     downloadersRepo: createDownloadersRepo(db),
     indexersRepo: createIndexersRepo(db),
-    releaseCandidateSnapshotsRepo: createReleaseCandidateSnapshotsRepo(db),
+    torrentSnapshotsRepo: createTorrentSnapshotsRepo(db),
     mediaSourcesRepo: createMediaSourcesRepo(db),
     downloaderGateways,
     downloadTaskGateways,

@@ -66,11 +66,11 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(operationIds).toEqual(new Set(AGENT_OPERATION_POLICIES.map(({ operationId }) => operationId)))
     const catalogScopes = new Set<string>(AGENT_SCOPES)
     expect([...scopes].every((scope) => catalogScopes.has(scope))).toBe(true)
-    expect(agentScopeForRequest('GET', '/library')).toBeNull()
+    expect(agentScopeForRequest('GET', '/library/items')).toBe('library:read')
   })
 
   it('declares DPoP semantics, pagination, idempotency, and Problem Details', () => {
-    expect(document.info.version).toBe('1.0.0')
+    expect(document.info.version).toBe('2.0.0')
     expect(document.servers).toEqual([{ url: config.resourceUrl }])
     expect(document.components.securitySchemes.oidcDpop.description).toMatch(/DPoP-bound/)
     expect(document.components.securitySchemes.oidcDpop['x-dpop-required']).toBe(true)
@@ -84,30 +84,41 @@ describe('DPoP resource OpenAPI contract', () => {
       expect.arrayContaining([{ $ref: '#/components/parameters/IdempotencyKey' }]),
     )
     expect(paths['/downloads'].post.parameters).toEqual(
-      expect.arrayContaining([{ $ref: '#/components/parameters/IdempotencyKey' }]),
+      expect.arrayContaining([expect.objectContaining({ name: 'Idempotency-Key', required: false })]),
     )
     expect(paths['/downloads'].get.parameters).toEqual(
       expect.arrayContaining([{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }]),
     )
-    expect(document.components.schemas.Media.required).toContain('mediaKey')
-    expect(document.components.schemas.CreateDownload.required).toEqual(['resourceRef', 'downloaderId'])
-    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('resourceRef')
-    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('magnetUrl')
-    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('downloadUrl')
-    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('infoHash')
-    expect(document.components.schemas.ReleaseCandidate.properties).not.toHaveProperty('indexer')
-    expect(document.components.schemas.ReleaseCandidate.required).toEqual(
+    expect(document.components.schemas.ScreenTitleSummary.properties).toHaveProperty('mediaKey')
+    expect(document.components.schemas.CreateDownload.required).toEqual(['resourceRef'])
+    expect(document.components.schemas.CreateDownload.properties).toHaveProperty('downloaderId')
+    expect(document.components.schemas.Download.oneOf).toEqual([
+      { $ref: '#/components/schemas/LocalDownload' },
+      { $ref: '#/components/schemas/RemoteDownload' },
+    ])
+    expect(paths).not.toHaveProperty('/download-links')
+    expect(paths['/downloads/{downloadId}/content'].get.security).toEqual([])
+    expect(parameter(paths['/downloads/{downloadId}'].get, 'downloadId').schema).toEqual({
+      type: 'string',
+      minLength: 1,
+    })
+    expect(document.components.schemas.Torrent.properties).not.toHaveProperty('resourceRef')
+    expect(document.components.schemas.Torrent.properties).not.toHaveProperty('magnetUrl')
+    expect(document.components.schemas.Torrent.properties).not.toHaveProperty('downloadUrl')
+    expect(document.components.schemas.Torrent.properties).not.toHaveProperty('infoHash')
+    expect(document.components.schemas.Torrent.properties).not.toHaveProperty('indexer')
+    expect(document.components.schemas.Torrent.required).toEqual(
       expect.arrayContaining(['quality', 'availability', 'links']),
     )
-    expect(document.components.schemas.ReleaseCandidateResourceRef.properties).toHaveProperty('resourceRef')
-    expect(paths['/release-candidates/{releaseCandidateId}'].get.operationId).toBe('getReleaseCandidate')
-    expect(document.components.schemas.ReleaseCandidateQuality.required).toEqual(
+    expect(document.components.schemas.TorrentResourceRef.properties).toHaveProperty('resourceRef')
+    expect(paths['/torrents/{torrentId}'].get.operationId).toBe('getTorrent')
+    expect(document.components.schemas.TorrentQuality.required).toEqual(
       expect.arrayContaining(['resolution', 'source', 'tier', 'warnings']),
     )
-    expect(document.components.schemas.ReleaseCandidateFull.properties).toHaveProperty('seeders')
-    expect(document.components.schemas.ReleaseCandidateFull.properties).toHaveProperty('indexer')
-    expect(document.components.schemas.ReleaseCandidateFull.properties).not.toHaveProperty('resourceRef')
-    expect(paths['/release-candidates'].get.parameters).not.toEqual(
+    expect(document.components.schemas.TorrentFull.properties).toHaveProperty('seeders')
+    expect(document.components.schemas.TorrentFull.properties).toHaveProperty('indexer')
+    expect(document.components.schemas.TorrentFull.properties).not.toHaveProperty('resourceRef')
+    expect(paths['/torrents'].get.parameters).toEqual(
       expect.arrayContaining([expect.objectContaining({ name: 'view' })]),
     )
     expect(paths).not.toHaveProperty('/release-search-jobs')
@@ -119,17 +130,17 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(document.components.responses.Forbidden.headers).toHaveProperty('WWW-Authenticate')
     expect(document.components.responses.SessionUnauthorized.headers).not.toHaveProperty('WWW-Authenticate')
     expect(document.components.responses.SessionForbidden.headers).not.toHaveProperty('WWW-Authenticate')
-    expect(paths['/library'].get.responses?.['401']).toEqual({
-      $ref: '#/components/responses/SessionUnauthorized',
+    expect(paths['/library/items'].get.responses?.['401']).toEqual({
+      $ref: '#/components/responses/Unauthorized',
     })
     expect(
       openapiDocument({ ...config, oidc: { ...config.oidc, issuer: `${config.oidc.issuer}/` } }).components
-        .securitySchemes.oidcDpop.openIdConnectUrl,
-    ).toBe('https://identity.example/tenant/.well-known/openid-configuration')
+        .securitySchemes.oidcDpop,
+    ).toMatchObject({ openIdConnectUrl: 'https://identity.example/tenant/.well-known/openid-configuration' })
   })
 
   it('documents public response headers and browser query constraints precisely', () => {
-    for (const path of ['/', '/health', '/openapi.json']) {
+    for (const path of ['/', '/health', '/openapi.json', '/docs']) {
       expect(paths[path].get.responses?.['200'].headers).not.toHaveProperty('API-Version')
       expect(paths[path].get.responses).not.toHaveProperty('401')
       expect(paths[path].get.parameters).toEqual(
@@ -139,11 +150,15 @@ describe('DPoP resource OpenAPI contract', () => {
         ]),
       )
     }
+    expect(paths['/docs'].get.security).toEqual([])
+    expect(paths['/docs'].get.responses?.['200'].content).toHaveProperty('text/html')
     expect(document.components.responses.PublicBadRequest.headers).not.toHaveProperty('API-Version')
     expect(document.components.responses.PublicInternalError.headers).not.toHaveProperty('API-Version')
-    expect(paths['/music'].get.description).toMatch(/at least one of q, artist, or title/i)
-    expect(paths['/music'].get['x-zme-query-constraint']).toEqual({ atLeastOne: ['q', 'artist', 'title'] })
-    expect(parameter(paths['/media-recommendations'].get, 'year').schema.maximum).toBe(new Date().getUTCFullYear() + 2)
+    expect(paths['/catalog/albums'].get.description).toMatch(/at least one of q, artist, title, genre, or year/i)
+    expect(paths['/catalog/albums'].get['x-zme-query-constraint']).toEqual({
+      atLeastOne: ['q', 'artist', 'title', 'genre', 'year'],
+    })
+    expect(parameter(paths['/catalog/movies'].get, 'year').schema.maximum).toBe(new Date().getUTCFullYear() + 2)
   })
 
   it('describes download lifecycle and audio semantically', () => {
@@ -156,15 +171,20 @@ describe('DPoP resource OpenAPI contract', () => {
     expect(paths['/music/tracks/{id}/content']).toHaveProperty('get')
     expect(paths['/music/tracks/{id}/content']).toHaveProperty('head')
 
-    expect(parameter(paths['/movies/{id}'].get, 'id').schema).toEqual({ type: 'integer', minimum: 1 })
-    expect(parameter(paths['/series/{id}/seasons/{seasonNumber}'].get, 'seasonNumber').schema).toEqual({
+    expect(parameter(paths['/catalog/movies/{id}'].get, 'id').schema).toEqual({ type: 'integer', minimum: 1 })
+    expect(parameter(paths['/catalog/series/{id}/seasons/{seasonNumber}'].get, 'seasonNumber').schema).toEqual({
       type: 'integer',
       minimum: 0,
     })
-    expect(parameter(paths['/books/{mediaKey}'].get, 'mediaKey').schema).toEqual({ type: 'string', minLength: 1 })
+    expect(parameter(paths['/catalog/books/{mediaKey}'].get, 'mediaKey').schema).toEqual({
+      type: 'string',
+      minLength: 1,
+      pattern: '^openlibrary:work:OL[0-9]+W$',
+    })
 
-    expect(parameter(paths['/books'].get, 'q').required).toBe(true)
-    expect(parameter(paths['/media-recommendations'].get, 'ratingGte').schema).toMatchObject({
+    expect(parameter(paths['/catalog/books'].get, 'q').required).toBe(false)
+    expect(paths['/catalog/books'].get.description).toMatch(/exactly one of q or subject/)
+    expect(parameter(paths['/catalog/movies'].get, 'ratingGte').schema).toMatchObject({
       minimum: 0,
       maximum: 10,
     })

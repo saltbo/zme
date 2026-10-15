@@ -4,7 +4,6 @@ import {
   createDownloader,
   deleteDownloader,
   getDownloader,
-  getDownloaderHealth,
   listDownloaders,
   updateDownloader,
 } from '@server/usecases/downloaders'
@@ -22,7 +21,14 @@ const downloaderSchema = z.object({
   options: z.record(z.string(), z.string()),
   enabled: z.boolean(),
 })
-const downloaderPatchSchema = downloaderSchema.partial().refine((value) => Object.keys(value).length > 0)
+const downloaderPatchSchema = downloaderSchema
+  .partial()
+  .extend({
+    description: z.string().trim().nullable().optional(),
+    credentials: z.record(z.string(), z.string().nullable()).nullable().optional(),
+    options: z.record(z.string(), z.string().nullable()).nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0)
 export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
   routes.get('/downloaders', async (c) => {
     const items = await listDownloaders(c.get('deps'), c.get('user').id)
@@ -33,13 +39,13 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
     const { id } = c.req.valid('param')
     const item = await getDownloader(c.get('deps'), c.get('user').id, id)
     if (!item) return c.json({ error: 'Downloader not found.' }, 404)
-    return c.json({ item })
+    return c.json(item)
   })
 
   routes.post('/downloaders', zValidator('json', downloaderSchema), async (c) => {
     const item = await createDownloader(c.get('deps'), c.get('user').id, c.req.valid('json'))
     c.header('Location', `/api/downloaders/${item.id}`)
-    return c.json({ item }, 201)
+    return c.json(item, 201)
   })
 
   routes.patch(
@@ -52,7 +58,7 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
       const { id } = c.req.valid('param')
       const item = await updateDownloader(c.get('deps'), c.get('user').id, id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Downloader not found.' }, 404)
-      return c.json({ item })
+      return c.json(item)
     },
   )
 
@@ -63,24 +69,10 @@ export function registerDownloaderRoutes(routes: Hono<AppEnv>) {
     return c.body(null, 204)
   })
 
-  routes.post('/downloaders/:id/health-observations', zValidator('param', idParamsSchema), async (c) => {
-    const { id } = c.req.valid('param')
-    const health = await checkDownloaderHealth(c.get('deps'), c.get('user').id, id)
-    if (!health) return c.json({ error: 'Downloader not found.' }, 404)
-    c.header('Location', `/api/downloaders/${id}/health-observations/${encodeURIComponent(health.checkedAt as string)}`)
-    return c.json({ item: health }, 201)
-  })
-
-  routes.get('/downloaders/:id/health-observations', zValidator('param', idParamsSchema), async (c) => {
-    const health = await getDownloaderHealth(c.get('deps'), c.get('user').id, c.req.valid('param').id)
-    if (!health) return c.json({ error: 'Downloader not found.' }, 404)
-    return c.json({ items: health.checkedAt ? [health] : [] })
-  })
-
-  routes.get('/downloaders/:id/health-observations/:checkedAt', zValidator('param', idParamsSchema), async (c) => {
-    const health = await getDownloaderHealth(c.get('deps'), c.get('user').id, c.req.param('id'))
-    if (!health || health.checkedAt !== c.req.param('checkedAt'))
-      return c.json({ error: 'Health observation not found.' }, 404)
-    return c.json({ item: health })
+  routes.get('/downloaders/:id/health', zValidator('param', idParamsSchema), async (c) => {
+    const health = await checkDownloaderHealth(c.get('deps'), c.get('user').id, c.req.valid('param').id)
+    if (!health) return c.json({ error: 'Connection not found.' }, 404)
+    c.header('Cache-Control', 'private, no-store')
+    return c.json(health)
   })
 }

@@ -29,7 +29,7 @@ describe('DPoP authentication middleware failures', () => {
     ['replay store', () => failingDeps({ replay: new Error('database unavailable') })],
     ['identity projection', () => failingDeps({ identity: new Error('database unavailable') })],
   ] as const)('preserves an unexpected %s failure as a server error', async (_name, createDeps) => {
-    const response = await middlewareApp(createDeps()).request('/api/media', {
+    const response = await middlewareApp(createDeps()).request('/api/catalog/items', {
       headers: { authorization: 'DPoP token', dpop: 'proof' },
     })
 
@@ -38,7 +38,7 @@ describe('DPoP authentication middleware failures', () => {
   })
 
   it('does not convert a downstream handler failure into an authentication error', async () => {
-    const response = await middlewareApp(failingDeps()).request('/api/media', {
+    const response = await middlewareApp(failingDeps()).request('/api/catalog/items', {
       headers: { authorization: 'DPoP token', dpop: 'proof' },
     })
 
@@ -54,7 +54,7 @@ function middlewareApp(deps: Deps) {
     await next()
   })
   app.use('*', requireAuthMiddleware)
-  app.get('/api/media', () => {
+  app.get('/api/catalog/items', () => {
     throw new Error('handler failed')
   })
   app.onError(() => new Response(null, { status: 500 }))

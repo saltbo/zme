@@ -3,7 +3,9 @@ import { createIdentityRepo } from '@server/adapters/repos/identity'
 import { app } from '@server/app'
 import { createDeps } from '@server/composition'
 import { createDb } from '@server/db/client'
+import { issueTorrentResourceRef } from '@server/security/download-resource-ref'
 import { processDownloadReconciliation } from '@server/usecases/downloads'
+import type { IndexerSearchItem, LocalDownload } from '@shared/types'
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { expect, it, vi } from 'vitest'
 
@@ -25,11 +27,62 @@ it('atomically accepts one concurrent use of a DPoP proof', async () => {
   expect(accepted.filter(Boolean)).toHaveLength(1)
 })
 
+it('lets Agents read book and music catalogs and their own library with the declared scopes', async () => {
+  const fixture = await dpopFixture()
+  fixture.setUpstreamFetch(async (request) => {
+    const url = new URL(request.url)
+    if (url.hostname === 'openlibrary.org' && url.pathname === '/search.json')
+      return json({
+        numFound: 1,
+        docs: [{ key: '/works/OL1W', title: 'Fixture Book', author_name: ['Fixture Author'] }],
+      })
+    if (url.hostname === 'musicbrainz.org' && url.pathname.includes('/release-group'))
+      return json({
+        'release-groups': [
+          {
+            id: '12345678-1234-4234-8234-123456789abc',
+            title: 'Fixture Album',
+            'primary-type': 'Album',
+            'artist-credit': [],
+          },
+        ],
+      })
+    return new Response(null, { status: 404 })
+  })
+  vi.stubGlobal('fetch', fixture.fetch)
+  for (const path of ['/api/catalog/books?q=Fixture', '/api/catalog/albums?q=Fixture']) {
+    const response = await app.fetch(await fixture.signedRequest(path, ['media:read']), fixture.env)
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as { items: Array<{ title: string }>; pagination: { totalItems: number } }
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0].title).toContain('Fixture')
+    if (path.startsWith('/api/catalog/books')) expect(body.pagination.totalItems).toBe(1)
+    else expect(body.pagination).not.toHaveProperty('totalItems')
+  }
+  const denied = await app.fetch(
+    await fixture.signedRequest('/api/library/items?kind=book', ['media:read']),
+    fixture.env,
+  )
+  expect(denied.status).toBe(403)
+  const library = await app.fetch(
+    await fixture.signedRequest('/api/library/items?kind=book', ['library:read']),
+    fixture.env,
+  )
+  expect(library.status).toBe(200)
+  expect(await library.json()).toMatchObject({ items: [], pagination: { totalItems: 0 } })
+  const collections = await app.fetch(
+    await fixture.signedRequest('/api/library/music/collections?kind=playlist', ['library:read']),
+    fixture.env,
+  )
+  expect(collections.status).toBe(200)
+  expect(await collections.json()).toEqual({ items: [] })
+})
+
 it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', async () => {
   const fixture = await dpopFixture()
   vi.stubGlobal('fetch', fixture.fetch)
   const bearer = await app.fetch(
-    new Request('https://zme.test/api/media?query=test', {
+    new Request('https://zme.test/api/catalog/items?q=test', {
       headers: { authorization: 'Bearer bearer-is-never-accepted' },
     }),
     fixture.env,
@@ -40,7 +93,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
   )
 
   const missingProof = await app.fetch(
-    new Request('https://zme.test/api/media?query=test', {
+    new Request('https://zme.test/api/catalog/items?q=test', {
       headers: { authorization: 'DPoP proof-required' },
     }),
     fixture.env,
@@ -67,7 +120,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
 
   const wrongBinding = await app.fetch(
     await fixture.signedRequest(
-      '/api/media?query=test',
+      '/api/catalog/items?q=test',
       ['media:read'],
       'different-user',
       'GET',
@@ -99,7 +152,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
     env.DB.prepare(
       `INSERT INTO downloads
         (id, user_id, idempotency_key, request_hash, resource_ref, resource_kind, resource_key, downloader_id, spec_json, status, created_at, updated_at)
-       VALUES (?, ?, 'owner-key', 'owner-hash', 'release-ref:v1:owner', 'release', 'tmdb:movie:550', ?, '{}', 'completed', ?, ?)`,
+       VALUES (?, ?, 'owner-key', 'owner-hash', 'torrent-ref:v1:owner', 'release', 'tmdb:movie:550', ?, '{}', 'completed', ?, ?)`,
     ).bind(downloadId, ownerId, downloaderId, new Date().toISOString(), new Date().toISOString()),
   ])
 
@@ -146,7 +199,7 @@ it('enforces DPoP replay, scope, Agent surface, and cross-owner boundaries', asy
   expect(await highRisk.json()).toMatchObject({ type: expect.stringContaining('/problems/agent-operation-forbidden') })
 })
 
-it('completes the least-privilege Agent media, release-candidate, and download flow', async () => {
+it('completes the least-privilege Agent media, torrent, and download flow', async () => {
   const fixture = await dpopFixture()
   const mediaSourceId = crypto.randomUUID()
   const indexerId = crypto.randomUUID()
@@ -160,8 +213,11 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     if (url.hostname === 'api.themoviedb.org' && url.pathname.includes('/genre/')) {
       return json({ genres: [{ id: 18, name: 'Drama' }] })
     }
-    if (url.hostname === 'api.themoviedb.org' && url.pathname === '/3/search/multi') {
+    if (url.hostname === 'api.themoviedb.org' && url.pathname === '/3/search/movie') {
       return json({
+        page: 1,
+        total_pages: 1,
+        total_results: 1,
         results: [
           {
             id: 550,
@@ -188,6 +244,13 @@ it('completes the least-privilege Agent media, release-candidate, and download f
           publishDate: '2026-08-01T00:00:00.000Z',
           magnetUrl: 'magnet:?xt=urn:btih:0123456789abcdef',
         },
+        {
+          guid: 'nzb-1',
+          title: 'Not a BT source',
+          indexer: 'Example Tracker',
+          protocol: 'usenet',
+          downloadUrl: 'https://tracker.test/file.nzb',
+        },
       ])
     }
     if (url.origin === 'https://zpan.test' && url.pathname === '/api/downloads/tasks') {
@@ -195,6 +258,14 @@ it('completes the least-privilege Agent media, release-candidate, and download f
         submitted.push(await request.json())
         return json({ id: 'zpan-task-123' })
       }
+    }
+    if (url.origin === 'https://tracker.test' && url.pathname === '/file') {
+      return new Response(null, { status: 302, headers: { location: '/signed?passkey=private' } })
+    }
+    if (url.origin === 'https://tracker.test' && url.pathname === '/signed') {
+      return new Response('d4:infod4:name4:testee', {
+        headers: { 'content-type': 'application/x-bittorrent', 'set-cookie': 'private=secret' },
+      })
     }
     if (url.origin === 'https://zpan.test' && url.pathname === '/api/downloads/tasks/zpan-task-123') {
       return json({
@@ -244,7 +315,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
   ])
 
   const mediaResponse = await app.fetch(
-    await fixture.signedRequest('/api/media?query=Fight%20Club&kind=movie', ['media:read']),
+    await fixture.signedRequest('/api/catalog/items?q=Fight%20Club&types=movie', ['media:read']),
     fixture.env,
   )
   expect(mediaResponse.status).toBe(200)
@@ -282,15 +353,26 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     },
   ])
 
+  const downloaderDetail = await app.fetch(
+    await fixture.signedRequest(`/api/downloaders/${downloaderId}`, ['downloaders:read']),
+    fixture.env,
+  )
+  expect(downloaderDetail.status).toBe(200)
+  const safeDownloader = await downloaderDetail.json()
+  expect(safeDownloader).toMatchObject({ id: downloaderId, configuredCredentials: ['apiKey'] })
+  expect(safeDownloader).not.toHaveProperty('credentials')
+  expect(JSON.stringify(safeDownloader)).not.toContain('zpan-test')
+
   const resultsResponse = await app.fetch(
     await fixture.signedRequest(
-      `/api/release-candidates?mediaKey=${encodeURIComponent(media.items[0].mediaKey)}&query=Fight%20Club%201999`,
-      ['release-candidates:read'],
+      `/api/torrents?mediaKey=${encodeURIComponent(media.items[0].mediaKey)}&q=Fight%20Club%201999`,
+      ['torrents:read'],
     ),
     fixture.env,
   )
   expect(resultsResponse.status).toBe(200)
   const results = (await resultsResponse.json()) as {
+    pagination: { snapshotId: string; totalItems: number }
     items: Array<{
       id: string
       title: string
@@ -302,7 +384,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
     }>
   }
   expect(results.items[0]).toMatchObject({
-    id: expect.stringMatching(/^release-candidate:[0-9a-f]{64}$/),
+    id: expect.stringMatching(/^torrent:[0-9a-f]{64}$/),
     title: 'Fight.Club.1999.1080p.BluRay.x265.DTS',
     quality: {
       resolution: '1080p',
@@ -313,7 +395,7 @@ it('completes the least-privilege Agent media, release-candidate, and download f
       warnings: [],
     },
     availability: { tier: 'high' },
-    links: { self: expect.stringContaining('/api/release-candidates/release-candidate%3A') },
+    links: { self: expect.stringContaining('/api/torrents/torrent%3A') },
   })
   expect(results.items[0]).not.toHaveProperty('resourceRef')
   expect(results.items[0]).not.toHaveProperty('resourceRefExpiresAt')
@@ -321,11 +403,41 @@ it('completes the least-privilege Agent media, release-candidate, and download f
   expect(results.items[0]).not.toHaveProperty('downloadUrl')
   expect(results.items[0]).not.toHaveProperty('infoHash')
   expect(results.items[0]).not.toHaveProperty('seeders')
+  expect(results.pagination.totalItems).toBe(1)
+  const searchesAfterFirstPage = indexerSearchRequests
+  const cachedQuery = `/api/torrents?q=Fight%20Club%201999&snapshotId=${results.pagination.snapshotId}&page=2`
+  const cachedPage = await app.fetch(await fixture.signedRequest(cachedQuery, ['torrents:read']), fixture.env)
+  expect(cachedPage.status).toBe(200)
+  expect(await cachedPage.json()).toMatchObject({
+    items: [],
+    pagination: { page: 2, totalItems: 1, snapshotId: results.pagination.snapshotId },
+  })
+  expect(indexerSearchRequests).toBe(searchesAfterFirstPage)
+  expect(
+    (
+      await app.fetch(
+        await fixture.signedRequest(cachedQuery.replace('Fight%20Club%201999', 'Other'), ['torrents:read']),
+        fixture.env,
+      )
+    ).status,
+  ).toBe(409)
+  expect(
+    (await app.fetch(await fixture.signedRequest(cachedQuery, ['torrents:read'], 'another-user'), fixture.env)).status,
+  ).toBe(404)
+  expect(
+    (
+      await app.fetch(
+        await fixture.signedRequest('/api/torrents?q=Fight&searchType=search', ['torrents:read']),
+        fixture.env,
+      )
+    ).status,
+  ).toBe(422)
+  expect(indexerSearchRequests).toBe(searchesAfterFirstPage)
 
   const fullResultsResponse = await app.fetch(
     await fixture.signedRequest(
-      `/api/release-candidates?mediaKey=${encodeURIComponent(media.items[0].mediaKey)}&query=Fight%20Club%201999&view=full`,
-      ['release-candidates:read'],
+      `/api/torrents?mediaKey=${encodeURIComponent(media.items[0].mediaKey)}&q=Fight%20Club%201999&view=full`,
+      ['torrents:read'],
     ),
     fixture.env,
   )
@@ -345,16 +457,65 @@ it('completes the least-privilege Agent media, release-candidate, and download f
   const candidateUrl = new URL(results.items[0].links.self)
   const searchRequestsBeforeCandidateGet = indexerSearchRequests
   const candidateResponse = await app.fetch(
-    await fixture.signedRequest(`${candidateUrl.pathname}${candidateUrl.search}`, ['release-candidates:read']),
+    await fixture.signedRequest(`${candidateUrl.pathname}?mediaKey=${encodeURIComponent(media.items[0].mediaKey)}`, [
+      'torrents:read',
+    ]),
     fixture.env,
   )
   expect(candidateResponse.status).toBe(200)
   expect(indexerSearchRequests).toBe(searchRequestsBeforeCandidateGet)
   const candidate = (await candidateResponse.json()) as { resourceRef: string; resourceRefExpiresAt: string }
   expect(candidate).toMatchObject({
-    resourceRef: expect.stringMatching(/^release-ref:v1:/),
+    resourceRef: expect.stringMatching(/^torrent-ref:v1:/),
     resourceRefExpiresAt: expect.any(String),
   })
+
+  const localResponse = await app.fetch(
+    await fixture.signedRequest('/api/downloads', ['downloads:write'], 'different-user', 'POST', {
+      resourceRef: candidate.resourceRef,
+    }),
+    fixture.env,
+  )
+  expect(localResponse.status).toBe(201)
+  expect(await localResponse.json()).toMatchObject({
+    kind: 'magnet',
+    href: 'magnet:?xt=urn:btih:0123456789abcdef',
+  })
+  expect(submitted).toEqual([])
+  const insufficientLocal = await app.fetch(
+    await fixture.signedRequest('/api/downloads', ['downloads:read'], 'different-user', 'POST', {
+      resourceRef: candidate.resourceRef,
+    }),
+    fixture.env,
+  )
+  expect(insufficientLocal.status).toBe(403)
+
+  const torrentReference = await issueTorrentResourceRef(
+    fixture.env.DOWNLOAD_RESOURCE_REF_SECRET,
+    agentUserId,
+    'tmdb:movie:550',
+    {
+      title: 'Local torrent',
+      downloadUrl: 'https://tracker.test/file',
+      magnetUrl: null,
+      downloadTarget: null,
+    } as IndexerSearchItem,
+  )
+  const torrentResponse = await app.fetch(
+    await fixture.signedRequest('/api/downloads', ['downloads:write'], 'different-user', 'POST', {
+      resourceRef: torrentReference.resourceRef,
+    }),
+    fixture.env,
+  )
+  expect(torrentResponse.status).toBe(201)
+  const torrentSource = (await torrentResponse.json()) as LocalDownload
+  expect(JSON.stringify(torrentSource)).not.toContain('tracker.test')
+  const content = await app.fetch(new Request(torrentSource.href), fixture.env)
+  expect(content.status).toBe(200)
+  expect(content.headers.has('location')).toBe(false)
+  expect(content.headers.has('set-cookie')).toBe(false)
+  expect(await content.text()).toBe('d4:infod4:name4:testee')
+  expect(submitted).toEqual([])
 
   const taskResponse = await app.fetch(
     await fixture.signedRequest(
@@ -443,7 +604,7 @@ it('intersects Agent scope with a disabled local identity projection', async () 
     .run()
 
   const response = await app.fetch(
-    await fixture.signedRequest('/api/media?query=test', ['media:read'], 'disabled-subject'),
+    await fixture.signedRequest('/api/catalog/items?q=test', ['media:read'], 'disabled-subject'),
     fixture.env,
   )
   expect(response.status).toBe(403)

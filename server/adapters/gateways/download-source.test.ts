@@ -7,6 +7,14 @@ afterEach(() => {
 })
 
 describe('download source helpers', () => {
+  it('accepts a Prowlarr response containing the torrent itself', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('d4:infodee', { headers: { 'content-type': 'application/x-bittorrent' } })),
+    )
+    const uri = 'https://prowlarr.test/1/download?link=encoded&apikey=private'
+    await expect(resolveProwlarrProxyDownloadUrl(uri)).resolves.toEqual({ uri, sourceType: 'torrent_url' })
+  })
   it('detects sanitized Prowlarr proxy download urls', () => {
     expect(isProwlarrProxyDownloadUrl('https://prowlarr.local/11/download?link=encoded&file=release.torrent')).toBe(
       true,

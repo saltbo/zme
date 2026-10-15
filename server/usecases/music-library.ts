@@ -81,6 +81,12 @@ export async function setFavoriteSong(
   return getMusicCollectionWithSubscription(deps, userId, collection.id)
 }
 
+export async function removeFavoriteSong(deps: Deps, userId: string, mediaKey: string): Promise<void> {
+  const collection = await getFavoriteSongs(deps, userId)
+  const track = collection?.tracks.find((item) => item.mediaKey === mediaKey)
+  if (track) await setFavoriteSong(deps, userId, track, false)
+}
+
 export async function saveMusicAlbum(deps: Deps, userId: string, mediaKey: string): Promise<MusicCollectionDetails> {
   const album = await deps.musicProvider.details(mediaKey)
   const now = new Date().toISOString()

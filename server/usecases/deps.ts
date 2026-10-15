@@ -12,6 +12,7 @@ import type {
   DownloadersRepo,
   DownloadReconciliationQueue,
   DownloadRecordsRepo,
+  DownloadSourceContentGateway,
   DownloadsRepo,
   DownloadTaskGateway,
   IndexerGateway,
@@ -25,10 +26,12 @@ import type {
   MusicConnectorModule,
   MusicDownloadKeysRepo,
   MusicProvider,
-  ReleaseCandidateSnapshotsRepo,
+  TorrentSnapshotsRepo,
 } from './ports'
 
 export interface Deps {
+  connectorLoginQueue: { enqueue(input: { userId: string; attemptId: string }, delaySeconds?: number): Promise<void> }
+  downloadSourceContent: DownloadSourceContentGateway
   identityRepo: IdentityRepo
   oidcClient: OidcClient
   dpopTokenValidator: DpopTokenValidator
@@ -47,7 +50,7 @@ export interface Deps {
   downloadDispatchQueue: DownloadDispatchQueue
   downloadersRepo: DownloadersRepo
   indexersRepo: IndexersRepo
-  releaseCandidateSnapshotsRepo: ReleaseCandidateSnapshotsRepo
+  torrentSnapshotsRepo: TorrentSnapshotsRepo
   mediaSourcesRepo: MediaSourcesRepo
   downloaderGateways: Record<DownloaderKind, DownloaderGateway>
   downloadTaskGateways: Partial<Record<DownloaderKind, DownloadTaskGateway>>

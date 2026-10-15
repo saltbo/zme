@@ -100,9 +100,16 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
     if (!selectedId) return
     setSaving(true)
     try {
-      const payload = await updateDownloader(selectedId, toDownloaderInput(editForm))
+      const payload = await updateDownloader(selectedId, {
+        ...toDownloaderInput(editForm),
+        description: editForm.description.trim() || null,
+        options: {
+          [{ zpan: 'targetFolder', qbittorrent: 'savePath', transmission: 'downloadDir', aria2: 'dir' }[editForm.kind]]:
+            editForm.option || null,
+        },
+      })
       queryClient.setQueryData<DownloaderSummary[]>(queryKeys.downloaders, (current = []) =>
-        current.map((item) => (item.id === payload.item.id ? payload.item : item)),
+        current.map((item) => (item.id === payload.id ? payload : item)),
       )
       setEditOpen(false)
       toast.success(t('downloaderUpdated'))
@@ -137,9 +144,9 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
           item.id === id
             ? {
                 ...item,
-                healthStatus: payload.item.status,
-                healthMessage: payload.item.message,
-                healthCheckedAt: payload.item.checkedAt,
+                healthStatus: payload.status,
+                healthMessage: payload.message,
+                healthCheckedAt: payload.checkedAt,
               }
             : item,
         ),
@@ -159,7 +166,7 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
     setEditForm(fromSummary(item))
     try {
       const payload = await getDownloader(item.id)
-      setEditForm(fromDetails(payload.item))
+      setEditForm(fromDetails(payload))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('downloadersLoadFailed'))
     } finally {
@@ -202,7 +209,9 @@ export function DownloadersPanel({ framed = false }: { framed?: boolean }) {
         <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>{t('editDownloader')}</SheetTitle>
-            <SheetDescription>{t('editDownloaderDescription')}</SheetDescription>
+            <SheetDescription>
+              {t('editDownloaderDescription')} {t('storedCredentialsHint')}
+            </SheetDescription>
           </SheetHeader>
           {editing ? (
             <div className="flex flex-col gap-3 p-4">
@@ -583,10 +592,10 @@ function fromDetails(item: DownloaderDetails): DownloaderFormState {
     description: item.description || '',
     kind: item.kind,
     endpoint: item.endpoint,
-    username: item.credentials.username || '',
-    password: item.credentials.password || '',
-    apiKey: item.credentials.apiKey || '',
-    secret: item.credentials.secret || '',
+    username: '',
+    password: '',
+    apiKey: '',
+    secret: '',
     option:
       item.options.targetFolder ||
       item.options.savePath ||

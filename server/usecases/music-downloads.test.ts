@@ -10,7 +10,12 @@ import {
 } from '@server/usecases/ports'
 import type { CreateDownloadInput } from '@shared/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { dispatchMusicDownloadRecord, resolveMusicTrackDownload, submitMusicTrackDownload } from './music-downloads'
+import {
+  dispatchMusicDownloadRecord,
+  resolveLocalMusicDownload,
+  resolveMusicTrackDownload,
+  submitMusicTrackDownload,
+} from './music-downloads'
 
 const secret = 'music-download-test-secret-at-least-32-characters'
 const env = {
@@ -135,6 +140,36 @@ function musicConnectors(resolve: (...args: never[]) => unknown) {
 }
 
 describe('music downloads', () => {
+  it('rejects unsupported local providers and disconnected connectors before resolving audio', async () => {
+    const deps = {
+      musicCollectionsRepo: { getTrackByMediaKey: async () => track, getLibraryTrack: async () => track },
+      musicConnectors: new Map(),
+      connectorsRepo: { findByKind: async () => null },
+    } as unknown as Deps
+    await expect(resolveLocalMusicDownload(deps, env, 'user-1', track.mediaKey)).rejects.toMatchObject({ status: 400 })
+    deps.musicConnectors = musicConnectors(vi.fn()) as unknown as Deps['musicConnectors']
+    await expect(resolveLocalMusicDownload(deps, env, 'user-1', track.mediaKey)).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('records local source failures instead of returning a successful handoff', async () => {
+    const availability = vi.fn(async () => undefined)
+    const encrypted = await encryptConnectorCredentials(secret, ['MUSIC_U=session-value'])
+    const deps = {
+      musicCollectionsRepo: {
+        getTrackByMediaKey: async () => track,
+        getLibraryTrack: async () => track,
+        setTrackAvailabilities: availability,
+      },
+      connectorsRepo: { findByKind: async () => ({ ...connector, credentialsEncrypted: encrypted }) },
+      musicConnectors: musicConnectors(async () => {
+        throw new Error('Provider unavailable')
+      }),
+    } as unknown as Deps
+    await expect(resolveLocalMusicDownload(deps, env, 'user-1', track.mediaKey)).rejects.toMatchObject({ status: 502 })
+    expect(availability).toHaveBeenCalledWith('user-1', connector.id, [
+      expect.objectContaining({ trackId: track.id, status: 'unknown', reason: 'provider_error' }),
+    ])
+  })
   it('creates an independent dispatch for each canonical music download', async () => {
     const records: DownloadRecordRecord[] = []
     const wake = vi.fn(async () => undefined)

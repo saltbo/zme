@@ -20,10 +20,11 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
-  continueConnectorLogin,
+  getConnectorLoginAttempt,
   listConnectorPlaylists,
   saveConnectorPlaylistSelection,
   startConnectorLogin,
+  submitConnectorChallengeResponse,
 } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -70,7 +71,7 @@ export function NeteaseConnectorDialog({
   const smsLogin = useMutation({
     mutationFn: () => {
       if (!attemptId) throw new Error('Connector login attempt is missing.')
-      return continueConnectorLogin(attemptId, 'submit_code', { code: smsCode.trim() })
+      return submitConnectorChallengeResponse(attemptId, { code: smsCode.trim() })
     },
     onSuccess: async (result) => {
       if (!result.connector) {
@@ -83,7 +84,7 @@ export function NeteaseConnectorDialog({
   })
   const login = useQuery({
     queryKey: ['connectors', 'netease-login', attemptId],
-    queryFn: () => continueConnectorLogin(attemptId as string, 'poll'),
+    queryFn: () => getConnectorLoginAttempt(attemptId as string),
     enabled: Boolean(open && attemptId && challenge?.type === 'qr'),
     refetchInterval: (query) => (query.state.data?.attempt.status === 'pending' ? 2000 : false),
   })

@@ -2,12 +2,12 @@ import { parseTmdbMediaKey } from '@shared/media-key'
 import type { IndexerSearchItem } from '@shared/types'
 import { EncryptJWT, jwtDecrypt } from 'jose'
 
-const releaseRefPrefix = 'release-ref:v1:'
+const torrentRefPrefix = 'torrent-ref:v1:'
 const musicTrackRefPrefix = 'music-track:'
-const releaseRefLifetimeSeconds = 60 * 60
+const torrentRefLifetimeSeconds = 60 * 60
 
-export interface ResolvedReleaseRef {
-  kind: 'release'
+export interface ResolvedTorrentRef {
+  kind: 'torrent'
   sourceType: 'magnet' | 'torrent_url'
   uri: string
   title: string
@@ -16,10 +16,10 @@ export interface ResolvedReleaseRef {
   tags: string[]
 }
 
-interface ReleaseRefClaims {
-  kind: 'release'
+interface TorrentRefClaims {
+  kind: 'torrent'
   userId: string
-  sourceType: ResolvedReleaseRef['sourceType']
+  sourceType: ResolvedTorrentRef['sourceType']
   uri: string
   title: string
   mediaKey: string
@@ -34,23 +34,23 @@ export class InvalidDownloadResourceRefError extends Error {
   }
 }
 
-export async function issueReleaseResourceRef(
+export async function issueTorrentResourceRef(
   secret: string,
   userId: string,
   mediaKey: string,
   item: IndexerSearchItem,
   now = new Date(),
 ): Promise<{
-  candidateId: string
-  sourceType: ResolvedReleaseRef['sourceType']
+  torrentId: string
+  sourceType: ResolvedTorrentRef['sourceType']
   resourceRef: string
   resourceRefExpiresAt: string
 }> {
-  const source = releaseSource(item)
-  if (!source) throw new InvalidDownloadResourceRefError('The release candidate has no downloadable source.')
-  const expiresAt = new Date(now.getTime() + releaseRefLifetimeSeconds * 1000)
-  const claims: ReleaseRefClaims = {
-    kind: 'release',
+  const source = torrentSource(item)
+  if (!source) throw new InvalidDownloadResourceRefError('The torrent has no downloadable source.')
+  const expiresAt = new Date(now.getTime() + torrentRefLifetimeSeconds * 1000)
+  const claims: TorrentRefClaims = {
+    kind: 'torrent',
     userId,
     ...source,
     title: item.title,
@@ -59,30 +59,30 @@ export async function issueReleaseResourceRef(
     tags: releaseTags(mediaKey, item),
   }
   const token = await new EncryptJWT({ ...claims })
-    .setProtectedHeader({ alg: 'dir', enc: 'A256GCM', typ: 'zme-release-ref+jwt' })
+    .setProtectedHeader({ alg: 'dir', enc: 'A256GCM', typ: 'zme-torrent-ref+jwt' })
     .setIssuedAt(Math.floor(now.getTime() / 1000))
     .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
     .encrypt(await encryptionKey(secret))
   return {
-    candidateId: await releaseCandidateId(secret, userId, mediaKey, item, source.uri),
+    torrentId: await torrentId(secret, userId, item, source.uri),
     sourceType: source.sourceType,
-    resourceRef: `${releaseRefPrefix}${token}`,
+    resourceRef: `${torrentRefPrefix}${token}`,
     resourceRefExpiresAt: expiresAt.toISOString(),
   }
 }
 
-export async function resolveReleaseResourceRef(
+export async function resolveTorrentResourceRef(
   secret: string,
   userId: string,
   resourceRef: string,
-): Promise<ResolvedReleaseRef> {
-  if (!resourceRef.startsWith(releaseRefPrefix)) throw new InvalidDownloadResourceRefError()
+): Promise<ResolvedTorrentRef> {
+  if (!resourceRef.startsWith(torrentRefPrefix)) throw new InvalidDownloadResourceRefError()
   try {
     const { payload, protectedHeader } = await jwtDecrypt(
-      resourceRef.slice(releaseRefPrefix.length),
+      resourceRef.slice(torrentRefPrefix.length),
       await encryptionKey(secret),
     )
-    if (protectedHeader.typ !== 'zme-release-ref+jwt' || payload.kind !== 'release' || payload.userId !== userId) {
+    if (protectedHeader.typ !== 'zme-torrent-ref+jwt' || payload.kind !== 'torrent' || payload.userId !== userId) {
       throw new InvalidDownloadResourceRefError()
     }
     if (
@@ -97,8 +97,8 @@ export async function resolveReleaseResourceRef(
       throw new InvalidDownloadResourceRefError()
     }
     return {
-      kind: 'release',
-      sourceType: payload.sourceType as ResolvedReleaseRef['sourceType'],
+      kind: 'torrent',
+      sourceType: payload.sourceType as ResolvedTorrentRef['sourceType'],
       uri: payload.uri,
       title: payload.title,
       mediaKey: payload.mediaKey,
@@ -120,7 +120,7 @@ export function parseMusicTrackResourceRef(resourceRef: string): string | null {
   return resourceRef.slice(musicTrackRefPrefix.length).trim() || null
 }
 
-function releaseSource(item: IndexerSearchItem) {
+function torrentSource(item: IndexerSearchItem) {
   if (item.magnetUrl) return { sourceType: 'magnet' as const, uri: item.magnetUrl }
   if (item.downloadUrl) return { sourceType: 'torrent_url' as const, uri: item.downloadUrl }
   return null
@@ -130,7 +130,8 @@ function releaseCategory(mediaKey: string, item: IndexerSearchItem): string {
   if (item.downloadTarget) return `zme:${item.downloadTarget}`
   if (mediaKey.startsWith('tmdb:tv:')) return 'zme:series'
   if (mediaKey.startsWith('tmdb:movie:')) return 'zme:movie'
-  throw new InvalidDownloadResourceRefError('The release candidate media type is unsupported.')
+  if (!mediaKey) return 'zme:other'
+  throw new InvalidDownloadResourceRefError('The torrent media type is unsupported.')
 }
 
 function releaseTags(mediaKey: string, item: IndexerSearchItem): string[] {
@@ -156,13 +157,7 @@ async function encryptionKey(secret: string): Promise<Uint8Array<ArrayBuffer>> {
   return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret)))
 }
 
-async function releaseCandidateId(
-  secret: string,
-  userId: string,
-  mediaKey: string,
-  item: IndexerSearchItem,
-  sourceUri: string,
-): Promise<string> {
+async function torrentId(secret: string, userId: string, item: IndexerSearchItem, sourceUri: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
     await encryptionKey(secret),
@@ -172,13 +167,9 @@ async function releaseCandidateId(
   )
   const sourceIdentity =
     item.infoHash?.trim().toLowerCase() || getMagnetInfoHash(item.magnetUrl) || item.id || sourceUri
-  const signature = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(`${userId}\n${mediaKey}\n${sourceIdentity}`),
-  )
+  const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${userId}\n${sourceIdentity}`))
   const value = Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')
-  return `release-candidate:${value}`
+  return `torrent:${value}`
 }
 
 function getMagnetInfoHash(value: string | null): string | null {

@@ -1,10 +1,10 @@
 import { readConfig } from '@server/config'
 import type { Env } from '@server/env'
-import { parseMusicTrackResourceRef, resolveReleaseResourceRef } from '@server/security/download-resource-ref'
+import { parseMusicTrackResourceRef, resolveTorrentResourceRef } from '@server/security/download-resource-ref'
 import { DEFAULT_MUSIC_DOWNLOAD_QUALITY, getZmeDownloadResourceDirectory } from '@shared/download-metadata'
 import type { DownloadTaskSummary } from '@shared/types'
 import type { Deps } from './deps'
-import { resolveDownloadInput, submitDownload } from './downloaders'
+import { resolveDownloadSource, submitDownload } from './downloaders'
 import { hashSecret } from './identity'
 import { submitMusicTrackDownload } from './music-downloads'
 import {
@@ -45,13 +45,14 @@ export async function createDownload(
   const existing = await deps.downloadsRepo.findByIdempotency(userId, idempotencyKey)
   if (existing) {
     if (existing.requestHash !== requestHash) throw new IdempotencyConflictError()
+    if (existing.status === 'submissionUnknown') return recoverDownloadSubmission(deps, existing)
     return existing
   }
   const downloader = await deps.downloadersRepo.getEnabled(userId, input.downloaderId)
   if (!downloader) throw new ResourceNotFoundError('Downloader not found.')
   const now = new Date().toISOString()
-  const release = input.resourceRef.startsWith('release-ref:')
-    ? await resolveReleaseResourceRef(
+  const release = input.resourceRef.startsWith('torrent-ref:')
+    ? await resolveTorrentResourceRef(
         requiredResourceRefSecret(readConfig(env).downloadResourceRefSecret),
         userId,
         input.resourceRef,
@@ -76,13 +77,12 @@ export async function createDownload(
         category: 'zme:music',
         tags: downloadTags([]),
       }
-  const resolvedInput = await resolveDownloadInput(deps, { downloaderId: input.downloaderId, ...unresolvedSpec })
+  const resolvedInput = { ...unresolvedSpec, ...(await resolveDownloadSource(deps, unresolvedSpec)) }
   const spec = {
     sourceType: resolvedInput.sourceType,
     uri: resolvedInput.uri,
     title: resolvedInput.title,
     category: resolvedInput.category,
-    targetSubdirectory: resolvedInput.targetSubdirectory,
     tags: resolvedInput.tags,
     targetFolder: downloadTargetFolder(downloader.config.options.targetFolder, resolvedInput.category),
   }
@@ -154,16 +154,21 @@ export async function createDownload(
       })) ?? record
     )
   } catch (error) {
-    if (error instanceof DownloadSubmissionUnknownError) {
-      throw new ResourceUpstreamError('Download submission outcome is unknown; retry with the same Idempotency-Key.')
+    if (
+      error instanceof DownloadSubmissionUnknownError ||
+      (release && !(error instanceof DownloadSubmissionRejectedError))
+    ) {
+      const unknown = await markSubmissionUnknown(deps, record, error)
+      await deps.downloadReconciliationQueue?.enqueue({ userId, downloadId: record.id }, 30)
+      return unknown
     }
-    const message = error instanceof Error ? error.message : 'Download submission failed.'
+    const message = 'The downloader rejected the download submission.'
     await deps.downloadsRepo.update(userId, record.id, record.updatedAt, {
       status: 'failed',
-      error: message,
+      error: error instanceof Error ? error.message : message,
       completedAt: new Date().toISOString(),
     })
-    if (error instanceof DownloadSubmissionRejectedError) throw new ResourceConflictError(message)
+    if (error instanceof DownloadSubmissionRejectedError) throw new ResourceConflictError(message, { cause: error })
     throw error
   }
 }
@@ -180,8 +185,17 @@ export async function processDownloadReconciliation(
   deps: Deps,
   message: DownloadReconciliationMessage,
 ): Promise<number | null> {
-  const current = await deps.downloadsRepo.get(message.userId, message.downloadId)
-  if (!current || isTerminal(current.status) || !current.externalTaskId) return null
+  let current = await deps.downloadsRepo.get(message.userId, message.downloadId)
+  if (!current || isTerminal(current.status)) return null
+  if (
+    !current.externalTaskId &&
+    current.resourceKind === 'release' &&
+    ['submitting', 'submissionUnknown'].includes(current.status)
+  ) {
+    current = await recoverDownloadSubmission(deps, current)
+    if (!current.externalTaskId) return null
+  }
+  if (!current.externalTaskId) return null
   const downloader = await deps.downloadersRepo.get(message.userId, current.downloaderId)
   if (downloader?.kind !== 'zpan') return null
   const gateway = deps.downloadTaskGateways.zpan
@@ -240,6 +254,71 @@ export async function processDownloadReconciliation(
   }
 }
 
+async function markSubmissionUnknown(deps: Deps, record: DownloadRecord, cause?: unknown): Promise<DownloadRecord> {
+  const updated = await deps.downloadsRepo.update(record.userId, record.id, record.updatedAt, {
+    status: 'submissionUnknown',
+    error:
+      cause instanceof Error
+        ? cause.message
+        : 'The downloader may have accepted this task; its submission result is not yet confirmed.',
+  })
+  return updated ?? (await deps.downloadsRepo.get(record.userId, record.id)) ?? record
+}
+
+async function recoverDownloadSubmission(deps: Deps, record: DownloadRecord): Promise<DownloadRecord> {
+  const downloader = await deps.downloadersRepo.getEnabled(record.userId, record.downloaderId)
+  if (!downloader || !deps.downloaderGateways[downloader.kind].supportsIdempotentSubmission) {
+    return record.status === 'submitting' ? markSubmissionUnknown(deps, record) : record
+  }
+  const laneKey = `download-submission:${record.id}`
+  const owner = crypto.randomUUID()
+  const now = new Date()
+  const lease = await deps.dispatchLanesRepo.acquire(
+    laneKey,
+    owner,
+    now.toISOString(),
+    new Date(now.getTime() + 30_000).toISOString(),
+  )
+  if (!lease.acquired) return record
+  try {
+    const current = await deps.downloadsRepo.get(record.userId, record.id)
+    if (!current || current.externalTaskId || !['submitting', 'submissionUnknown'].includes(current.status))
+      return current ?? record
+    try {
+      const submitted = await submitDownload(
+        deps,
+        current.userId,
+        { downloaderId: current.downloaderId, ...current.spec },
+        current.id,
+      )
+      const updated = await deps.downloadsRepo.update(current.userId, current.id, current.updatedAt, {
+        status: 'submitted',
+        externalTaskId: submitted.externalTaskId ?? null,
+        error: null,
+      })
+      if (updated?.externalTaskId)
+        await deps.downloadReconciliationQueue?.enqueue({ userId: updated.userId, downloadId: updated.id }, 5)
+      return updated ?? current
+    } catch (error) {
+      if (error instanceof DownloadSubmissionRejectedError) {
+        return (
+          (await deps.downloadsRepo.update(current.userId, current.id, current.updatedAt, {
+            status: 'failed',
+            error: error.message,
+            completedAt: new Date().toISOString(),
+          })) ?? current
+        )
+      }
+      const unknown = await markSubmissionUnknown(deps, current, error)
+      await deps.downloadReconciliationQueue?.enqueue({ userId: current.userId, downloadId: current.id }, 60)
+      return unknown
+    }
+  } finally {
+    const releasedAt = new Date().toISOString()
+    await deps.dispatchLanesRepo.release(laneKey, owner, releasedAt, releasedAt)
+  }
+}
+
 export async function recoverDownloadReconciliations(deps: Deps): Promise<void> {
   for (const download of await deps.downloadsRepo.listReconciliationCandidates(100)) {
     await deps.downloadReconciliationQueue?.enqueue({ userId: download.userId, downloadId: download.id })
@@ -275,8 +354,9 @@ export async function deleteDownload(deps: Deps, userId: string, id: string): Pr
   if (!['completed', 'failed', 'canceled'].includes(current.status)) {
     throw new DownloadNotTerminalError('Only a terminal download can be deleted.')
   }
-  const { gateway, downloader } = await managedGateway(deps, userId, current)
-  if (current.externalTaskId) {
+  const downloader = await deps.downloadersRepo.get(userId, current.downloaderId)
+  const gateway = downloader ? deps.downloadTaskGateways[downloader.kind] : undefined
+  if (current.externalTaskId && downloader?.kind === 'zpan' && gateway) {
     if (!gateway.delete) throw new DownloadManagementUnsupportedError('Download management is unsupported.')
     await gateway.delete(downloader.config, current.externalTaskId)
   }

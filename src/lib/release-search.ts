@@ -8,7 +8,7 @@ import {
   scoreResourceResults,
   uniqueReleases,
 } from '@shared/indexer-search'
-import type { DownloadSearchTarget, ReleaseCandidateFull } from '@shared/types'
+import type { DownloadSearchTarget, TorrentFull } from '@shared/types'
 import { searchIndexerOnce } from '@/lib/api'
 
 export interface ReleaseSearchProgress {
@@ -30,7 +30,7 @@ export interface ReleaseSearchStepProgress {
 export type ReleaseSearchStepKind = ReleaseTitleSearchKind | 'targeted' | 'fallback'
 
 export interface ReleaseSearchOutcome {
-  items: ReleaseCandidateFull[]
+  items: TorrentFull[]
   stoppedEarly: boolean
 }
 
@@ -38,7 +38,7 @@ export interface MediaReleaseSearchOptions {
   exhaustive?: boolean
 }
 
-export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: ReleaseCandidateFull[]) => void
+export type ReleaseSearchProgressHandler = (progress: ReleaseSearchProgress, results: TorrentFull[]) => void
 
 interface SearchTask {
   mediaKey?: string
@@ -59,8 +59,8 @@ export async function searchMediaReleasesInSteps(
   options: MediaReleaseSearchOptions = {},
 ): Promise<ReleaseSearchOutcome> {
   const searches = buildTitleSearches(input)
-  const collected: ReleaseCandidateFull[] = []
-  const getResults = (items: ReleaseCandidateFull[]) => uniqueReleases(filterExactMediaMatches(items, input))
+  const collected: TorrentFull[] = []
+  const getResults = (items: TorrentFull[]) => uniqueReleases(filterExactMediaMatches(items, input))
   let firstError: Error | null = null
   const preferred = searches.filter((search) => search.titleKind === 'original' || search.titleKind === 'english')
   const supplemental = searches.filter((search) => search.titleKind !== 'original' && search.titleKind !== 'english')
@@ -102,7 +102,7 @@ export async function searchResourceReleasesInSteps(
   input: ResourceDownloadSearchInput,
   onProgress: ReleaseSearchProgressHandler,
 ): Promise<ReleaseSearchOutcome> {
-  const collected: ReleaseCandidateFull[] = []
+  const collected: TorrentFull[] = []
   const targeted = getResourceSearchQueries(input, true).map((search) => ({
     ...search,
     mediaKey: input.mediaKey,
@@ -146,9 +146,9 @@ export async function searchResourceReleasesInSteps(
 async function runSearches(
   searches: SearchTask[],
   phase: ReleaseSearchProgress['phase'],
-  collected: ReleaseCandidateFull[],
+  collected: TorrentFull[],
   onProgress: ReleaseSearchProgressHandler,
-  getResults: (items: ReleaseCandidateFull[]) => ReleaseCandidateFull[],
+  getResults: (items: TorrentFull[]) => TorrentFull[],
   concurrency: number,
 ): Promise<Error | null> {
   let firstError: Error | null = null

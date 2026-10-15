@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   deleteConnector,
   enqueueConnectorSync,
+  getConnectorPlaylistSelection,
   getConnectorSyncJob,
   processConnectorSyncJob,
   recoverQueuedConnectorSyncJobs,
@@ -14,7 +15,13 @@ import {
   updateConnector,
 } from './connectors'
 import type { Deps } from './deps'
-import type { ConnectorRecord, ImportedLibraryEntry, LibraryRecord, MusicTrackRecord } from './ports'
+import type {
+  ConnectorRecord,
+  ConnectorSyncJobRecord,
+  ImportedLibraryEntry,
+  LibraryRecord,
+  MusicTrackRecord,
+} from './ports'
 
 const connectorRecord: ConnectorRecord = {
   id: 'connector-1',
@@ -407,6 +414,70 @@ describe('syncConnector', () => {
 })
 
 describe('saveConnectorPlaylistSelection', () => {
+  it('reads only selected owned playlists and rejects a missing music connector', async () => {
+    const deps = {
+      connectorsRepo: { get: vi.fn(async () => ({ ...connectorRecord, kind: 'netease' })) },
+      musicConnectors: new Map([['netease', neteaseModule()]]),
+      musicCollectionsRepo: {
+        listForConnector: async () => [
+          { id: 'z', libraryAddedAt: 'now' },
+          { id: 'a', libraryAddedAt: 'now' },
+          { id: 'b', libraryAddedAt: null },
+        ],
+      },
+    } as unknown as Deps
+    await expect(getConnectorPlaylistSelection(deps, 'user-1', 'connector-1')).resolves.toEqual({
+      selectedPlaylistIds: ['a', 'z'],
+    })
+    vi.mocked(deps.connectorsRepo.get).mockResolvedValue(null)
+    await expect(getConnectorPlaylistSelection(deps, 'user-1', 'connector-1')).rejects.toThrow(
+      'Music connector was not found',
+    )
+    const unlocked = {
+      ...deps,
+      dispatchLanesRepo: { acquire: async () => ({ acquired: true }), release: async () => undefined },
+    } as unknown as Deps
+    await expect(saveConnectorPlaylistSelection(unlocked, 'user-1', 'missing', [])).rejects.toThrow(
+      'Music connector was not found',
+    )
+  })
+  it('reuses an unchanged policy revision and creates a new sync when selection changes back', async () => {
+    let connector = { ...connectorRecord, kind: 'netease' as const }
+    const jobs = new Map<string, ConnectorSyncJobRecord>()
+    const enqueue = vi.fn(async () => undefined)
+    const deps = {
+      connectorsRepo: {
+        get: async () => connector,
+        updateState: async (_user: string, _id: string, input: { settings: Record<string, string> }) => {
+          connector = { ...connector, settings: input.settings }
+          return connector
+        },
+      },
+      musicCollectionsRepo: {
+        listForConnector: async () => [{ id: 'playlist-1' }],
+        setLibrarySelections: async () => undefined,
+      },
+      musicConnectors: new Map([['netease', neteaseModule()]]),
+      connectorSyncJobsRepo: {
+        findByIdempotency: async (_user: string, key: string) => jobs.get(key) ?? null,
+        create: async (job: ConnectorSyncJobRecord) => {
+          jobs.set(job.idempotencyKey, job)
+          return true
+        },
+      },
+      connectorSyncQueue: { enqueue },
+      dispatchLanesRepo: { acquire: async () => ({ acquired: true }), release: async () => undefined },
+    } as unknown as Deps
+    const first = await saveConnectorPlaylistSelection(deps, 'user-1', connector.id, ['playlist-1'])
+    const repeated = await saveConnectorPlaylistSelection(deps, 'user-1', connector.id, ['playlist-1'])
+    expect(repeated.syncJob.id).toBe(first.syncJob.id)
+    expect(jobs.size).toBe(1)
+    await saveConnectorPlaylistSelection(deps, 'user-1', connector.id, [])
+    const restored = await saveConnectorPlaylistSelection(deps, 'user-1', connector.id, ['playlist-1'])
+    expect(restored.syncJob.id).not.toBe(first.syncJob.id)
+    expect(jobs.size).toBe(3)
+  })
+
   it('saves the complete selection once and queues one background sync', async () => {
     const playlist: MusicCollectionSummary = {
       id: 'playlist-1',
@@ -429,6 +500,7 @@ describe('saveConnectorPlaylistSelection', () => {
     const deps = {
       connectorsRepo: {
         get: async () => ({ ...connectorRecord, kind: 'netease' as const }),
+        updateState: async () => ({ ...connectorRecord, kind: 'netease' as const }),
       },
       musicCollectionsRepo: {
         listForConnector: async () => [playlist],
@@ -441,11 +513,12 @@ describe('saveConnectorPlaylistSelection', () => {
       musicConnectors: new Map([['netease', neteaseModule()]]),
       connectorSyncJobsRepo: { findByIdempotency: async () => null, create: async () => true },
       connectorSyncQueue: { enqueue },
+      dispatchLanesRepo: { acquire: async () => ({ acquired: true }), release: async () => undefined },
     } as never as Deps
 
     await expect(
       saveConnectorPlaylistSelection(deps, 'user-1', 'connector-1', ['playlist-1', 'playlist-1']),
-    ).resolves.toEqual({ selectedPlaylists: 1 })
+    ).resolves.toMatchObject({ selectedPlaylistIds: ['playlist-1'], syncJob: { status: 'queued' } })
     expect(savedSelections).toEqual([['playlist-1']])
     expect(enqueue).toHaveBeenCalledOnce()
     expect(enqueue).toHaveBeenCalledWith({
@@ -464,6 +537,7 @@ describe('saveConnectorPlaylistSelection', () => {
       musicConnectors: new Map([['netease', neteaseModule()]]),
       connectorSyncJobsRepo: { findByIdempotency: async () => null, create: async () => true },
       connectorSyncQueue: { enqueue },
+      dispatchLanesRepo: { acquire: async () => ({ acquired: true }), release: async () => undefined },
     } as never as Deps
 
     await expect(saveConnectorPlaylistSelection(deps, 'user-1', 'connector-1', ['unknown-playlist'])).rejects.toThrow(

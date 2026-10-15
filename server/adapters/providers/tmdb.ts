@@ -1,5 +1,7 @@
 import type { MediaProvider } from '@server/usecases/ports'
+import { ResourceUpstreamError } from '@server/usecases/resource-errors'
 import type {
+  MediaChartPage,
   MediaCredit,
   MediaDetails,
   MediaDiscoverInput,
@@ -198,6 +200,68 @@ const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p'
 const TMDB_WEB_BASE = 'https://www.themoviedb.org'
 const DEFAULT_WATCH_REGION = 'US'
 
+async function readCatalogPage(apiKey: string, url: URL, language: string, kind?: MediaKind): Promise<MediaChartPage> {
+  const [response, movieGenres, tvGenres] = await Promise.all([
+    fetchTmdb(apiKey, url),
+    kind === 'tv' ? Promise.resolve(new Map<number, string>()) : listGenreMap(apiKey, 'movie', language),
+    kind === 'movie' ? Promise.resolve(new Map<number, string>()) : listGenreMap(apiKey, 'tv', language),
+  ])
+  const payload = (await response.json()) as TmdbSearchResponse
+  if (
+    !Number.isInteger(payload.page) ||
+    !Number.isInteger(payload.total_pages) ||
+    !Number.isInteger(payload.total_results) ||
+    (payload.page as number) < 1 ||
+    (payload.total_pages as number) < 0 ||
+    (payload.total_results as number) < 0
+  ) {
+    throw new ResourceUpstreamError('TMDB catalog response is missing pagination metadata.')
+  }
+  const ranked = (payload.results ?? []).flatMap((item, index) => {
+    const type = kind ?? item.media_type
+    if (type !== 'movie' && type !== 'tv') return []
+    const value = toMediaSearchItem({ ...item, media_type: type }, type === 'movie' ? movieGenres : tvGenres)
+    return value ? [{ value, rank: ((payload.page as number) - 1) * 20 + index + 1 }] : []
+  })
+  return {
+    results: ranked.map(({ value }) => value),
+    ranks: ranked.map(({ rank }) => rank),
+    page: payload.page as number,
+    totalPages: payload.total_pages as number,
+    totalResults: payload.total_results as number,
+  }
+}
+
+export function searchCatalogPage(
+  apiKey: string,
+  language: string,
+  input: { query: string; page: number; kind?: MediaKind },
+) {
+  const url = new URL(
+    `${TMDB_API_BASE}/search/${input.kind === 'movie' ? 'movie' : input.kind === 'tv' ? 'tv' : 'multi'}`,
+  )
+  url.searchParams.set('query', input.query)
+  url.searchParams.set('page', String(input.page))
+  url.searchParams.set('language', language)
+  url.searchParams.set('include_adult', 'false')
+  return readCatalogPage(apiKey, url, language, input.kind)
+}
+
+export function readChartPage(
+  apiKey: string,
+  language: string,
+  input: { chart: 'trending' | 'popular'; kind?: MediaKind; period?: 'day' | 'week'; page: number },
+) {
+  const endpoint =
+    input.chart === 'trending'
+      ? `trending/all/${input.period ?? 'day'}`
+      : `${input.kind === 'movie' ? 'movie' : 'tv'}/popular`
+  const url = new URL(`${TMDB_API_BASE}/${endpoint}`)
+  url.searchParams.set('language', language)
+  url.searchParams.set('page', String(input.page))
+  return readCatalogPage(apiKey, url, language, input.kind)
+}
+
 export async function searchMedia(apiKey: string, query: string, language: string): Promise<MediaSearchItem[]> {
   const url = new URL(`${TMDB_API_BASE}/search/multi`)
   url.searchParams.set('query', query)
@@ -279,20 +343,7 @@ export async function discoverMedia(apiKey: string, input: MediaDiscoverInput): 
     url.searchParams.set(input.kind === 'movie' ? 'primary_release_year' : 'first_air_date_year', String(input.year))
   }
 
-  const [response, genres] = await Promise.all([
-    fetchTmdb(apiKey, url),
-    listGenreMap(apiKey, input.kind, input.language),
-  ])
-  const payload = (await response.json()) as TmdbSearchResponse
-
-  return {
-    results: (payload.results ?? [])
-      .map((item) => toMediaSearchItem({ ...item, media_type: input.kind }, genres))
-      .filter((item): item is MediaSearchItem => item !== null),
-    page: payload.page ?? input.page,
-    totalPages: payload.total_pages ?? input.page,
-    totalResults: payload.total_results ?? 0,
-  }
+  return readCatalogPage(apiKey, url, input.language, input.kind)
 }
 
 export async function listMediaGenres(apiKey: string, kind: MediaKind, language: string): Promise<MediaGenre[]> {
@@ -419,10 +470,16 @@ export async function getWatchClickouts(kind: MediaKind, id: number, region: str
 }
 
 async function fetchTmdb(apiKey: string, url: URL, edgeCacheTtl?: number): Promise<Response> {
-  const response = await fetch(url, tmdbRequestOptions(apiKey, edgeCacheTtl))
+  let response: Response
+  try {
+    response = await fetch(url, tmdbRequestOptions(apiKey, edgeCacheTtl))
+  } catch (cause) {
+    throw new ResourceUpstreamError('TMDB request failed.', { cause })
+  }
 
   if (!response.ok) {
-    throw new Error(`TMDB request failed: ${response.status}`)
+    await response.body?.cancel()
+    throw new ResourceUpstreamError(`TMDB request failed: ${response.status}`)
   }
 
   return response
@@ -778,6 +835,8 @@ function formatRuntime(minutes: number): string {
 
 export const tmdbMediaProvider: MediaProvider = {
   search: (source, query) => searchMedia(source.apiKey, query, source.language),
+  searchPage: (source, input) => searchCatalogPage(source.apiKey, source.language, input),
+  chartPage: (source, input) => readChartPage(source.apiKey, source.language, input),
   trending: (source) => getTrendingMedia(source.apiKey, source.language),
   popular: (source, kind) => getPopularMedia(source.apiKey, kind, source.language),
   discover: (source, input) => discoverMedia(source.apiKey, { ...input, language: source.language }),

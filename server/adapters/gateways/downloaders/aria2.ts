@@ -2,6 +2,8 @@ import { type DownloaderGateway, DownloadSubmissionRejectedError } from '@server
 import { assertOk, getTypedDownloadDirectory } from './shared'
 
 export const aria2DownloaderGateway: DownloaderGateway = {
+  // Completed results can be evicted, so a missing GID cannot prove that a task was never accepted.
+  supportsIdempotentSubmission: false,
   supportedSourceTypes: ['http', 'magnet', 'torrent_url'],
   async submit(config, input, idempotencyKey) {
     const params: unknown[] = [[input.uri]]
@@ -15,6 +17,14 @@ export const aria2DownloaderGateway: DownloaderGateway = {
     const response = await rpc(config.endpoint, 'aria2.addUri', params)
     await assertOk(response, 'aria2', true)
     const payload = (await response.json()) as { result?: string; error?: { message?: string } }
+    if (payload.error && options.gid) {
+      const lookupParams: unknown[] = [options.gid, ['gid']]
+      if (config.credentials.secret) lookupParams.unshift(`token:${config.credentials.secret}`)
+      const lookup = await rpc(config.endpoint, 'aria2.tellStatus', lookupParams)
+      await assertOk(lookup, 'aria2', true)
+      const existing = (await lookup.json()) as { result?: { gid?: string } }
+      if (existing.result?.gid === options.gid) return { externalTaskId: options.gid }
+    }
     if (payload.error)
       throw new DownloadSubmissionRejectedError(`aria2 rejected download: ${payload.error.message || 'unknown error'}`)
     return { externalTaskId: payload.result ?? null }

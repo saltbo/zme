@@ -1,9 +1,10 @@
 import { zValidator } from '@hono/zod-validator'
 import {
-  continueConnectorLogin,
+  getConnectorChallengeResponse,
   getConnectorLoginAttempt,
   listConnectorProviders,
   startConnectorLogin,
+  submitConnectorChallengeResponse,
 } from '@server/usecases/connector-auth'
 import {
   ConnectorNotFoundError,
@@ -11,6 +12,7 @@ import {
   ConnectorSyncQueueError,
   deleteConnector,
   enqueueConnectorSync,
+  getConnectorPlaylistSelection,
   getConnectorSyncJob,
   listConnectorPlaylists,
   listConnectors,
@@ -18,7 +20,9 @@ import {
   saveDoubanConnector,
   updateConnector,
 } from '@server/usecases/connectors'
-import type { Hono } from 'hono'
+import { ResourceConflictError, ResourceNotFoundError } from '@server/usecases/resource-errors'
+import type { ConnectorLoginResult } from '@shared/types'
+import type { Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { AppEnv } from './context'
 import { problem, requireMergePatch } from './protocol'
@@ -42,10 +46,11 @@ const connectorLoginStartSchema = z.object({
   input: connectorAuthInputSchema,
 })
 
-const connectorLoginContinueSchema = z.object({
-  challenge: z.string().trim().min(1),
-  input: connectorAuthInputSchema,
-})
+const connectorLoginContinueSchema = z
+  .object({
+    input: connectorAuthInputSchema,
+  })
+  .strict()
 
 const connectorSyncJobSchema = z.object({
   connectorId: z.string().trim().min(1),
@@ -67,32 +72,61 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   routes.post('/connectors', zValidator('json', connectorCreateSchema), async (c) => {
     const item = await saveDoubanConnector(c.get('deps'), c.get('user').id, c.req.valid('json'))
     c.header('Location', `/api/connectors/${item.id}`)
-    return c.json({ item }, 201)
+    return c.json(item, 201)
   })
 
   routes.post('/connector-login-attempts', zValidator('json', connectorLoginStartSchema), async (c) => {
     const result = await startConnectorLogin(c.get('deps'), c.env, c.get('user').id, c.req.valid('json'))
     c.header('Location', `/api/connector-login-attempts/${result.attempt.id}`)
-    return c.json(result, 201)
+    return c.json(loginAttemptRepresentation(c, result), 201)
   })
 
   routes.get('/connector-login-attempts/:id', zValidator('param', idParamsSchema), async (c) => {
-    return c.json(await getConnectorLoginAttempt(c.get('deps'), c.get('user').id, c.req.valid('param').id))
+    return c.json(
+      loginAttemptRepresentation(
+        c,
+        await getConnectorLoginAttempt(c.get('deps'), c.get('user').id, c.req.valid('param').id),
+      ),
+    )
   })
 
   routes.put(
-    '/connector-login-attempts/:id/response',
+    '/connector-login-attempts/:id/challenge-response',
     zValidator('param', idParamsSchema),
     zValidator('json', connectorLoginContinueSchema),
     async (c) => {
-      return c.json(
-        await continueConnectorLogin(c.get('deps'), c.env, c.get('user').id, c.req.valid('param').id, {
-          action: c.req.valid('json').challenge,
-          input: c.req.valid('json').input,
-        }),
-      )
+      try {
+        const result = await submitConnectorChallengeResponse(
+          c.get('deps'),
+          c.env,
+          c.get('user').id,
+          c.req.valid('param').id,
+          c.req.valid('json').input,
+        )
+        const self = new URL(c.req.url).toString()
+        c.header('Location', self)
+        return c.json(
+          { ...result.response, links: { self, attempt: self.replace(/\/challenge-response$/, '') } },
+          result.created ? 201 : 200,
+        )
+      } catch (error) {
+        if (error instanceof ResourceConflictError) return problem(c, 409, 'challenge-response-conflict', error.message)
+        if (error instanceof ResourceNotFoundError) return problem(c, 404, 'not-found', error.message)
+        throw error
+      }
     },
   )
+
+  routes.get('/connector-login-attempts/:id/challenge-response', zValidator('param', idParamsSchema), async (c) => {
+    try {
+      const response = await getConnectorChallengeResponse(c.get('deps'), c.get('user').id, c.req.valid('param').id)
+      const self = new URL(c.req.url).toString()
+      return c.json({ ...response, links: { self, attempt: self.replace(/\/challenge-response$/, '') } })
+    } catch (error) {
+      if (error instanceof ResourceNotFoundError) return problem(c, 404, 'not-found', error.message)
+      throw error
+    }
+  })
 
   routes.patch(
     '/connectors/:id',
@@ -103,7 +137,7 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
       if (unsupported) return unsupported
       const item = await updateConnector(c.get('deps'), c.get('user').id, c.req.valid('param').id, c.req.valid('json'))
       if (!item) return c.json({ error: 'Connector not found.' }, 404)
-      return c.json({ item })
+      return c.json(item)
     },
   )
 
@@ -120,7 +154,7 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
     try {
       const job = await enqueueConnectorSync(c.get('deps'), c.get('user').id, c.req.valid('json').connectorId, key)
       c.header('Location', `/api/connector-sync-jobs/${job.id}`)
-      return c.json({ job }, 201)
+      return c.json(job, 201)
     } catch (error) {
       if (error instanceof ConnectorNotFoundError) return problem(c, 404, 'connector-not-found', 'Connector not found')
       if (error instanceof ConnectorSyncIdempotencyConflictError)
@@ -134,7 +168,7 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   routes.get('/connector-sync-jobs/:id', zValidator('param', idParamsSchema), async (c) => {
     const job = await getConnectorSyncJob(c.get('deps'), c.get('user').id, c.req.valid('param').id)
     if (!job) return problem(c, 404, 'connector-sync-job-not-found', 'Connector sync job not found')
-    return c.json({ job })
+    return c.json(job)
   })
 
   routes.get('/connectors/:id/playlists', zValidator('param', idParamsSchema), async (c) => {
@@ -143,7 +177,7 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
   })
 
   routes.put(
-    '/connectors/:id/playlists',
+    '/connectors/:id/playlist-selection',
     zValidator('param', idParamsSchema),
     zValidator('json', playlistSelectionSchema),
     async (c) => {
@@ -153,7 +187,32 @@ export function registerConnectorRoutes(routes: Hono<AppEnv>) {
         c.req.valid('param').id,
         c.req.valid('json').selectedPlaylistIds,
       )
-      return c.json(result, 202)
+      return c.json({
+        selectedPlaylistIds: result.selectedPlaylistIds,
+        links: {
+          self: new URL(`/api/connectors/${c.req.valid('param').id}/playlist-selection`, c.req.url).toString(),
+          syncJob: new URL(`/api/connector-sync-jobs/${result.syncJob.id}`, c.req.url).toString(),
+        },
+      })
     },
   )
+
+  routes.get('/connectors/:id/playlist-selection', zValidator('param', idParamsSchema), async (c) => {
+    try {
+      const selection = await getConnectorPlaylistSelection(c.get('deps'), c.get('user').id, c.req.valid('param').id)
+      return c.json({ ...selection, links: { self: new URL(c.req.url).toString() } })
+    } catch (error) {
+      if (error instanceof ResourceNotFoundError) return problem(c, 404, 'not-found', error.message)
+      throw error
+    }
+  })
+}
+
+function loginAttemptRepresentation(c: Context<AppEnv>, result: ConnectorLoginResult) {
+  const self = new URL(`/api/connector-login-attempts/${result.attempt.id}`, c.req.url).toString()
+  return {
+    ...result.attempt,
+    connector: result.connector,
+    links: { self, challengeResponse: `${self}/challenge-response` },
+  }
 }

@@ -75,7 +75,7 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     mutationFn: saveLibraryResource,
     onSuccess: (payload, item) => {
       queryClient.setQueryData<LibraryStateItem[]>(queryKeys.library.states, (current = []) => [
-        toLibraryState(payload.item),
+        toLibraryState(payload),
         ...current.filter((libraryItem) => libraryItem.mediaKey !== item.mediaKey),
       ])
       void queryClient.invalidateQueries({ queryKey: queryKeys.library.root })
