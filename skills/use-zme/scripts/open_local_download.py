@@ -55,7 +55,8 @@ def handoff(source, origin, directory, save_only=False):
     # A private subdirectory preserves the suggested filename without overwriting existing downloads.
     path = Path(tempfile.mkdtemp(prefix="zme-", dir=directory)) / filename
     try:
-        with build_opener(NoRedirect).open(Request(uri), timeout=60) as response, path.open("xb") as output:
+        request = Request(uri, headers={"User-Agent": "ZME-Local-Download/1.0"})
+        with build_opener(NoRedirect).open(request, timeout=60) as response, path.open("xb") as output:
             while chunk := response.read(64 * 1024):
                 output.write(chunk)
     except Exception:

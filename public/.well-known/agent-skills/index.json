@@ -6,7 +6,7 @@
       "type": "archive",
       "description": "Use ZME through Realmroot to browse the media catalog, charts, and available torrents, download locally through the system's associated client or submit to a remote downloader, and inspect or manage owned remote downloads. Use for the user's private ZME media and download workflows with controller-approved access.",
       "url": "/.well-known/agent-skills/use-zme.tar.gz",
-      "digest": "sha256:94337c338343d66aaca85a5880ff0c7618da33ad61cd9dbaec749dc14294d7d3"
+      "digest": "sha256:ceaf92a15a6709da4162b12281bac9214655a03d716b717f3334e49c4c86afc1"
     }
   ]
 }

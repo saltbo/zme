@@ -21,6 +21,7 @@ TORRENT = b"d4:infod4:name4:testee"
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
+        self.server.last_user_agent = self.headers.get("User-Agent")
         if "redirect" in self.path:
             self.send_response(302)
             self.send_header("Location", "https://private-tracker.test/file")
@@ -74,6 +75,11 @@ class LocalHandoffTest(unittest.TestCase):
             handoff.handoff(self.source(), self.origin, Path(directory), save_only=True)
             opener.assert_not_called()
             self.assertEqual(next(Path(directory).glob("*/*.torrent")).read_bytes(), TORRENT)
+
+    def test_identifies_the_zme_file_client_on_the_wire(self):
+        with tempfile.TemporaryDirectory() as directory:
+            handoff.handoff(self.source(), self.origin, Path(directory), save_only=True)
+            self.assertEqual(self.server.last_user_agent, "ZME-Local-Download/1.0")
 
     def test_rejects_untrusted_file_origins_and_path_traversal(self):
         with tempfile.TemporaryDirectory() as directory:
